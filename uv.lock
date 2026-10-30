@@ -1322,13 +1322,6 @@ dependencies = [
     { name = "rapidocr" },
 ]
 
-[package.optional-dependencies]
-dev = [
-    { name = "pillow" },
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
 [package.dev-dependencies]
 dev = [
     { name = "pillow" },
@@ -1341,13 +1334,9 @@ requires-dist = [
     { name = "jsonschema", specifier = ">=4.20" },
     { name = "llama-cpp-python", specifier = ">=0.3.19", index = "https://abetlen.github.io/llama-cpp-python/whl/cpu" },
     { name = "onnxruntime", specifier = ">=1.17" },
-    { name = "pillow", marker = "extra == 'dev'", specifier = ">=10" },
     { name = "pymupdf", specifier = ">=1.24" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "rapidocr", specifier = ">=3.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
 ]
-provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [
