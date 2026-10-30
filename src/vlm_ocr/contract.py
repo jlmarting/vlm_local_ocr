@@ -7,6 +7,11 @@ from typing import Any
 
 import jsonschema
 
+try:
+    from llama_cpp import Llama
+except ImportError:  # permite usar el modo Markdown sin el motor LLM
+    Llama = None  # type: ignore[assignment]
+
 _NUMBER_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
 
 
@@ -138,3 +143,93 @@ def _validate_scalar(value: Any, shape: Any, path: str) -> list[str]:
     if not ok:
         return [f"{path}: se esperaba {_type_name(shape)}, llegó {_type_name(value)}"]
     return []
+
+
+def infer_contract(
+    text: str,
+    contract: dict,
+    kind: str,
+    model_path: Path | str,
+    *,
+    n_ctx: int = 4096,
+    max_ocr_tokens: int = 1500,
+) -> dict:
+    """Pide al LLM local un JSON que cumpla el contrato y lo valida."""
+    if Llama is None:
+        raise ContractError(
+            "llama-cpp-python no está instalado; instálalo para usar --format json"
+        )
+    llm = Llama(model_path=str(model_path), n_ctx=n_ctx, verbose=False)
+    ocr_text = _truncate_text(text, max_ocr_tokens)
+    messages = _build_messages(ocr_text, contract, kind)
+    base_max_tokens = max(256, len(json.dumps(contract, ensure_ascii=False)) * 2)
+
+    raw = _chat(llm, messages, contract, kind, base_max_tokens)
+    data, errors = _parse_and_validate(raw, contract, kind)
+    if not errors:
+        return data
+
+    repair_messages = [
+        *messages,
+        {"role": "assistant", "content": raw},
+        {
+            "role": "user",
+            "content": (
+                "Your previous answer was invalid. Errors: "
+                + "; ".join(errors)
+                + ". Return ONLY the corrected JSON."
+            ),
+        },
+    ]
+    raw_retry = _chat(llm, repair_messages, contract, kind, base_max_tokens * 2)
+    data, errors = _parse_and_validate(raw_retry, contract, kind)
+    if errors:
+        raise ContractError("el modelo no produjo un contrato válido: " + "; ".join(errors))
+    return data
+
+
+def _truncate_text(text: str, max_ocr_tokens: int) -> str:
+    limit = max(1, max_ocr_tokens) * 4
+    if len(text) <= limit:
+        return text
+    return text[:limit]
+
+
+def _build_messages(ocr_text: str, contract: dict, kind: str) -> list[dict]:
+    label = "JSON Schema" if kind == "schema" else "example"
+    header = "SCHEMA" if kind == "schema" else "EXAMPLE"
+    prompt = (
+        f"You extract structured data from OCR text.\n"
+        f"Return ONLY a JSON value that conforms to the {label}. "
+        "Do not invent values; use null when the information is absent.\n\n"
+        f"{header}:\n{json.dumps(contract, ensure_ascii=False, indent=2)}\n\n"
+        f"OCR TEXT:\n{ocr_text}\n"
+    )
+    return [{"role": "user", "content": prompt}]
+
+
+def _chat(
+    llm: Llama,
+    messages: list[dict],
+    contract: dict,
+    kind: str,
+    max_tokens: int,
+) -> str:
+    response_format: dict[str, Any] = {"type": "json_object"}
+    if kind == "schema":
+        response_format["schema"] = contract
+    response = llm.create_chat_completion(
+        messages=messages,
+        temperature=0,
+        max_tokens=max_tokens,
+        response_format=response_format,
+    )
+    return response["choices"][0]["message"]["content"]
+
+
+def _parse_and_validate(raw: str, contract: dict, kind: str) -> tuple[Any, list[str]]:
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return None, [f"la respuesta no es JSON válido ({exc.msg})"]
+    return data, validate_payload(data, contract, kind)
