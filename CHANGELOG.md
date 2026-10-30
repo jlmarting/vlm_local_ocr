@@ -19,5 +19,6 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Salida `--with-layout` con los boxes del OCR.
 - Script `scripts/fetch_models.py` con URL fijada y verificación SHA256.
 - Golden tests de fidelidad semántica sobre PDF nativo y escaneado.
+- Clave `text` en la salida JSON cuando no se especifica contrato, con `layout` opcional vía `--with-layout`.
 - Normalización de números en formato europeo antes de la inferencia.
 - Few-shot mínimo en el prompt para evitar que el modelo reutilice un valor (p. ej. la fecha) en otro campo.

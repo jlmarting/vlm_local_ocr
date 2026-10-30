@@ -7,7 +7,7 @@ from pathlib import Path
 from .contract import ContractError, infer_contract, load_contract, validate_payload
 from .ingest import ingest
 from .ocr import ocr_pages
-from .output import to_json_payload, to_markdown
+from .output import to_json_payload, to_markdown, to_text_json
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -22,7 +22,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default="md",
         help="salida Markdown (defecto) o JSON de contrato",
     )
-    parser.add_argument("--contract", type=Path, help="ejemplo de payload o JSON Schema")
+    parser.add_argument(
+        "--contract",
+        type=Path,
+        help="ejemplo de payload o JSON Schema; si se omite, la salida JSON es {\"text\": ...}",
+    )
     parser.add_argument(
         "--contract-kind",
         choices=["example", "schema"],
@@ -43,13 +47,9 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
-    if args.format == "json":
-        if args.contract is None:
-            print("error: --format json requiere --contract", file=sys.stderr)
-            return 2
-        if args.model is None:
-            print("error: --format json requiere --model", file=sys.stderr)
-            return 2
+    if args.format == "json" and args.contract is not None and args.model is None:
+        print("error: --format json con --contract requiere --model", file=sys.stderr)
+        return 2
 
     try:
         pages = ingest(args.file, dpi=args.dpi)
@@ -57,6 +57,11 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.format == "md":
             output = to_markdown(blocks)
+        elif args.contract is None:
+            output = to_text_json(
+                to_markdown(blocks),
+                blocks if args.with_layout else None,
+            )
         else:
             contract, detected_kind = load_contract(args.contract)
             kind = args.contract_kind or detected_kind

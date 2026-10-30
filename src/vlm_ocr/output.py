@@ -20,17 +20,26 @@ def to_markdown(blocks: list[LayoutBlock]) -> str:
     )
 
 
+def _layout(blocks: list[LayoutBlock]) -> list[dict]:
+    return [
+        {"page": block.page, "text": block.text, "box": list(block.box)}
+        for block in blocks
+    ]
+
+
 def to_json_payload(data: Any, blocks: list[LayoutBlock] | None = None) -> str:
     """Serializa el contrato; con bloques, lo envuelve junto al layout."""
     if blocks is None:
         payload: Any = data
     else:
-        payload = {
-            "data": data,
-            "layout": [
-                {"page": block.page, "text": block.text, "box": list(block.box)}
-                for block in blocks
-            ],
-        }
+        payload = {"data": data, "layout": _layout(blocks)}
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def to_text_json(text: str, blocks: list[LayoutBlock] | None = None) -> str:
+    """Serializa solo el texto extraído; con bloques, añade el layout."""
+    payload: dict[str, Any] = {"text": text}
+    if blocks is not None:
+        payload["layout"] = _layout(blocks)
     return json.dumps(payload, ensure_ascii=False, indent=2)
 

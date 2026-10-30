@@ -54,15 +54,40 @@ def test_json_without_model_returns_2(monkeypatch, tmp_path: Path, capsys) -> No
     assert "model" in capsys.readouterr().err
 
 
-def test_json_without_contract_returns_2(monkeypatch, tmp_path: Path, capsys) -> None:
+def test_json_without_contract_returns_text(monkeypatch, tmp_path: Path, capsys) -> None:
     _mock_pipeline(monkeypatch)
     source = tmp_path / "doc.pdf"
     source.write_bytes(b"")
 
-    code = cli.main([str(source), "--format", "json", "--model", "m.gguf"])
+    code = cli.main([str(source), "--format", "json"])
 
-    assert code == 2
-    assert "contract" in capsys.readouterr().err
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {"text": "texto de prueba"}
+
+
+def test_json_without_contract_with_layout(monkeypatch, tmp_path: Path, capsys) -> None:
+    _mock_pipeline(monkeypatch)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+
+    code = cli.main([str(source), "--format", "json", "--with-layout"])
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["text"] == "texto de prueba"
+    assert payload["layout"][0]["text"] == "texto de prueba"
+
+
+def test_json_without_contract_does_not_need_model(monkeypatch, tmp_path: Path, capsys) -> None:
+    _mock_pipeline(monkeypatch)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+
+    code = cli.main([str(source), "--format", "json"])
+
+    assert code == 0
+    assert "model" not in capsys.readouterr().err
 
 
 def test_json_success_emits_contract_shaped_payload(monkeypatch, tmp_path: Path, capsys) -> None:

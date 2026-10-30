@@ -27,6 +27,13 @@ El modelo por defecto es `Qwen2.5-0.5B-Instruct Q4_K_M` (Apache-2.0). Los modelo
 # Markdown (defecto)
 uv run vlm-ocr documento.pdf
 
+# JSON solo con el texto extraído (sin contrato, sin modelo)
+uv run vlm-ocr documento.pdf --format json
+# { "text": "..." }
+
+# JSON con texto + boxes del OCR
+uv run vlm-ocr escaneo.jpg --format json --with-layout
+
 # JSON a partir de un ejemplo de payload
 uv run vlm-ocr factura.pdf --format json \
   --contract ejemplo.json \
@@ -42,12 +49,12 @@ uv run vlm-ocr documento.pdf --out salida.md
 
 ### Contrato
 
-El contrato puede ser:
+El contrato es **opcional**. Si no se indica `--contract`, `--format json` devuelve el texto extraído en `{"text": ...}` (y `layout` con `--with-layout`), sin necesidad de modelo. Si se indica, puede ser:
 
 - un **JSON Schema** (con `$schema` o `--contract-kind schema`): validación estricta;
 - un **ejemplo de datos** (defecto): se valida la forma de forma recursiva (arrays, objetos anidados, `null` como nullable, claves extra prohibidas).
 
-La inferencia se hace con una llamada por documento, `n_ctx=4096` y el texto OCR truncado a ~1500 tokens.
+En ese caso se requiere `--model` y la inferencia se hace con una llamada por documento, `n_ctx=4096` y el texto OCR truncado a ~1500 tokens.
 
 ## Rendimiento medido (T480, CPU)
 
