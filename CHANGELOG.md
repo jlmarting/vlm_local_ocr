@@ -7,6 +7,16 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-30
+
 ### Added
 
-- Andamiaje del proyecto: paquete `vlm_ocr`, tipos base y script de descarga del modelo.
+- CLI `vlm-ocr` con salida Markdown (defecto) y JSON.
+- Ingesta de PDFs e imágenes: los PDFs con capa de texto se leen sin OCR; los escaneados se rasterizan a 200 DPI.
+- OCR con RapidOCR v3 + ONNX Runtime, con boxes y orden top-down.
+- Contrato por ejemplo de payload o JSON Schema (`--contract-kind`), con validación recursiva.
+- Inferencia del contrato con `llama.cpp`/GGUF (`llama-cpp-python`), `n_ctx=4096`, truncado de OCR y reintento correctivo.
+- Salida `--with-layout` con los boxes del OCR.
+- Script `scripts/fetch_models.py` con URL fijada y verificación SHA256.
+- Golden tests de fidelidad semántica sobre PDF nativo y escaneado.
+- Normalización de números en formato europeo antes de la inferencia.

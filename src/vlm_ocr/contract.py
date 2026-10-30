@@ -195,13 +195,25 @@ def _truncate_text(text: str, max_ocr_tokens: int) -> str:
     return text[:limit]
 
 
+def _normalize_numbers(text: str) -> str:
+    """Normaliza el formato numérico europeo para que el modelo no lo confunda."""
+    text = re.sub(r"(?<=\d)\.(?=\d{3}(?:\D|$))", "", text)
+    text = re.sub(r"(?<=\d),(?=\d{1,2}(?:\D|$))", ".", text)
+    return text
+
+
 def _build_messages(ocr_text: str, contract: dict, kind: str) -> list[dict]:
+    ocr_text = _normalize_numbers(ocr_text)
     label = "JSON Schema" if kind == "schema" else "example"
     header = "SCHEMA" if kind == "schema" else "EXAMPLE"
     prompt = (
         f"You extract structured data from OCR text.\n"
         f"Return ONLY a JSON value that conforms to the {label}. "
-        "Do not invent values; use null when the information is absent.\n\n"
+        "Do not invent values; use null when the information is absent.\n"
+        "Rules: output numbers as JSON numbers, not strings. "
+        "A comma is the decimal separator and a dot is a thousands separator: "
+        "'1.234,56' or '50,00' become 1234.56 and 50.00; never drop the decimal comma. "
+        "No currency symbols. Dates use YYYY-MM-DD when possible; copy names and identifiers verbatim.\n\n"
         f"{header}:\n{json.dumps(contract, ensure_ascii=False, indent=2)}\n\n"
         f"OCR TEXT:\n{ocr_text}\n"
     )

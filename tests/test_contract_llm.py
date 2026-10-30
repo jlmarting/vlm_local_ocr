@@ -92,3 +92,18 @@ def test_two_invalid_answers_raise_contract_error(monkeypatch, tmp_path: Path) -
 
     with pytest.raises(ContractError):
         infer_contract("texto", EXAMPLE, "example", tmp_path / "m.gguf")
+
+
+def test_prompt_normalizes_european_numbers(monkeypatch, tmp_path: Path) -> None:
+    calls = _fake_llama(monkeypatch, [json.dumps({"cliente": "ACME", "total": 2})])
+
+    infer_contract(
+        "Importe: 50,00 EUR y total 1.234,56",
+        EXAMPLE,
+        "example",
+        tmp_path / "m.gguf",
+    )
+
+    prompt = calls[0]["messages"][0]["content"]
+    assert "50.00 EUR" in prompt
+    assert "1234.56" in prompt
