@@ -54,19 +54,20 @@ La inferencia se hace con una llamada por documento, `n_ctx=4096` y el texto OCR
 | Caso | Tiempo |
 |---|---|
 | PDF nativo → Markdown | 1,5 s |
-| PDF nativo → JSON de contrato | 6,1 s |
-| PDF escaneado → Markdown | 3,2 s |
-| PDF escaneado → JSON de contrato | 7,8 s |
+| PDF nativo → JSON de contrato (3 campos) | 6,1 s |
+| PDF escaneado A4 100 DPI → Markdown | 3,2 s |
+| PDF escaneado A4 100 DPI → JSON (5 campos) | 13,9 s |
+| PDF escaneado 2 págs → JSON (4 campos) | 18,2 s |
 | Prefill aislado de 2 500 tokens | 20,6 s |
 
-Las páginas densas (miles de tokens de OCR) pueden superar los 10 s: el prefill en CPU domina. El presupuesto de tokens y el truncado están fijados en código.
+En A4 escaneado completo el JSON de contrato puede superar los 10 s: el OCR va en 3–5 s y el resto es inferencia. Un contrato con más campos tarda más (y puede disparar un reintento correctivo).
 
 ## Límites conocidos
 
 - **Orientación**: el clasificador de RapidOCR distingue 0°/180° por línea; páginas giradas 90°/270° no se garantizan.
 - **Multicolumna**: el orden es top-down por detección; documentos a varias columnas quedan fuera de v1.
 - **Manuscrito, tablas complejas y formularios**: fuera de v1.
-- **Idiomas**: el set por defecto cubre chino/inglés/japonés y ~50 lenguas latinas (incl. español); cirílico, árabe, devanagari, etc. requieren modelos adicionales.
+- **Idiomas**: el set por defecto cubre chino/inglés/japonés y ~50 lenguas latinas (incl. español); cirílico, árabe, devanagari, **coreano**, etc. requieren modelos adicionales. Con `--lang ar`/`--lang ko` el CLI falla con un hint claro; sin `--lang` el OCR devuelve texto incorrecto en silencio.
 - **Fidelidad semántica**: la estructura JSON está garantizada por gramática, pero el modelo de 0.5B puede equivocarse en valores; usa `--model` con uno mayor para contratos exigentes.
 
 ## Tests
