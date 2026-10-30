@@ -21,4 +21,6 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Golden tests de fidelidad semántica sobre PDF nativo y escaneado.
 - Clave `text` en la salida JSON cuando no se especifica contrato, con `layout` opcional vía `--with-layout`.
 - Normalización de números en formato europeo antes de la inferencia.
+- El ejemplo de contrato se envía al modelo como forma con tipos (`<string>`, `<number>`), no como valores literales.
+- Coerción de strings numéricos inequívocos al tipo numérico del contrato.
 - Few-shot mínimo en el prompt para evitar que el modelo reutilice un valor (p. ej. la fecha) en otro campo.

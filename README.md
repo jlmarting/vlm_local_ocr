@@ -52,7 +52,7 @@ uv run vlm-ocr documento.pdf --out salida.md
 El contrato es **opcional**. Si no se indica `--contract`, `--format json` devuelve el texto extraído en `{"text": ...}` (y `layout` con `--with-layout`), sin necesidad de modelo. Si se indica, puede ser:
 
 - un **JSON Schema** (con `$schema` o `--contract-kind schema`): validación estricta;
-- un **ejemplo de datos** (defecto): se valida la forma de forma recursiva (arrays, objetos anidados, `null` como nullable, claves extra prohibidas).
+- un **ejemplo de datos** (defecto): se usa como **forma y tipos** (los valores no se copian) y se valida de forma recursiva (arrays, objetos anidados, `null` como nullable, claves extra prohibidas).
 
 En ese caso se requiere `--model` y la inferencia se hace con una llamada por documento, `n_ctx=4096` y el texto OCR truncado a ~1500 tokens.
 

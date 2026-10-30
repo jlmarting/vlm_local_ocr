@@ -167,7 +167,7 @@ def infer_contract(
     raw = _chat(llm, messages, contract, kind, base_max_tokens)
     data, errors = _parse_and_validate(raw, contract, kind)
     if not errors:
-        return data
+        return _coerce_numbers(data, contract)
 
     repair_messages = [
         *messages,
@@ -185,7 +185,7 @@ def infer_contract(
     data, errors = _parse_and_validate(raw_retry, contract, kind)
     if errors:
         raise ContractError("el modelo no produjo un contrato válido: " + "; ".join(errors))
-    return data
+    return _coerce_numbers(data, contract)
 
 
 def _truncate_text(text: str, max_ocr_tokens: int) -> str:
@@ -202,17 +202,34 @@ def _normalize_numbers(text: str) -> str:
     return text
 
 
+def _shape_template(value: Any) -> Any:
+    """Sustituye valores del ejemplo por marcadores de tipo."""
+    if isinstance(value, dict):
+        return {key: _shape_template(sub) for key, sub in value.items()}
+    if isinstance(value, list):
+        return [_shape_template(value[0])] if value else []
+    if isinstance(value, bool):
+        return "<boolean>"
+    if isinstance(value, int | float):
+        return "<number>"
+    if isinstance(value, str):
+        return "<string>"
+    return value
+
+
 def _build_messages(ocr_text: str, contract: dict, kind: str) -> list[dict]:
     ocr_text = _normalize_numbers(ocr_text)
-    label = "JSON Schema" if kind == "schema" else "example"
-    header = "SCHEMA" if kind == "schema" else "EXAMPLE"
+    label = "JSON Schema" if kind == "schema" else "shape"
+    header = "SCHEMA" if kind == "schema" else "SHAPE"
+    shape = contract if kind == "schema" else _shape_template(contract)
     prompt = (
-        f"You extract structured data from OCR text.\n"
+        "You extract structured data from OCR text.\n"
         "Example:\n"
         'OCR TEXT: "ID: A-100. Date: 2024-01-02."\n'
-        'CONTRACT: {"id": "text", "date": "text"}\n'
+        'SHAPE: {"id": "<string>", "date": "<string>"}\n'
         'OUTPUT: {"id": "A-100", "date": "2024-01-02"}\n\n'
         f"Return ONLY a JSON value that conforms to the {label}. "
+        "Markers like <string> and <number> describe the required type; never output them literally. "
         "Do not invent values; use null when the information is absent.\n"
         "Rules: output numbers as JSON numbers, not strings. "
         "A comma is the decimal separator and a dot is a thousands separator: "
@@ -220,7 +237,7 @@ def _build_messages(ocr_text: str, contract: dict, kind: str) -> list[dict]:
         "No currency symbols. Dates use YYYY-MM-DD when possible; copy names and identifiers verbatim. "
         "Take every value from the OCR text and never reuse the same value for two different fields "
         "(for example, do not use the date as an invoice number).\n\n"
-        f"{header}:\n{json.dumps(contract, ensure_ascii=False, indent=2)}\n\n"
+        f"{header}:\n{json.dumps(shape, ensure_ascii=False, indent=2)}\n\n"
         f"OCR TEXT:\n{ocr_text}\n"
     )
     return [{"role": "user", "content": prompt}]
@@ -251,3 +268,36 @@ def _parse_and_validate(raw: str, contract: dict, kind: str) -> tuple[Any, list[
     except json.JSONDecodeError as exc:
         return None, [f"la respuesta no es JSON válido ({exc.msg})"]
     return data, validate_payload(data, contract, kind)
+
+
+def _coerce_numbers(value: Any, shape: Any) -> Any:
+    """Convierte strings numéricos inequívocos al tipo numérico del ejemplo."""
+    if shape is None:
+        return value
+    if isinstance(shape, dict) and isinstance(value, dict):
+        return {
+            key: _coerce_numbers(sub, shape[key]) if key in shape else sub
+            for key, sub in value.items()
+        }
+    if isinstance(shape, list) and isinstance(value, list):
+        if not shape:
+            return value
+        options = _distinct_shapes(shape)
+        coerced = []
+        for item in value:
+            chosen = next(
+                (option for option in options if not _validate(item, option, "$")),
+                options[0],
+            )
+            coerced.append(_coerce_numbers(item, chosen))
+        return coerced
+    if isinstance(shape, float) and isinstance(value, str) and _is_unambiguous_number(value):
+        return float(value)
+    if (
+        isinstance(shape, int)
+        and not isinstance(shape, bool)
+        and isinstance(value, str)
+        and _is_unambiguous_number(value)
+    ):
+        return int(float(value))
+    return value

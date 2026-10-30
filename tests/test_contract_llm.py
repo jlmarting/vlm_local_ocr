@@ -117,3 +117,12 @@ def test_prompt_includes_few_shot_example(monkeypatch, tmp_path: Path) -> None:
     prompt = calls[0]["messages"][0]["content"]
     assert "OUTPUT:" in prompt
     assert "A-100" in prompt
+
+
+def test_numeric_strings_are_coerced_to_numbers(monkeypatch, tmp_path: Path) -> None:
+    _fake_llama(monkeypatch, ['{"cliente": "ACME", "total": "12.5"}'])
+
+    result = infer_contract("texto", EXAMPLE, "example", tmp_path / "m.gguf")
+
+    assert result["total"] == 12.5
+    assert isinstance(result["total"], float)
