@@ -208,12 +208,18 @@ def _build_messages(ocr_text: str, contract: dict, kind: str) -> list[dict]:
     header = "SCHEMA" if kind == "schema" else "EXAMPLE"
     prompt = (
         f"You extract structured data from OCR text.\n"
+        "Example:\n"
+        'OCR TEXT: "ID: A-100. Date: 2024-01-02."\n'
+        'CONTRACT: {"id": "text", "date": "text"}\n'
+        'OUTPUT: {"id": "A-100", "date": "2024-01-02"}\n\n'
         f"Return ONLY a JSON value that conforms to the {label}. "
         "Do not invent values; use null when the information is absent.\n"
         "Rules: output numbers as JSON numbers, not strings. "
         "A comma is the decimal separator and a dot is a thousands separator: "
         "'1.234,56' or '50,00' become 1234.56 and 50.00; never drop the decimal comma. "
-        "No currency symbols. Dates use YYYY-MM-DD when possible; copy names and identifiers verbatim.\n\n"
+        "No currency symbols. Dates use YYYY-MM-DD when possible; copy names and identifiers verbatim. "
+        "Take every value from the OCR text and never reuse the same value for two different fields "
+        "(for example, do not use the date as an invoice number).\n\n"
         f"{header}:\n{json.dumps(contract, ensure_ascii=False, indent=2)}\n\n"
         f"OCR TEXT:\n{ocr_text}\n"
     )

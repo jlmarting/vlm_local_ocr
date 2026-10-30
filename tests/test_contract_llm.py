@@ -107,3 +107,13 @@ def test_prompt_normalizes_european_numbers(monkeypatch, tmp_path: Path) -> None
     prompt = calls[0]["messages"][0]["content"]
     assert "50.00 EUR" in prompt
     assert "1234.56" in prompt
+
+
+def test_prompt_includes_few_shot_example(monkeypatch, tmp_path: Path) -> None:
+    calls = _fake_llama(monkeypatch, [json.dumps({"cliente": "ACME", "total": 2})])
+
+    infer_contract("texto", EXAMPLE, "example", tmp_path / "m.gguf")
+
+    prompt = calls[0]["messages"][0]["content"]
+    assert "OUTPUT:" in prompt
+    assert "A-100" in prompt
