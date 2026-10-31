@@ -105,8 +105,10 @@ Con un contrato anotado el CLI reconstruye la tabla del PDF **en filas** y asign
 Medido con las dos nóminas de prueba (contrato de 30 campos): **24/24 campos, 0 tokens y sin incidencias de literalidad**; con el texto en columnas y LLM el mejor resultado era 1/24. La ruta OCR está cubierta por tests de integración con un escaneo sintético en PNG y en PDF sin capa de texto (`tests/integration/test_ocr_rows.py`): el PDF se rasteriza a `--dpi`, la imagen se **endereza y recorta** si llega girada, RapidOCR separa las celdas cuando hay separación horizontal suficiente y el extractor las resuelve igual (con tolerancia a erratas del OCR en las etiquetas). Detalle en `rondas/20261031d-extraccion-fiable/`.
 
 ```bash
-uv run vlm-ocr nomina.pdf --format json --contract contrato-nomina.json --no-llm --metrics
+uv run vlm-ocr nomina.pdf --format json --contract examples/contrato-nomina.json --no-llm --metrics
 ```
+
+El ejemplo completo (29 campos de una nómina) está en [`examples/contrato-nomina.json`](examples/contrato-nomina.json).
 
 ## Métricas (opt-in)
 
