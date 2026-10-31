@@ -132,13 +132,30 @@ El informe incluye tamaño, formato y páginas del fichero; tiempos de ingesta, 
 
 En A4 escaneado completo el JSON de contrato puede superar los 10 s: el OCR va en 3–5 s y el resto es inferencia. Un contrato con más campos tarda más (y puede disparar un reintento correctivo).
 
+### Contrato de 30 campos (nómina)
+
+Banco reproducible: `scripts/bench_models.py` (mide) y `scripts/score_bench.py` (puntúa contra una
+verdad JSON). Misma nómina, contrato, sidecar y gramática; `n_ctx=4096`, `max_tokens=1200`, un
+intento; 24 campos verificados contra el PDF.
+
+| Modelo | Texto en columnas (como lo da hoy el CLI) | Texto en filas (prueba de concepto) | Tiempo |
+|---|---|---|---|
+| Qwen2.5-0.5B Q4 | 0/24 | — | 56 s |
+| Phi-4-mini Q4 (MIT) | 1/24 | 18/24 | 111-120 s |
+| Qwen2.5-3B Q4 | 1-2/24 | 19/24 | 109-121 s |
+| Llama 3.2 3B Q4 | 1/24 | **22/24** | 96-102 s |
+
+Lectura: con el texto tal como lo emite la ruta nativa (todas las etiquetas y después todos los
+valores) ningún modelo pasa de 2/24; serializando la tabla en filas, Llama 3.2 3B llega a 22/24.
+El cuello de botella es la representación del texto, no el tamaño del modelo.
+
 ## Límites conocidos
 
 - **Orientación**: el clasificador de RapidOCR distingue 0°/180° por línea; páginas giradas 90°/270° no se garantizan.
 - **Multicolumna**: el orden es top-down por detección; documentos a varias columnas quedan fuera de v1.
 - **Manuscrito, tablas complejas y formularios**: fuera de v1.
 - **Idiomas**: el set por defecto cubre chino/inglés/japonés y ~50 lenguas latinas (incl. español); cirílico, árabe, devanagari, **coreano**, etc. requieren modelos adicionales. Con `--lang ar`/`--lang ko` el CLI falla con un hint claro; sin `--lang` el OCR devuelve texto incorrecto en silencio.
-- **Fidelidad semántica**: la estructura JSON está garantizada por gramática, pero el modelo de 0.5B puede equivocarse en valores; usa `--model` con uno mayor para contratos exigentes.
+- **Fidelidad semántica**: el JSON válido está garantizado por gramática; la forma del contrato solo se impone como esquema cuando el contrato es un JSON Schema. Los valores dependen del modelo y, sobre todo, del texto: en tablas (nóminas) el orden del texto nativo puede separar etiquetas y valores, y entonces ningún modelo acierta. Ver «Contrato de 30 campos».
 
 ## Tests
 
@@ -146,6 +163,14 @@ En A4 escaneado completo el JSON de contrato puede superar los 10 s: el OCR va e
 uv run pytest -q -m "not integration"   # unitarios
 uv run pytest -m integration -v         # golden con el modelo real
 uv run ruff check .
+```
+
+Banco de modelos (spike, no forma parte de la suite):
+
+```bash
+uv run python scripts/bench_models.py --model models/llama.gguf --doc nomina.pdf \
+  --contract contrato.json --instructions prompt.md --out bench.jsonl
+uv run python scripts/score_bench.py --bench bench.jsonl --truth verdad.json
 ```
 
 ## Documentación
