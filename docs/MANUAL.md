@@ -2,7 +2,7 @@
 
 Manual de uso y mantenimiento de la v1. Documento de proyecto; el diseño y el historial viven en el vault (`rondas/20261030a-definicion/`).
 
-> **Estado de cierre**: v1 funcional y probada (76 tests, `ruff` limpio). Los bloqueantes de la revisión fresca (exit codes, validación `int`, modelo por defecto, golden ≥80 %, prompt injection) están corregidos. La licencia se resolvió sustituyendo PyMuPDF por `pypdfium2` y manteniendo MIT. Ver §10.
+> **Estado de cierre**: v1 funcional y probada (126 tests, `ruff` limpio). Los bloqueantes de la revisión fresca (exit codes, validación `int`, modelo por defecto, golden ≥80 %, prompt injection) están corregidos. La licencia se resolvió sustituyendo PyMuPDF por `pypdfium2` y manteniendo MIT. Ver §10.
 
 ## 1. Qué es
 
@@ -83,11 +83,17 @@ uv run vlm-ocr documento.pdf --out salida.md
 | `--contract PATH` | — | Ejemplo de payload o JSON Schema |
 | `--contract-kind example\|schema` | autodetecta | Fuerza la interpretación |
 | `--model PATH` | — | GGUF para inferir el contrato |
+| `--n-ctx N` | 4096 | Contexto del modelo en tokens; súbelo si el prompt no cabe |
 | `--instructions PATH` | sidecar | Instrucciones de ajuste |
 | `--dpi N` | 200 | DPI al rasterizar PDFs |
+| `--text-format md\|rows` | md (rows con contrato anotado) | Representación del texto para el contrato |
+| `--no-llm` | off | Solo asignación determinista; no carga modelo |
+| `--strict` | off | Un valor que no aparece literalmente en el texto es error (`2`) |
 | `--lang LANG` | `default` | Idioma del OCR |
 | `--with-layout` | off | Añade cajas al JSON |
 | `--out PATH` | stdout | Escribe la salida a fichero |
+| `--metrics` | off | Informe de métricas JSON por stderr |
+| `--metrics-out PATH` | — | Escribe el informe de métricas a fichero |
 
 ### Exit codes
 
@@ -95,9 +101,51 @@ uv run vlm-ocr documento.pdf --out salida.md
 |---|---|
 | `0` | OK |
 | `1` | Error de entrada/OCR |
-| `2` | Error de contrato/modelo/instrucciones |
+| `2` | Error de contrato/modelo/instrucciones o flag incoherente |
+| `130` | Interrumpido con Ctrl-C |
 
-Los errores de entrada/OCR salen como `1`; contrato, instrucciones o modelo como `2`. Los detalles se imprimen en stderr sin traceback.
+`--strict` convierte en error (`2`) cualquier valor numérico del resultado que no aparezca en el texto; sin él solo se avisa por stderr.
+
+Los errores de entrada/OCR salen como `1`; contrato, instrucciones, modelo o flags incoherentes como `2`. Los detalles se imprimen en stderr sin traceback. `--contract`, `--instructions` y `--model` exigen `--format json`: con la salida Markdown por defecto se rechazan con `2` en lugar de ignorarse.
+
+### Contrato anotado y asignación determinista
+
+Un contrato JSON Schema puede anotar cada campo con `x-labels` (etiquetas del documento) y `x-source` (columna: `unidades`, `importe`, `devengado`, `a_deducir`, `base`, `porcentaje`, `cuota`). Con anotaciones, el CLI reconstruye la tabla en filas y **asigna los valores sin LLM**; el modelo solo completa los campos que no casan y el valor determinista gana en el merge. `--no-llm` desactiva el modelo por completo y `--text-format rows` fuerza la representación; el prompt se genera con el mapa de campos.
+
+Prueba real con dos nóminas (30 campos): **24/24 sin LLM, 0 tokens y sin incidencias de literalidad**. Las imágenes se enderezan (giro de hasta ±30°) y se recortan antes del OCR; las etiquetas toleran erratas del OCR si la coincidencia es clara. Si la cobertura baja del 75 % de los campos anotados se avisa por stderr (y `--strict` falla): un escaneo ilegible puede producir valores que aparecen en el texto pero están en la fila equivocada. Con un escaneo sintético (PNG y PDF sin capa de texto, rasterizado a `--dpi`), el mismo camino (OCR → filas → extractor) resuelve la tabla; si el OCR devuelve la fila entera como un bloque, los campos caen al LLM. `scripts/draft_contract.py` genera un borrador del contrato a partir del documento para revisarlo a mano.
+
+### Métricas (opt-in)
+
+`--metrics` emite un informe JSON por stderr (stdout intacto); `--metrics-out PATH` lo escribe a fichero. Sin flags no hay salida extra ni coste apreciable. El informe se emite **también** cuando la ejecución falla (`exit 1`/`2`) o se interrumpe (`130`): lleva las etapas ya medidas, `llm.attempts`, los tokens consumidos, `llm.finish_reason` y un campo `error` con `kind` y `message`.
+
+```bash
+uv run vlm-ocr factura.pdf --format json --contract factura.json --metrics
+uv run vlm-ocr documento.pdf --metrics-out metricas.json
+```
+
+```json
+{
+  "file":   {"path": "factura.pdf", "size_bytes": 53000, "format": "pdf", "pages": 1},
+  "ingest": {"time_ms": 12.3, "native_pages": 0, "rasterized_pages": 1, "dpi": 200},
+  "ocr":    {"time_ms": 1234.5, "blocks": 8, "mean_confidence": 0.92},
+  "llm":    {"enabled": true, "model": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+             "load_time_ms": 800.0, "time_ms": 9000.0, "attempts": 1,
+             "prompt_tokens": 500, "completion_tokens": 40, "total_tokens": 540,
+             "tokens_per_second": 42.1, "finish_reason": "stop"},
+  "output": {"format": "json", "size_bytes": 123},
+  "extract": {"deterministic": 24, "llm": false, "unmatched": 5},
+  "verify": {"errors": []},
+  "total":  {"time_ms": 10500.0},
+  "error":  null
+}
+```
+
+- `llm.model` es el basename del GGUF (identifica sin arrastrar rutas absolutas).
+- `attempts` cuenta el reintento correctivo; los tokens son la **suma** de todos los intentos.
+- Sin `usage` del backend, los tokens quedan a `null` (no se inventan).
+- `tokens_per_second` = tokens de completado / tiempo de generación (sin carga).
+- `mean_confidence` solo sobre bloques de páginas rasterizadas; `null` sin OCR real.
+- Sin contrato/modelo: `llm.enabled=false` y el resto se mide igual.
 
 ## 5. Contratos
 
@@ -219,7 +267,7 @@ La revisión fresca previa al cierre encontró:
 
 **Media**: `--lang` no cambia de modelo; presupuesto de tokens no acotado del todo; normalización numérica puede tocar identificadores; sidecar se lee entero antes del límite; arrays vacíos sin aviso; layout nativo con cajas `(0,0,0,0)`; imports eager; documentación desactualizada; tests de formatos/rotación/errores incompletos.
 
-**Propuestas abiertas**: métricas de coste y catálogo/perfiles de modelo (`propuestas/`).
+**Propuestas abiertas**: catálogo/perfiles de modelo (`propuestas/`). Métricas de coste implementadas (`--metrics`/`--metrics-out`).
 
 ## 11. Enlaces
 

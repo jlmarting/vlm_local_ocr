@@ -7,6 +7,28 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+
+- Contrato JSON Schema anotado: `x-labels` (etiquetas del documento) y `x-source` (columna del valor).
+- Asignación determinista sin LLM cuando el contrato está anotado: el modelo solo rellena los campos que no casan y lo determinista gana.
+- `--text-format md|rows` (filas automáticas con contrato anotado), `--no-llm` y `--strict`.
+- Enderezado y recorte automático de imágenes antes del OCR (perfil de filas, giros de hasta ±30°).
+- Etiquetas tolerantes a erratas del OCR (similitud ≥ 0,9 y ganadora clara) y valores verticales alineados por posición, no por orden.
+- Aviso de cobertura baja: si se resuelven menos del 75 % de los campos anotados, se avisa (`--strict` falla) en vez de devolver datos plausibles pero falsos.
+- Serialización en filas desde PDF nativo (cajas por carácter de PDFium) o desde OCR.
+- Bloque `extract` y `verify` en el informe de métricas; `scripts/draft_contract.py` para proponer un contrato anotado.
+
+- Métricas opt-in: `--metrics` (informe JSON a stderr) y `--metrics-out PATH` (fichero). Miden fichero, ingesta, OCR (bloques y confianza real), SLM (modelo, carga, intentos, tokens y velocidad), salida y total, sin alterar stdout ni los exit codes.
+- `--n-ctx N`: contexto del modelo en tokens (defecto 4096) para dar aire a prompts grandes.
+- El informe de métricas incluye `llm.finish_reason` y se emite también en error e interrupción, con un campo `error` (`kind` + `message`).
+
+### Fixed
+
+- El reintento del contrato ya no pide `max_tokens` a ciegas: el presupuesto de cada intento se ajusta al contexto que deja el prompt y falla antes de generar si no cabe.
+- Una respuesta cortada por el límite de tokens se reporta como truncamiento, no como JSON inválido.
+- `Ctrl-C` sale con `130` sin traceback y emite el informe parcial si se pidió.
+- `--contract`, `--instructions` y `--model` con `--format md` fallan con `2` en vez de ignorarse en silencio.
+
 ## [0.1.0] - 2026-10-30
 
 ### Changed

@@ -14,16 +14,30 @@ def _model(tmp_path: Path) -> Path:
     return path
 
 
-def _fake_llama(monkeypatch: pytest.MonkeyPatch, replies: list[str]) -> list[dict]:
+def _fake_llama(
+    monkeypatch: pytest.MonkeyPatch,
+    replies: list[str],
+    *,
+    prompt_tokens: int | None = None,
+    finish_reasons: list[str | None] | None = None,
+) -> list[dict]:
     calls: list[dict] = []
 
     class FakeLlama:
         def __init__(self, *args, **kwargs) -> None:
             self.init = kwargs
 
+        def tokenize(self, data):
+            if prompt_tokens is not None:
+                return [0] * prompt_tokens
+            return [0] * max(1, len(data) // 4)
+
         def create_chat_completion(self, messages, **kwargs):
             calls.append({"messages": [dict(m) for m in messages], **kwargs})
-            return {"choices": [{"message": {"content": replies.pop(0)}}]}
+            choice = {"message": {"content": replies.pop(0)}}
+            if finish_reasons:
+                choice["finish_reason"] = finish_reasons.pop(0)
+            return {"choices": [choice]}
 
     monkeypatch.setattr("vlm_ocr.contract.Llama", FakeLlama)
     return calls
@@ -90,7 +104,7 @@ def test_invalid_first_answer_triggers_corrective_retry(monkeypatch, tmp_path: P
     assert len(calls) == 2
     repair_text = " ".join(m["content"] for m in calls[1]["messages"])
     assert "total" in repair_text
-    assert calls[1]["max_tokens"] > calls[0]["max_tokens"]
+    assert calls[1]["max_tokens"] >= 256
 
 
 def test_two_invalid_answers_raise_contract_error(monkeypatch, tmp_path: Path) -> None:
@@ -217,3 +231,109 @@ def test_prompt_wraps_task_instructions(monkeypatch, tmp_path: Path) -> None:
     prompt = calls[0]["messages"][0]["content"]
     assert "<task_instructions>" in prompt
     assert "</task_instructions>" in prompt
+
+
+def _fake_llama_with_usage(monkeypatch, replies: list[tuple[str, dict | None]]) -> None:
+    class FakeLlama:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def create_chat_completion(self, messages, **kwargs):
+            content, usage = replies.pop(0)
+            response = {"choices": [{"message": {"content": content}}]}
+            if usage is not None:
+                response["usage"] = usage
+            return response
+
+    monkeypatch.setattr("vlm_ocr.contract.Llama", FakeLlama)
+
+
+def test_usage_out_accumulates_tokens_across_attempts(monkeypatch, tmp_path: Path) -> None:
+    _fake_llama_with_usage(
+        monkeypatch,
+        [
+            ('{"cliente": "ACME"}', {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}),
+            (
+                json.dumps({"cliente": "ACME", "total": 2}),
+                {"prompt_tokens": 20, "completion_tokens": 4, "total_tokens": 24},
+            ),
+        ],
+    )
+    usage: dict = {}
+
+    result = infer_contract(
+        "texto", EXAMPLE, "example", _model(tmp_path), usage_out=usage
+    )
+
+    assert result == {"cliente": "ACME", "total": 2}
+    assert usage["attempts"] == 2
+    assert usage["prompt_tokens"] == 30
+    assert usage["completion_tokens"] == 6
+    assert usage["total_tokens"] == 36
+    assert usage["tokens_per_second"] is not None
+    assert usage["load_time_ms"] >= 0
+
+
+def test_usage_out_nulls_tokens_without_usage(monkeypatch, tmp_path: Path) -> None:
+    _fake_llama(monkeypatch, [json.dumps({"cliente": "ACME", "total": 2})])
+    usage: dict = {}
+
+    infer_contract("texto", EXAMPLE, "example", _model(tmp_path), usage_out=usage)
+
+    assert usage["attempts"] == 1
+    assert usage["prompt_tokens"] is None
+    assert usage["completion_tokens"] is None
+    assert usage["total_tokens"] is None
+    assert usage["tokens_per_second"] is None
+
+
+BIG_CONTRACT = {f"campo_{index:03d}": 0.0 for index in range(120)}
+
+
+def test_retry_budget_never_exceeds_context(monkeypatch, tmp_path: Path) -> None:
+    calls = _fake_llama(
+        monkeypatch,
+        ['{"cliente": "ACME"}', "{}"],
+        prompt_tokens=1000,
+    )
+
+    with pytest.raises(ContractError):
+        infer_contract("texto", BIG_CONTRACT, "example", _model(tmp_path), n_ctx=4096)
+
+    assert len(calls) == 2
+    for call in calls:
+        assert call["max_tokens"] <= 4096 - 1000 - 64
+
+
+def test_prompt_without_room_fails_before_calling_model(monkeypatch, tmp_path: Path) -> None:
+    calls = _fake_llama(monkeypatch, [], prompt_tokens=4096)
+
+    with pytest.raises(ContractError) as excinfo:
+        infer_contract("texto", EXAMPLE, "example", _model(tmp_path), n_ctx=4096)
+
+    assert calls == []
+    assert "--n-ctx" in str(excinfo.value)
+
+
+def test_truncated_answer_reports_length_not_syntax(monkeypatch, tmp_path: Path) -> None:
+    _fake_llama(monkeypatch, ['{"cliente": "ACME'], finish_reasons=["length"])
+
+    with pytest.raises(ContractError) as excinfo:
+        infer_contract("texto", EXAMPLE, "example", _model(tmp_path))
+
+    message = str(excinfo.value)
+    assert "truncada" in message
+    assert "JSON válido" not in message
+
+
+def test_finish_reason_is_reported(monkeypatch, tmp_path: Path) -> None:
+    _fake_llama(
+        monkeypatch,
+        [json.dumps({"cliente": "ACME", "total": 2})],
+        finish_reasons=["stop"],
+    )
+    usage: dict = {}
+
+    infer_contract("texto", EXAMPLE, "example", _model(tmp_path), usage_out=usage)
+
+    assert usage["finish_reason"] == "stop"

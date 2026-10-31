@@ -412,3 +412,253 @@ def test_corrupt_pdf_returns_1_without_traceback(tmp_path: Path, capsys) -> None
     err = capsys.readouterr().err
     assert "error" in err
     assert "Traceback" not in err
+
+
+def test_contract_flags_without_json_format_return_2(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    def boom(*args, **kwargs):
+        raise AssertionError("no debe procesar el fichero")
+
+    monkeypatch.setattr(cli, "ingest", boom)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+    contract = _contract_file(tmp_path, EXAMPLE)
+    model = tmp_path / "m.gguf"
+    model.write_bytes(b"")
+
+    code = cli.main([str(source), "--contract", str(contract)])
+    assert code == 2
+    assert "--format json" in capsys.readouterr().err
+
+    code = cli.main([str(source), "--model", str(model)])
+    assert code == 2
+    assert "--format json" in capsys.readouterr().err
+
+
+ROWS_SCHEMA = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+        "nomina": {
+            "type": "object",
+            "properties": {
+                "devengos": {
+                    "type": "object",
+                    "properties": {
+                        "salario_base": {
+                            "type": ["number", "null"],
+                            "x-labels": ["SALARIO BASE"],
+                            "x-source": "devengado",
+                        }
+                    },
+                }
+            },
+        }
+    },
+}
+
+PARTIAL_SCHEMA = {
+    **ROWS_SCHEMA,
+    "properties": {
+        "nomina": {
+            "type": "object",
+            "properties": {
+                "devengos": {
+                    "type": "object",
+                    "properties": {
+                        **ROWS_SCHEMA["properties"]["nomina"]["properties"]["devengos"]["properties"],
+                        "horas_extras": {
+                            "type": ["number", "null"],
+                            "x-labels": ["HORAS EXTRAS"],
+                            "x-source": "devengado",
+                        },
+                    },
+                }
+            },
+        }
+    },
+}
+
+
+def _row_blocks() -> list[LayoutBlock]:
+    return [
+        LayoutBlock(0, "Concepto", 1.0, (10.0, 10.0, 60.0, 20.0)),
+        LayoutBlock(0, "Unidades", 1.0, (100.0, 10.0, 140.0, 20.0)),
+        LayoutBlock(0, "Importe", 1.0, (160.0, 10.0, 200.0, 20.0)),
+        LayoutBlock(0, "Devengado", 1.0, (220.0, 10.0, 280.0, 20.0)),
+        LayoutBlock(0, "SALARIO BASE", 1.0, (10.0, 30.0, 90.0, 40.0)),
+        LayoutBlock(0, "30,00", 1.0, (100.0, 30.0, 130.0, 40.0)),
+        LayoutBlock(0, "80,2297", 1.0, (160.0, 30.0, 200.0, 40.0)),
+        LayoutBlock(0, "2.406,89", 1.0, (220.0, 30.0, 280.0, 40.0)),
+    ]
+
+
+def _annotated(monkeypatch, tmp_path: Path, schema: dict | None = None) -> Path:
+    chosen = schema or ROWS_SCHEMA
+    _mock_pipeline(monkeypatch)
+    monkeypatch.setattr(cli, "native_blocks", lambda path: _row_blocks())
+    monkeypatch.setattr(cli, "load_contract", lambda path: (chosen, "schema"))
+    monkeypatch.setattr(cli, "load_instructions", lambda *args, **kwargs: None)
+    return _contract_file(tmp_path, chosen)
+
+
+def test_annotated_contract_uses_rows_and_skips_the_llm(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    contract = _annotated(monkeypatch, tmp_path)
+
+    def boom(*args, **kwargs):
+        raise AssertionError("no debe llamarse al LLM")
+
+    monkeypatch.setattr(cli, "infer_contract", boom)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+
+    code = cli.main(
+        [str(source), "--format", "json", "--contract", str(contract), "--metrics"]
+    )
+
+    assert code == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["nomina"]["devengos"]["salario_base"] == 2406.89
+    report = json.loads(captured.err)
+    assert report["extract"]["deterministic"] == 1
+    assert report["extract"]["unmatched"] == 0
+    assert report["extract"]["llm"] is False
+    assert report["verify"]["errors"] == []
+
+
+def test_no_llm_does_not_require_a_model(monkeypatch, tmp_path: Path, capsys) -> None:
+    contract = _annotated(monkeypatch, tmp_path, PARTIAL_SCHEMA)
+    monkeypatch.setattr(cli, "default_model_path", lambda: None)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+
+    code = cli.main(
+        [str(source), "--format", "json", "--contract", str(contract), "--no-llm", "--metrics"]
+    )
+
+    assert code == 0
+    captured = capsys.readouterr()
+    report = json.loads(captured.err.strip().splitlines()[-1])
+    assert report["llm"]["enabled"] is False
+    assert report["extract"]["llm"] is False
+
+
+def test_strict_fails_when_a_value_is_not_in_the_text(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    _mock_pipeline(monkeypatch, blocks=[LayoutBlock(0, "sin cifras", 1.0, (0.0, 0.0, 1.0, 1.0))])
+    monkeypatch.setattr(cli, "infer_contract", lambda *args, **kwargs: {"cliente": "ACME", "total": 1e15})
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+
+    code = cli.main(
+        [
+            str(source),
+            "--format",
+            "json",
+            "--contract",
+            str(_contract_file(tmp_path, EXAMPLE)),
+            "--model",
+            _model(tmp_path),
+            "--strict",
+        ]
+    )
+
+    assert code == 2
+    assert "no aparecen en el texto" in capsys.readouterr().err
+
+
+def test_without_strict_a_literal_mismatch_only_warns(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    _mock_pipeline(monkeypatch, blocks=[LayoutBlock(0, "sin cifras", 1.0, (0.0, 0.0, 1.0, 1.0))])
+    monkeypatch.setattr(cli, "infer_contract", lambda *args, **kwargs: {"cliente": "ACME", "total": 1e15})
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+
+    code = cli.main(
+        [
+            str(source),
+            "--format",
+            "json",
+            "--contract",
+            str(_contract_file(tmp_path, EXAMPLE)),
+            "--model",
+            _model(tmp_path),
+        ]
+    )
+
+    assert code == 0
+    assert "aviso:" in capsys.readouterr().err
+
+
+def test_absent_fields_do_not_trigger_the_llm(monkeypatch, tmp_path: Path, capsys) -> None:
+    contract = _annotated(monkeypatch, tmp_path, PARTIAL_SCHEMA)
+
+    def boom(*args, **kwargs):
+        raise AssertionError("no debe llamarse al LLM por campos ausentes")
+
+    monkeypatch.setattr(cli, "infer_contract", boom)
+    monkeypatch.setattr(cli, "default_model_path", lambda: tmp_path / "nada.gguf")
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+
+    code = cli.main(
+        [str(source), "--format", "json", "--contract", str(contract), "--metrics"]
+    )
+
+    assert code == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["nomina"]["devengos"]["horas_extras"] is None
+    report = json.loads(captured.err.strip().splitlines()[-1])
+    assert report["extract"]["llm"] is False
+
+
+def test_low_coverage_warns(monkeypatch, tmp_path: Path, capsys) -> None:
+    _mock_pipeline(monkeypatch)
+    monkeypatch.setattr(cli, "native_blocks", lambda path: _row_blocks())
+    monkeypatch.setattr(cli, "load_contract", lambda path: (PARTIAL_SCHEMA, "schema"))
+    monkeypatch.setattr(cli, "load_instructions", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cli, "default_model_path", lambda: None)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+    contract = _contract_file(tmp_path, PARTIAL_SCHEMA)
+
+    code = cli.main(
+        [str(source), "--format", "json", "--contract", str(contract), "--no-llm", "--metrics"]
+    )
+
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "cobertura baja: 1/2" in captured.err
+    assert json.loads(captured.err.strip().splitlines()[-1])["extract"]["coverage"] == 0.5
+
+
+def test_low_coverage_fails_with_strict(monkeypatch, tmp_path: Path, capsys) -> None:
+    _mock_pipeline(monkeypatch)
+    monkeypatch.setattr(cli, "native_blocks", lambda path: _row_blocks())
+    monkeypatch.setattr(cli, "load_contract", lambda path: (PARTIAL_SCHEMA, "schema"))
+    monkeypatch.setattr(cli, "load_instructions", lambda *args, **kwargs: None)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+    contract = _contract_file(tmp_path, PARTIAL_SCHEMA)
+
+    code = cli.main(
+        [
+            str(source),
+            "--format",
+            "json",
+            "--contract",
+            str(contract),
+            "--no-llm",
+            "--strict",
+        ]
+    )
+
+    assert code == 2
+    assert "cobertura baja" in capsys.readouterr().err

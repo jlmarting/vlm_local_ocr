@@ -1,0 +1,355 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "nomina": {
+      "type": "object",
+      "properties": {
+        "datos_generales": {
+          "type": "object",
+          "properties": {
+            "grupo_cotizacion": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "x-labels": [
+                "GRUPO"
+              ]
+            }
+          }
+        },
+        "devengos": {
+          "type": "object",
+          "properties": {
+            "salario_base": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-labels": [
+                "SALARIO BASE"
+              ],
+              "x-source": "devengado"
+            },
+            "antiguedad": {
+              "type": "object",
+              "properties": {
+                "unidades": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "x-labels": [
+                    "ANTIGÜEDAD"
+                  ],
+                  "x-source": "unidades"
+                },
+                "importe": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "x-labels": [
+                    "ANTIGÜEDAD"
+                  ],
+                  "x-source": "devengado"
+                }
+              }
+            },
+            "kilometraje": {
+              "type": "object",
+              "properties": {
+                "sujeto_a_cotizacion": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "x-labels": [
+                    "KILOMETRAJE SUJETO A COTIZACION"
+                  ],
+                  "x-source": "devengado"
+                },
+                "no_sujeto_a_cotizacion": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "x-labels": [
+                    "KILOMETRAJE NO SUJETO A COTIZACION"
+                  ],
+                  "x-source": "devengado"
+                },
+                "tributa_y_cotiza": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "x-labels": [
+                    "KILOMETRAJE TRIBUTA+COTIZA"
+                  ],
+                  "x-source": "devengado"
+                }
+              }
+            },
+            "gastos_comida": {
+              "type": "object",
+              "properties": {
+                "exentos_no_pernocta": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "x-labels": [
+                    "GTOS COMIDA EXENTOS NO PERNOCTA"
+                  ],
+                  "x-source": "devengado"
+                }
+              }
+            },
+            "horas_extras": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-labels": [
+                "HORAS EXTRAS"
+              ],
+              "x-source": "devengado"
+            },
+            "prorrata_pagas": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-labels": [
+                "PRORRATA PAGAS"
+              ]
+            },
+            "remuneracion_total": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-labels": [
+                "REMUNERACION TOTAL"
+              ]
+            }
+          }
+        },
+        "deducciones": {
+          "type": "object",
+          "properties": {
+            "irpf": {
+              "type": "object",
+              "properties": {
+                "retencion": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "x-labels": [
+                    "RETENCION I.R.P.F."
+                  ],
+                  "x-source": "a_deducir"
+                }
+              }
+            },
+            "seguridad_social": {
+              "type": "object",
+              "properties": {
+                "descuentos_seg_soc": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "x-labels": [
+                    "DESCUENTOS SEG. SOC."
+                  ],
+                  "x-source": "a_deducir"
+                },
+                "aportacion_trabajador": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "x-labels": [
+                    "DESCUENTOS SEG. SOC."
+                  ],
+                  "x-source": "a_deducir"
+                },
+                "incapacidad_temporal_it": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "x-labels": [
+                    "IT + IMS"
+                  ],
+                  "x-source": "cuota"
+                },
+                "contingencias_comunes": {
+                  "type": "object",
+                  "properties": {
+                    "base": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "x-labels": [
+                        "CONTINGENCIAS COMUNES"
+                      ],
+                      "x-source": "base"
+                    },
+                    "porcentaje": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "x-labels": [
+                        "CONTINGENCIAS COMUNES"
+                      ],
+                      "x-source": "porcentaje"
+                    },
+                    "cuota": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "x-labels": [
+                        "CONTINGENCIAS COMUNES"
+                      ],
+                      "x-source": "cuota"
+                    }
+                  }
+                },
+                "desempleo": {
+                  "type": "object",
+                  "properties": {
+                    "base": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "x-labels": [
+                        "DESEMPLEO"
+                      ],
+                      "x-source": "base"
+                    },
+                    "porcentaje": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "x-labels": [
+                        "DESEMPLEO"
+                      ],
+                      "x-source": "porcentaje"
+                    },
+                    "cuota": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "x-labels": [
+                        "DESEMPLEO"
+                      ],
+                      "x-source": "cuota"
+                    }
+                  }
+                },
+                "formacion_profesional": {
+                  "type": "object",
+                  "properties": {
+                    "base": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "x-labels": [
+                        "FORMACION PROFESIONAL"
+                      ],
+                      "x-source": "base"
+                    },
+                    "porcentaje": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "x-labels": [
+                        "FORMACION PROFESIONAL"
+                      ],
+                      "x-source": "porcentaje"
+                    },
+                    "cuota": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "x-labels": [
+                        "FORMACION PROFESIONAL"
+                      ],
+                      "x-source": "cuota"
+                    }
+                  }
+                },
+                "fogasa": {
+                  "type": "object",
+                  "properties": {
+                    "base": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "x-labels": [
+                        "FOGASA"
+                      ],
+                      "x-source": "base"
+                    },
+                    "porcentaje": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "x-labels": [
+                        "FOGASA"
+                      ],
+                      "x-source": "porcentaje"
+                    },
+                    "cuota": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "x-labels": [
+                        "FOGASA"
+                      ],
+                      "x-source": "cuota"
+                    }
+                  }
+                }
+              }
+            },
+            "total_deducciones": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-labels": [
+                "TOTAL DEDUCCIONES"
+              ]
+            }
+          }
+        },
+        "aportacion_empresa": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-labels": [
+            "APORTACION DE LA EMPRESA"
+          ]
+        }
+      }
+    }
+  }
+}
