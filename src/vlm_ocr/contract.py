@@ -263,7 +263,9 @@ def _build_messages(ocr_text: str, contract: dict, kind: str) -> list[dict]:
         "'1.234,56' or '50,00' become 1234.56 and 50.00; never drop the decimal comma. "
         "No currency symbols. Dates use YYYY-MM-DD when possible; copy names and identifiers verbatim. "
         "Take every value from the OCR text and never reuse the same value for two different fields "
-        "(for example, do not use the date as an invoice number).\n\n"
+        "(for example, do not use the date as an invoice number). "
+        "Extract the minimal literal value for each field: do not include the field label, "
+        "neighboring fields, or unrelated text.\n\n"
         f"{header}:\n{json.dumps(shape, ensure_ascii=False, indent=2)}\n\n"
         f"OCR TEXT:\n{ocr_text}\n"
     )
