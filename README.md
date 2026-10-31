@@ -17,11 +17,13 @@ CLI local para extraer texto de PDFs e imágenes y mapearlo a un contrato JSON, 
 ```bash
 uv sync
 uv run python scripts/fetch_models.py   # descarga y verifica el GGUF (~491 MB)
+# artefacto de distribución con el modelo incluido:
+./scripts/build_release.sh
 ```
 
 El script descarga `Qwen2.5-0.5B-Instruct Q4_K_M` (Apache-2.0). Los modelos OCR por defecto vienen en el wheel de `rapidocr` y funcionan offline.
 
-> Hoy el CLI requiere `--model` cuando hay contrato; la ruta por defecto y el empaquetado del GGUF están pendientes (ver `docs/MANUAL.md` §10).
+El CLI busca el GGUF por defecto en `models/` del repo, `./models/` o `~/.local/share/vlm-local-ocr/models/`; `--model` lo sobrescribe. `scripts/build_release.sh` genera un artefacto con el modelo incluido.
 
 ## Uso
 

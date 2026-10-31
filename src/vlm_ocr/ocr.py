@@ -4,6 +4,7 @@ from functools import lru_cache
 
 from rapidocr import RapidOCR
 
+from .errors import InputError
 from .types import LayoutBlock, PageInput
 
 SUPPORTED_LANGS = {
@@ -50,10 +51,14 @@ def ocr_pages(pages: list[PageInput], lang: str = "default") -> list[LayoutBlock
         if page.image_png is None:
             continue
 
-        result = _engine()(page.image_png)
+        try:
+            result = _engine()(page.image_png)
+        except Exception as exc:
+            raise InputError(f"falló el OCR en la página {page.index}: {exc}") from exc
         if result.boxes is None or result.txts is None or len(result.boxes) == 0:
             continue
-        for box, text, score in zip(result.boxes, result.txts, result.scores):
+        scores = result.scores if result.scores is not None else [0.0] * len(result.txts)
+        for box, text, score in zip(result.boxes, result.txts, scores):
             xs = [float(point[0]) for point in box]
             ys = [float(point[1]) for point in box]
             blocks.append(

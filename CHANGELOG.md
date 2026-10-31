@@ -9,6 +9,14 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [0.1.0] - 2026-10-30
 
+### Fixed
+
+- Exit codes: contrato/instrucciones/modelo → `2`; entrada/OCR → `1`; PDF corrupto y schema inválido sin traceback.
+- Validación `int`: rechaza `1.5` y `"1.5"`; acepta enteros e integrales.
+- Revalidación del contrato tras coerción y anclaje; el anclaje `int` ya no trunca.
+- Golden test con umbral ≥80 %.
+- OCR y sidecar delimitados como datos no confiables frente a prompt injection.
+
 ### Added
 
 - CLI `vlm-ocr` con salida Markdown (defecto) y JSON.
@@ -26,4 +34,5 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Instrucción al modelo para copiar valores literales y no calcular cifras; `null` aceptado para datos ausentes.
 - Anclaje determinista a etiquetas para campos numéricos (`Total: 1895` prevalece sobre un precio unitario).
 - Sidecar `*.prompt.md` con instrucciones de ajuste por contrato, autodetectado o vía `--instructions`, con límite de 4 000 caracteres.
+- Resolución del modelo por defecto (`models/`, `./models/`, `~/.local/share/vlm-local-ocr/models/`) y script `scripts/build_release.sh` con el GGUF incluido.
 - Few-shot mínimo en el prompt para evitar que el modelo reutilice un valor (p. ej. la fecha) en otro campo.

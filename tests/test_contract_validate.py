@@ -93,3 +93,15 @@ def test_schema_mode_uses_jsonschema() -> None:
 
     assert validate_payload({"total": 3}, schema, "schema") == []
     assert validate_payload({"total": "tres"}, schema, "schema")
+
+
+def test_example_int_rejects_fractional_float() -> None:
+    assert validate_payload({"n": 1.5}, {"n": 1}, "example")
+
+
+def test_example_int_rejects_fractional_string() -> None:
+    assert validate_payload({"n": "1.5"}, {"n": 1}, "example")
+
+
+def test_example_int_accepts_integral_float() -> None:
+    assert validate_payload({"n": 2.0}, {"n": 1}, "example") == []

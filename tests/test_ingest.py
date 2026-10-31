@@ -7,6 +7,7 @@ import pymupdf
 import pytest
 from PIL import Image, ImageDraw
 
+from vlm_ocr.errors import InputError
 from vlm_ocr.ingest import ingest
 
 
@@ -90,10 +91,10 @@ def test_unsupported_extension_raises(tmp_path: Path) -> None:
     path = tmp_path / "nota.txt"
     path.write_text("hola")
 
-    with pytest.raises(ValueError, match="no soportado"):
+    with pytest.raises(InputError, match="no soportado"):
         ingest(path)
 
 
 def test_missing_file_raises(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(InputError, match="no existe"):
         ingest(tmp_path / "no-existe.pdf")

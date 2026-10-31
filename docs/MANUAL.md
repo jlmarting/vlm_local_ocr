@@ -35,9 +35,9 @@ uv sync
 uv run python scripts/fetch_models.py   # descarga y verifica el GGUF (~491 MB)
 ```
 
-Modelo por defecto descargado: `models/qwen2.5-0.5b-instruct-q4_k_m.gguf` (Qwen2.5-0.5B-Instruct Q4_K_M, Apache-2.0).
+Modelo por defecto descargado: `models/qwen2.5-0.5b-instruct-q4_k_m.gguf` (Qwen2.5-0.5B-Instruct Q4_K_M, Apache-2.0). El CLI lo resuelve en `models/` del repo, `./models/` o `~/.local/share/vlm-local-ocr/models/`; `--model` lo sobrescribe.
 
-> Hoy el CLI **no resuelve una ruta por defecto**: con contrato hay que pasar `--model`. El empaquetado del modelo y la ruta por defecto están pendientes (ver §10).
+Para distribución: `scripts/build_release.sh` construye el wheel y un tarball con el GGUF y el script de descarga.
 
 ## 4. Uso
 
@@ -97,7 +97,7 @@ uv run vlm-ocr documento.pdf --out salida.md
 | `1` | Error de entrada/OCR |
 | `2` | Error de contrato/modelo/instrucciones |
 
-> **Pendiente**: hoy algunos errores de contrato/modelo salen como `1` y un PDF corrupto imprime traceback. Ver §10.
+Los errores de entrada/OCR salen como `1`; contrato, instrucciones o modelo como `2`. Los detalles se imprimen en stderr sin traceback.
 
 ## 5. Contratos
 
@@ -208,13 +208,15 @@ uv run ruff check .
 
 La revisión fresca previa al cierre encontró:
 
-**Alta**
-1. Exit codes: contrato malformado/inexistente y modelo inexistente salen como `1`; deberían ser `2`. PDF corrupto y schema inválido imprimen traceback.
-2. Validación `int`: acepta `1.5` y `"1.5"` como entero.
-3. Modelo por defecto/empaquetado: no hay ruta por defecto ni el GGUF en el artefacto.
-4. Golden test: umbral 66,7 %, no el ≥80 % del spec; documentos sintéticos.
-5. Prompt injection sin delimitar (OCR y sidecar).
-6. Licencia: PyMuPDF AGPL frente a proyecto MIT; sin `LICENSE`/`NOTICE`.
+**Alta — resueltas (2026-10-31)**
+1. Exit codes: contrato/instrucciones/modelo → `2`; entrada/OCR → `1`; sin traceback.
+2. Validación `int`: rechaza `1.5` y `"1.5"`; acepta enteros e integrales (`2.0`).
+3. Modelo por defecto resuelto (`models/`, `./models/`, `~/.local/share/...`) y release con GGUF (`scripts/build_release.sh`).
+4. Golden test: umbral ≥80 % (3/3 en los documentos actuales).
+5. Prompt injection: OCR y sidecar delimitados (`<ocr_text>`, `<task_instructions>`) con instrucción de no seguirlos.
+
+**Alta — pendiente**
+6. Licencia: PyMuPDF AGPL frente a proyecto MIT; sin `LICENSE`/`NOTICE`. Requiere decisión (AGPL o sustituir PyMuPDF).
 
 **Media**: `--lang` no cambia de modelo; presupuesto de tokens no acotado del todo; normalización numérica puede tocar identificadores; sidecar se lee entero antes del límite; arrays vacíos sin aviso; layout nativo con cajas `(0,0,0,0)`; imports eager; documentación desactualizada; tests de formatos/rotación/errores incompletos.
 

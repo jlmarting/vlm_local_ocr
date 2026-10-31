@@ -19,6 +19,7 @@ FONT = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(not MODEL.exists(), reason=f"falta el modelo {MODEL.name}"),
+    pytest.mark.skipif(not FONT.exists(), reason=f"falta la fuente {FONT}"),
 ]
 
 
@@ -91,7 +92,7 @@ def test_golden_native_pdf(tmp_path: Path) -> None:
         _number(data.get("total")) == pytest.approx(123.45, abs=0.01),
         "2026-10-30" in _normalize(data.get("fecha")),
     ]
-    assert sum(checks) >= 2, data
+    assert sum(checks) >= 0.8 * len(checks), data
 
 
 def test_golden_scanned_pdf(tmp_path: Path) -> None:
@@ -103,4 +104,4 @@ def test_golden_scanned_pdf(tmp_path: Path) -> None:
         _number(data.get("importe")) == pytest.approx(50.0, abs=0.01),
         "2026-09-15" in _normalize(data.get("fecha")),
     ]
-    assert sum(checks) >= 2, data
+    assert sum(checks) >= 0.8 * len(checks), data

@@ -11,6 +11,12 @@ from vlm_ocr.types import LayoutBlock, PageInput
 EXAMPLE = {"cliente": "ACME", "total": 1.5}
 
 
+def _model(tmp_path: Path) -> str:
+    path = tmp_path / "m.gguf"
+    path.write_bytes(b"")
+    return str(path)
+
+
 def _contract_file(tmp_path: Path, payload: dict) -> Path:
     path = tmp_path / "contrato.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
@@ -42,8 +48,27 @@ def test_markdown_is_default(monkeypatch, tmp_path: Path, capsys) -> None:
     assert "texto de prueba" in capsys.readouterr().out
 
 
-def test_json_without_model_returns_2(monkeypatch, tmp_path: Path, capsys) -> None:
+def test_json_without_model_uses_default(monkeypatch, tmp_path: Path, capsys) -> None:
     _mock_pipeline(monkeypatch)
+    default = tmp_path / "default.gguf"
+    default.write_bytes(b"")
+    monkeypatch.setattr(cli, "default_model_path", lambda: default)
+    monkeypatch.setattr(cli, "infer_contract", lambda *a, **k: {"cliente": "ACME", "total": 2})
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+    contract = _contract_file(tmp_path, EXAMPLE)
+
+    code = cli.main([str(source), "--format", "json", "--contract", str(contract)])
+
+    assert code == 0
+    assert json.loads(capsys.readouterr().out) == {"cliente": "ACME", "total": 2}
+
+
+def test_json_without_model_and_without_default_returns_2(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    _mock_pipeline(monkeypatch)
+    monkeypatch.setattr(cli, "default_model_path", lambda: None)
     source = tmp_path / "doc.pdf"
     source.write_bytes(b"")
     contract = _contract_file(tmp_path, EXAMPLE)
@@ -98,7 +123,7 @@ def test_json_success_emits_contract_shaped_payload(monkeypatch, tmp_path: Path,
     contract = _contract_file(tmp_path, EXAMPLE)
 
     code = cli.main(
-        [str(source), "--format", "json", "--contract", str(contract), "--model", "m.gguf"]
+        [str(source), "--format", "json", "--contract", str(contract), "--model", _model(tmp_path)]
     )
 
     assert code == 0
@@ -120,7 +145,7 @@ def test_with_layout_wraps_data_and_layout(monkeypatch, tmp_path: Path, capsys) 
             "--contract",
             str(contract),
             "--model",
-            "m.gguf",
+            _model(tmp_path),
             "--with-layout",
         ]
     )
@@ -191,7 +216,7 @@ def test_contract_kind_schema_overrides_detection(monkeypatch, tmp_path: Path) -
             "--contract",
             str(contract),
             "--model",
-            "m.gguf",
+            _model(tmp_path),
             "--contract-kind",
             "schema",
         ]
@@ -235,7 +260,7 @@ def test_missing_explicit_instructions_returns_2(
             "--contract",
             str(contract),
             "--model",
-            "m.gguf",
+            _model(tmp_path),
             "--instructions",
             str(tmp_path / "no-existe.md"),
         ]
@@ -260,7 +285,7 @@ def test_auto_sidecar_is_forwarded(monkeypatch, tmp_path: Path, capsys) -> None:
     (tmp_path / "contrato.prompt.md").write_text("AJUSTE AUTO", encoding="utf-8")
 
     code = cli.main(
-        [str(source), "--format", "json", "--contract", str(contract), "--model", "m.gguf"]
+        [str(source), "--format", "json", "--contract", str(contract), "--model", _model(tmp_path)]
     )
 
     assert code == 0
@@ -291,7 +316,7 @@ def test_explicit_instructions_override_sidecar(monkeypatch, tmp_path: Path) -> 
             "--contract",
             str(contract),
             "--model",
-            "m.gguf",
+            _model(tmp_path),
             "--instructions",
             str(explicit),
         ]
@@ -299,3 +324,91 @@ def test_explicit_instructions_override_sidecar(monkeypatch, tmp_path: Path) -> 
 
     assert code == 0
     assert seen["instructions"] == "EXPLICITO"
+
+
+def test_malformed_contract_returns_2(monkeypatch, tmp_path: Path, capsys) -> None:
+    _mock_pipeline(monkeypatch)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+    bad = tmp_path / "bad.json"
+    bad.write_text("{ malformado", encoding="utf-8")
+
+    code = cli.main(
+        [str(source), "--format", "json", "--contract", str(bad), "--model", _model(tmp_path)]
+    )
+
+    assert code == 2
+    assert "contrato" in capsys.readouterr().err
+
+
+def test_missing_contract_returns_2(monkeypatch, tmp_path: Path, capsys) -> None:
+    _mock_pipeline(monkeypatch)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+
+    code = cli.main(
+        [
+            str(source),
+            "--format",
+            "json",
+            "--contract",
+            str(tmp_path / "no-existe.json"),
+            "--model",
+            _model(tmp_path),
+        ]
+    )
+
+    assert code == 2
+    assert "contrato" in capsys.readouterr().err
+
+
+def test_missing_explicit_model_returns_2(monkeypatch, tmp_path: Path, capsys) -> None:
+    _mock_pipeline(monkeypatch)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+    contract = _contract_file(tmp_path, EXAMPLE)
+
+    code = cli.main(
+        [
+            str(source),
+            "--format",
+            "json",
+            "--contract",
+            str(contract),
+            "--model",
+            str(tmp_path / "no-existe.gguf"),
+        ]
+    )
+
+    assert code == 2
+    assert "modelo" in capsys.readouterr().err
+
+
+def test_invalid_schema_returns_2(monkeypatch, tmp_path: Path, capsys) -> None:
+    _mock_pipeline(monkeypatch)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+    schema = tmp_path / "schema.json"
+    schema.write_text(
+        json.dumps({"$schema": "https://json-schema.org/draft/2020-12/schema", "type": 123}),
+        encoding="utf-8",
+    )
+
+    code = cli.main(
+        [str(source), "--format", "json", "--contract", str(schema), "--model", _model(tmp_path)]
+    )
+
+    assert code == 2
+    assert "schema" in capsys.readouterr().err.lower()
+
+
+def test_corrupt_pdf_returns_1_without_traceback(tmp_path: Path, capsys) -> None:
+    source = tmp_path / "corrupto.pdf"
+    source.write_bytes(b"no es un pdf")
+
+    code = cli.main([str(source)])
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "error" in err
+    assert "Traceback" not in err
