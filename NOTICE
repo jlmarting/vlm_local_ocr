@@ -1,0 +1,22 @@
+# Third-party notices
+
+`vlm_local_ocr` se distribuye bajo la licencia MIT (ver `LICENSE`).
+
+Dependencias y componentes de terceros:
+
+- **pypdfium2** — Apache-2.0 (wrapper de Python); **PDFium** — BSD-3-Clause.
+  https://github.com/pypdfium2-team/pypdfium2
+- **RapidOCR** — Apache-2.0.
+  https://github.com/RapidAI/RapidOCR
+- **ONNX Runtime** — MIT.
+  https://github.com/microsoft/onnxruntime
+- **llama-cpp-python** / **llama.cpp** — MIT.
+  https://github.com/abetlen/llama-cpp-python · https://github.com/ggml-org/llama.cpp
+- **jsonschema** — MIT.
+  https://github.com/python-jsonschema/jsonschema
+- **Qwen2.5-0.5B-Instruct** (pesos GGUF, descargados aparte) — Apache-2.0.
+  https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF
+
+Los modelos OCR de RapidOCR/PaddleOCR incluidos en el wheel se distribuyen bajo
+Apache-2.0. Consulte los ficheros de licencia de cada paquete instalado para el
+texto completo.

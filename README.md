@@ -121,3 +121,7 @@ uv run ruff check .
 
 - [docs/MANUAL.md](docs/MANUAL.md) — manual de uso, contratos, límites y estado de cierre.
 - [CHANGELOG.md](CHANGELOG.md) — historial de cambios.
+
+## Licencia
+
+MIT. Ver [LICENSE](LICENSE) y [NOTICE](NOTICE).

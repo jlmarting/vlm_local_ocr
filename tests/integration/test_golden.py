@@ -4,9 +4,11 @@ import io
 import re
 from pathlib import Path
 
-import pymupdf
 import pytest
 from PIL import Image, ImageDraw, ImageFont
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
 
 from vlm_ocr.contract import infer_contract, validate_payload
 from vlm_ocr.ingest import ingest
@@ -24,8 +26,7 @@ pytestmark = [
 
 
 def _text_pdf(path: Path) -> Path:
-    doc = pymupdf.open()
-    page = doc.new_page()
+    doc = canvas.Canvas(str(path), pagesize=A4)
     lines = [
         "Factura",
         "Cliente: ACME S.L.",
@@ -33,9 +34,10 @@ def _text_pdf(path: Path) -> Path:
         "Fecha: 2026-10-30",
     ]
     for i, line in enumerate(lines):
-        page.insert_text((72, 72 + i * 24), line, fontsize=14)
-    doc.save(path)
-    doc.close()
+        doc.setFont("Helvetica", 14)
+        doc.drawString(72, 780 - i * 24, line)
+    doc.showPage()
+    doc.save()
     return path
 
 
@@ -53,11 +55,11 @@ def _scanned_pdf(path: Path) -> Path:
         draw.text((30, 20 + i * 48), line, fill="black", font=font)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
-    doc = pymupdf.open()
-    page = doc.new_page(width=600, height=220)
-    page.insert_image(page.rect, stream=buf.getvalue())
-    doc.save(path)
-    doc.close()
+    buf.seek(0)
+    doc = canvas.Canvas(str(path), pagesize=(600, 220))
+    doc.drawImage(ImageReader(buf), 0, 0, width=600, height=220)
+    doc.showPage()
+    doc.save()
     return path
 
 

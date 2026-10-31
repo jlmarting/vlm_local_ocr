@@ -9,6 +9,11 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [0.1.0] - 2026-10-30
 
+### Changed
+
+- PDF: se sustituye PyMuPDF (AGPL) por `pypdfium2`/PDFium (permisivo) para mantener el proyecto en MIT.
+- Licencia del proyecto: MIT con `LICENSE` y `NOTICE` de terceros.
+
 ### Fixed
 
 - Exit codes: contrato/instrucciones/modelo → `2`; entrada/OCR → `1`; PDF corrupto y schema inválido sin traceback.

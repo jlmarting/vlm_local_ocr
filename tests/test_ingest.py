@@ -3,24 +3,26 @@ from __future__ import annotations
 import io
 from pathlib import Path
 
-import pymupdf
 import pytest
 from PIL import Image, ImageDraw
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
 
 from vlm_ocr.errors import InputError
 from vlm_ocr.ingest import ingest
 
 
 def _make_text_pdf(path: Path, pages: int = 1) -> Path:
-    doc = pymupdf.open()
+    doc = canvas.Canvas(str(path), pagesize=A4)
     for i in range(pages):
-        page = doc.new_page()
-        page.insert_text(
-            (72, 72),
+        doc.drawString(
+            72,
+            800,
             f"Pagina {i + 1}. Este PDF tiene una capa de texto nativa y suficiente longitud.",
         )
-    doc.save(path)
-    doc.close()
+        doc.showPage()
+    doc.save()
     return path
 
 
@@ -28,14 +30,14 @@ def _make_scanned_pdf(path: Path) -> Path:
     img = Image.new("RGB", (300, 120), "white")
     draw = ImageDraw.Draw(img)
     draw.text((10, 40), "TEXTO ESCANEADO", fill="black")
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
 
-    doc = pymupdf.open()
-    page = doc.new_page(width=300, height=120)
-    page.insert_image(page.rect, stream=buf.getvalue())
-    doc.save(path)
-    doc.close()
+    doc = canvas.Canvas(str(path), pagesize=(300, 120))
+    doc.drawImage(ImageReader(buffer), 0, 0, width=300, height=120)
+    doc.showPage()
+    doc.save()
     return path
 
 

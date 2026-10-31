@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
-import pymupdf
+import pypdfium2 as pdfium
 
 from .errors import InputError
 from .types import PageInput
@@ -38,16 +39,27 @@ def ingest(path: Path | str, dpi: int = 200) -> list[PageInput]:
 
 def _ingest_pdf(path: Path, dpi: int) -> list[PageInput]:
     pages: list[PageInput] = []
-    with pymupdf.open(path) as doc:
-        for index, page in enumerate(doc):
-            text = page.get_text("text") or ""
+    pdf = pdfium.PdfDocument(str(path))
+    try:
+        count = len(pdf)
+        if count == 0:
+            raise InputError(f"el PDF no tiene páginas: {path}")
+        for index in range(count):
+            page = pdf[index]
+            try:
+                text = page.get_textpage().get_text_range() or ""
+            except pdfium.PdfiumError:
+                text = ""
             if len(text.strip()) >= TEXT_MIN_CHARS:
                 pages.append(PageInput(index=index, text=text, image_png=None))
             else:
-                pixmap = page.get_pixmap(dpi=dpi)
+                bitmap = page.render(scale=dpi / 72)
+                image = bitmap.to_pil()
+                buffer = io.BytesIO()
+                image.save(buffer, format="PNG")
                 pages.append(
-                    PageInput(index=index, text=None, image_png=pixmap.tobytes("png"))
+                    PageInput(index=index, text=None, image_png=buffer.getvalue())
                 )
-    if not pages:
-        raise InputError(f"el PDF no tiene páginas: {path}")
+    finally:
+        pdf.close()
     return pages
