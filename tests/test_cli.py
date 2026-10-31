@@ -541,7 +541,8 @@ def test_no_llm_does_not_require_a_model(monkeypatch, tmp_path: Path, capsys) ->
     )
 
     assert code == 0
-    report = json.loads(capsys.readouterr().err)
+    captured = capsys.readouterr()
+    report = json.loads(captured.err.strip().splitlines()[-1])
     assert report["llm"]["enabled"] is False
     assert report["extract"]["llm"] is False
 
@@ -614,4 +615,50 @@ def test_absent_fields_do_not_trigger_the_llm(monkeypatch, tmp_path: Path, capsy
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
     assert payload["nomina"]["devengos"]["horas_extras"] is None
-    assert json.loads(captured.err)["extract"]["llm"] is False
+    report = json.loads(captured.err.strip().splitlines()[-1])
+    assert report["extract"]["llm"] is False
+
+
+def test_low_coverage_warns(monkeypatch, tmp_path: Path, capsys) -> None:
+    _mock_pipeline(monkeypatch)
+    monkeypatch.setattr(cli, "native_blocks", lambda path: _row_blocks())
+    monkeypatch.setattr(cli, "load_contract", lambda path: (PARTIAL_SCHEMA, "schema"))
+    monkeypatch.setattr(cli, "load_instructions", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cli, "default_model_path", lambda: None)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+    contract = _contract_file(tmp_path, PARTIAL_SCHEMA)
+
+    code = cli.main(
+        [str(source), "--format", "json", "--contract", str(contract), "--no-llm", "--metrics"]
+    )
+
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "cobertura baja: 1/2" in captured.err
+    assert json.loads(captured.err.strip().splitlines()[-1])["extract"]["coverage"] == 0.5
+
+
+def test_low_coverage_fails_with_strict(monkeypatch, tmp_path: Path, capsys) -> None:
+    _mock_pipeline(monkeypatch)
+    monkeypatch.setattr(cli, "native_blocks", lambda path: _row_blocks())
+    monkeypatch.setattr(cli, "load_contract", lambda path: (PARTIAL_SCHEMA, "schema"))
+    monkeypatch.setattr(cli, "load_instructions", lambda *args, **kwargs: None)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+    contract = _contract_file(tmp_path, PARTIAL_SCHEMA)
+
+    code = cli.main(
+        [
+            str(source),
+            "--format",
+            "json",
+            "--contract",
+            str(contract),
+            "--no-llm",
+            "--strict",
+        ]
+    )
+
+    assert code == 2
+    assert "cobertura baja" in capsys.readouterr().err

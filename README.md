@@ -177,6 +177,7 @@ El cuello de botella es la representación del texto, no el tamaño del modelo.
 - **Manuscrito, tablas complejas y formularios**: fuera de v1.
 - **Idiomas**: el set por defecto cubre chino/inglés/japonés y ~50 lenguas latinas (incl. español); cirílico, árabe, devanagari, **coreano**, etc. requieren modelos adicionales. Con `--lang ar`/`--lang ko` el CLI falla con un hint claro; sin `--lang` el OCR devuelve texto incorrecto en silencio.
 - **Fidelidad semántica**: el JSON válido está garantizado por gramática; la forma del contrato solo se impone como esquema cuando el contrato es un JSON Schema. Los valores dependen del modelo y, sobre todo, del texto: en tablas (nóminas) el orden del texto nativo puede separar etiquetas y valores, y entonces ningún modelo acierta. Ver «Contrato de 30 campos».
+- **Cobertura baja**: si menos del 75 % de los campos anotados se resuelven, se avisa por stderr (`--strict` lo convierte en error). Protege de OCR de baja calidad que devuelve valores plausibles pero falsos: los números salen del texto y pasan la literalidad, aunque estén en la fila equivocada.
 - **Asignación determinista**: depende de que las etiquetas lleguen aisladas. Con un escaneo sintético RapidOCR separa las celdas; si la separación entre columnas es pequeña y devuelve la fila entera como un bloque, no hay columnas que cruzar y el campo cae al LLM. Las cabeceras verticales y los totales al pie se resuelven con heurísticas (ventana de filas y unicidad del número), no con una tabla geométrica completa.
 
 ## Tests

@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 from . import extract, metrics, verify
-from .annotations import has_annotations
+from .annotations import field_map, has_annotations
 from .contract import (
     ContractError,
     default_model_path,
@@ -225,7 +225,25 @@ def main(argv: list[str] | None = None) -> int:
                 row_blocks = _row_blocks(args.file, pages, args.lang)
                 input_text = rows_text(row_blocks)
                 assignment = extract.assign(row_blocks, contract)
+                annotated_fields = len(field_map(contract))
+                coverage = (
+                    len(assignment.matched) / annotated_fields if annotated_fields else 1.0
+                )
+                if annotated_fields and coverage < 0.75:
+                    print(
+                        f"aviso: cobertura baja: {len(assignment.matched)}/{annotated_fields} "
+                        "campos anotados (¿escaneo de baja calidad?)",
+                        file=sys.stderr,
+                    )
+                    if args.strict:
+                        return fail(
+                            "verify",
+                            f"cobertura baja: {len(assignment.matched)}/{annotated_fields} "
+                            "campos anotados",
+                            2,
+                        )
                 if report is not None:
+                    report["extract"]["coverage"] = round(coverage, 2)
                     report["extract"]["deterministic"] = len(assignment.matched)
                     report["extract"]["unmatched"] = len(assignment.unmatched)
                     report["extract"]["pending"] = len(assignment.pending)

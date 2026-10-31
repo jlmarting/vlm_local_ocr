@@ -12,6 +12,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Contrato JSON Schema anotado: `x-labels` (etiquetas del documento) y `x-source` (columna del valor).
 - Asignación determinista sin LLM cuando el contrato está anotado: el modelo solo rellena los campos que no casan y lo determinista gana.
 - `--text-format md|rows` (filas automáticas con contrato anotado), `--no-llm` y `--strict`.
+- Aviso de cobertura baja: si se resuelven menos del 75 % de los campos anotados, se avisa (`--strict` falla) en vez de devolver datos plausibles pero falsos.
 - Serialización en filas desde PDF nativo (cajas por carácter de PDFium) o desde OCR.
 - Bloque `extract` y `verify` en el informe de métricas; `scripts/draft_contract.py` para proponer un contrato anotado.
 

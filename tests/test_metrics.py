@@ -40,7 +40,13 @@ def test_empty_report_has_stable_shape() -> None:
     assert report["file"]["pages"] is None
     assert report["llm"]["finish_reason"] is None
     assert report["error"] is None
-    assert report["extract"] == {"deterministic": None, "llm": False, "unmatched": None, "pending": None}
+    assert report["extract"] == {
+        "deterministic": None,
+        "llm": False,
+        "unmatched": None,
+        "pending": None,
+        "coverage": None,
+    }
     assert report["verify"] == {"errors": []}
     assert set(report) == {
         "file",
