@@ -137,7 +137,7 @@ El informe incluye tamaño, formato y páginas del fichero; tiempos de ingesta, 
 - Sin `--metrics`/`--metrics-out` no hay salida extra ni coste apreciable.
 - En error (exit `1`/`2`) o interrupción (`130`) el informe se emite igualmente, con las etapas medidas y un campo `error` (`kind` + `message`).
 - `mean_confidence` se calcula **solo** sobre bloques de páginas rasterizadas (las nativas llevan confianza `1.0` sintética); `null` si no hay OCR real.
-- Sin contrato/modelo, `llm.enabled` es `false` y el resto se mide igual.
+- `llm.enabled` indica si el modelo llegó a usarse; `extract` dice cuántos campos se resolvieron sin él.
 
 ## Rendimiento medido (T480, CPU)
 

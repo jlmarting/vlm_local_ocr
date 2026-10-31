@@ -22,6 +22,7 @@ class Assignment:
     data: dict
     matched: list[str] = field(default_factory=list)
     unmatched: list[str] = field(default_factory=list)
+    pending: list[str] = field(default_factory=list)
 
 
 def parse_number(raw: str) -> float | None:
@@ -151,6 +152,7 @@ def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
     for path in leaves:
         _set(data, path, None)
     matched: list[str] = []
+    ambiguous: set[str] = set()
     unmatched: set[str] = set(leaves)
     columns: dict[str, tuple[float, float]] | None = None
     pending: list[tuple[FieldHint, tuple[float, float], int]] = []
@@ -175,6 +177,10 @@ def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
                 cell = _value_cell(hint, others, columns)
                 if cell is not None:
                     take(hint, cell, block.text)
+                elif columns is None and hint.source and len(
+                    [item for item in others if parse_number(item.text) is not None]
+                ) > 1:
+                    ambiguous.add(hint.path)
 
         numbers = [block for block in row if parse_number(block.text) is not None]
         remaining = []
@@ -197,7 +203,12 @@ def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
                     continue
                 pending.append((hint, (block.box[0], block.box[2]), index))
 
-    return Assignment(data=data, matched=matched, unmatched=sorted(unmatched))
+    return Assignment(
+        data=data,
+        matched=matched,
+        unmatched=sorted(unmatched),
+        pending=sorted(ambiguous - set(matched)),
+    )
 
 
 def merge(deterministic: Any, fallback: Any) -> Any:

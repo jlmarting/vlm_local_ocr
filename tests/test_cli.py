@@ -593,3 +593,25 @@ def test_without_strict_a_literal_mismatch_only_warns(
 
     assert code == 0
     assert "aviso:" in capsys.readouterr().err
+
+
+def test_absent_fields_do_not_trigger_the_llm(monkeypatch, tmp_path: Path, capsys) -> None:
+    contract = _annotated(monkeypatch, tmp_path, PARTIAL_SCHEMA)
+
+    def boom(*args, **kwargs):
+        raise AssertionError("no debe llamarse al LLM por campos ausentes")
+
+    monkeypatch.setattr(cli, "infer_contract", boom)
+    monkeypatch.setattr(cli, "default_model_path", lambda: tmp_path / "nada.gguf")
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+
+    code = cli.main(
+        [str(source), "--format", "json", "--contract", str(contract), "--metrics"]
+    )
+
+    assert code == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["nomina"]["devengos"]["horas_extras"] is None
+    assert json.loads(captured.err)["extract"]["llm"] is False

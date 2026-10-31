@@ -175,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
                 model_path = None
             else:
                 model_path = default_model_path()
-            if not args.no_llm:
+            if not args.no_llm and not use_rows:
                 if model_path is None:
                     return fail(
                         "usage",
@@ -186,10 +186,8 @@ def main(argv: list[str] | None = None) -> int:
                 if not Path(model_path).is_file():
                     return fail("usage", f"no existe el modelo: {model_path}", 2)
             usage_out = {} if report is not None else None
-            if report is not None:
-                report["llm"]["enabled"] = not args.no_llm
-                if model_path is not None:
-                    report["llm"]["model"] = Path(model_path).name
+            if report is not None and model_path is not None:
+                report["llm"]["model"] = Path(model_path).name
 
         ingest_start = time.perf_counter()
         pages = ingest(args.file, dpi=args.dpi)
@@ -230,10 +228,11 @@ def main(argv: list[str] | None = None) -> int:
                 if report is not None:
                     report["extract"]["deterministic"] = len(assignment.matched)
                     report["extract"]["unmatched"] = len(assignment.unmatched)
+                    report["extract"]["pending"] = len(assignment.pending)
                     report["extract"]["llm"] = False
 
             data = assignment.data if assignment is not None else None
-            needs_llm = assignment is None or bool(assignment.unmatched)
+            needs_llm = assignment is None or bool(assignment.pending)
             if needs_llm:
                 if args.no_llm:
                     if assignment is None:
@@ -243,6 +242,17 @@ def main(argv: list[str] | None = None) -> int:
                             2,
                         )
                 else:
+                    if model_path is None:
+                        return fail(
+                            "usage",
+                            "no hay modelo: pasa --model o descárgalo con "
+                            "`uv run python scripts/fetch_models.py`",
+                            2,
+                        )
+                    if not Path(model_path).is_file():
+                        return fail("usage", f"no existe el modelo: {model_path}", 2)
+                    if report is not None:
+                        report["llm"]["enabled"] = True
                     llm_start = time.perf_counter()
                     llm_data = infer_contract(
                         input_text,
