@@ -23,4 +23,5 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Normalización de números en formato europeo antes de la inferencia.
 - El ejemplo de contrato se envía al modelo como forma con tipos (`<string>`, `<number>`), no como valores literales.
 - Coerción de strings numéricos inequívocos al tipo numérico del contrato.
+- Instrucción al modelo para copiar valores literales y no calcular cifras; `null` aceptado para datos ausentes.
 - Few-shot mínimo en el prompt para evitar que el modelo reutilice un valor (p. ej. la fecha) en otro campo.

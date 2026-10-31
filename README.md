@@ -56,6 +56,8 @@ El contrato es **opcional**. Si no se indica `--contract`, `--format json` devue
 
 En ese caso se requiere `--model` y la inferencia se hace con una llamada por documento, `n_ctx=4096` y el texto OCR truncado a ~1500 tokens.
 
+El modelo recibe instrucción explícita de **copiar los valores literales** del texto y **no calcular** (nada de sumas, subtotales, porcentajes, medias ni cifras derivadas). Si un dato no aparece escrito, devuelve `null`; la clave del contrato sigue siendo obligatoria.
+
 ## Rendimiento medido (T480, CPU)
 
 | Caso | Tiempo |

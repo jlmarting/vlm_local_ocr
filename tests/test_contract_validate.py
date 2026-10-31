@@ -52,10 +52,8 @@ def test_example_null_is_nullable() -> None:
     assert validate_payload({"nota": "texto", "total": 2.0}, contract, "example") == []
 
 
-def test_example_non_null_rejects_null() -> None:
-    errors = validate_payload({"total": None}, {"total": 1.5}, "example")
-
-    assert errors
+def test_example_null_value_is_accepted_as_absent() -> None:
+    assert validate_payload({"total": None}, {"total": 1.5}, "example") == []
 
 
 def test_example_arrays_merge_element_shapes() -> None:

@@ -13,6 +13,10 @@ except ImportError:  # permite usar el modo Markdown sin el motor LLM
     Llama = None  # type: ignore[assignment]
 
 _NUMBER_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
+_EN_NUMBER_RE = re.compile(r"^-?\d{1,3}(?:,\d{3})+(?:\.\d+)?$")
+_CURRENCY_RE = re.compile(
+    r"(EUR|USD|GBP|MXN|ARS|CLP|COP|JPY|KRW|SAR|AED|[$€£¥])", re.IGNORECASE
+)
 
 
 class ContractError(RuntimeError):
@@ -64,11 +68,29 @@ def _type_name(value: Any) -> str:
     return type(value).__name__
 
 
+def _numeric_value(value: Any) -> float | None:
+    """Extrae un número inequívoco de un valor o string (admite moneda)."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    if not isinstance(value, str):
+        return None
+    cleaned = _CURRENCY_RE.sub("", value).replace("\u00a0", " ").strip()
+    if _NUMBER_RE.match(cleaned):
+        return float(cleaned)
+    if _EN_NUMBER_RE.match(cleaned):
+        return float(cleaned.replace(",", ""))
+    return None
+
+
 def _is_unambiguous_number(value: Any) -> bool:
-    return isinstance(value, str) and bool(_NUMBER_RE.match(value.strip()))
+    return _numeric_value(value) is not None
 
 
 def _validate(value: Any, shape: Any, path: str) -> list[str]:
+    if value is None:
+        return []
     if shape is None:
         return []
 
@@ -226,11 +248,16 @@ def _build_messages(ocr_text: str, contract: dict, kind: str) -> list[dict]:
         "You extract structured data from OCR text.\n"
         "Example:\n"
         'OCR TEXT: "ID: A-100. Date: 2024-01-02."\n'
-        'SHAPE: {"id": "<string>", "date": "<string>"}\n'
-        'OUTPUT: {"id": "A-100", "date": "2024-01-02"}\n\n'
+        'SHAPE: {"id": "<string>", "date": "<string>", "note": "<string>"}\n'
+        'OUTPUT: {"id": "A-100", "date": "2024-01-02", "note": null}\n\n'
         f"Return ONLY a JSON value that conforms to the {label}. "
         "Markers like <string> and <number> describe the required type; never output them literally. "
         "Do not invent values; use null when the information is absent.\n"
+        "Copy values literally from the OCR text. Do not perform calculations: no sums, subtotals, "
+        "percentage applications, averages, or derived figures. Formatting a written number or date is "
+        "allowed, but never compute a value that is not written in the text. "
+        "Always include every key from the shape. If a value is not explicitly written, output null for that "
+        "key instead of computing or copying it from another field.\n"
         "Rules: output numbers as JSON numbers, not strings. "
         "A comma is the decimal separator and a dot is a thousands separator: "
         "'1.234,56' or '50,00' become 1234.56 and 50.00; never drop the decimal comma. "
@@ -291,13 +318,12 @@ def _coerce_numbers(value: Any, shape: Any) -> Any:
             )
             coerced.append(_coerce_numbers(item, chosen))
         return coerced
-    if isinstance(shape, float) and isinstance(value, str) and _is_unambiguous_number(value):
-        return float(value)
-    if (
-        isinstance(shape, int)
-        and not isinstance(shape, bool)
-        and isinstance(value, str)
-        and _is_unambiguous_number(value)
-    ):
-        return int(float(value))
+    if isinstance(shape, float) and not isinstance(value, bool):
+        number = _numeric_value(value)
+        if number is not None:
+            return number
+    if isinstance(shape, int) and not isinstance(shape, bool):
+        number = _numeric_value(value)
+        if number is not None and float(number).is_integer():
+            return int(number)
     return value

@@ -126,3 +126,14 @@ def test_numeric_strings_are_coerced_to_numbers(monkeypatch, tmp_path: Path) -> 
 
     assert result["total"] == 12.5
     assert isinstance(result["total"], float)
+
+
+def test_prompt_forbids_calculations(monkeypatch, tmp_path: Path) -> None:
+    calls = _fake_llama(monkeypatch, [json.dumps({"cliente": "ACME", "total": 2})])
+
+    infer_contract("texto", EXAMPLE, "example", tmp_path / "m.gguf")
+
+    prompt = calls[0]["messages"][0]["content"]
+    assert "Copy values literally" in prompt
+    assert "Do not perform calculations" in prompt
+    assert "derived figures" in prompt
