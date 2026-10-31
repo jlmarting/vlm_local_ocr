@@ -1260,6 +1260,7 @@ dependencies = [
     { name = "jsonschema" },
     { name = "llama-cpp-python" },
     { name = "onnxruntime" },
+    { name = "pillow" },
     { name = "pypdfium2" },
     { name = "rapidocr" },
 ]
@@ -1277,6 +1278,7 @@ requires-dist = [
     { name = "jsonschema", specifier = ">=4.20" },
     { name = "llama-cpp-python", specifier = ">=0.3.19", index = "https://abetlen.github.io/llama-cpp-python/whl/cpu" },
     { name = "onnxruntime", specifier = ">=1.17" },
+    { name = "pillow", specifier = ">=10" },
     { name = "pypdfium2", specifier = ">=4.30" },
     { name = "rapidocr", specifier = ">=3.0" },
 ]

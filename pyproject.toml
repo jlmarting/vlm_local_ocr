@@ -9,6 +9,7 @@ dependencies = [
     "pypdfium2>=4.30",
     "rapidocr>=3.0",
     "onnxruntime>=1.17",
+    "pillow>=10",
     "llama-cpp-python>=0.3.19",
     "jsonschema>=4.20",
 ]

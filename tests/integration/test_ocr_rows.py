@@ -213,3 +213,17 @@ def test_pdf_without_text_layer_is_rasterized_and_resolved_without_llm(
     assert report["extract"]["deterministic"] == 6
     assert report["extract"]["llm"] is False
     assert report["verify"]["errors"] == []
+
+
+def test_deskew_straightens_a_rotated_scan(tmp_path: Path) -> None:
+    image = _scan(tmp_path / "nomina.png")
+    rotated = Image.open(image).rotate(12, resample=Image.BICUBIC, expand=True, fillcolor="white")
+    tilted = tmp_path / "rotada.png"
+    rotated.save(tilted)
+
+    blocks = ocr_pages(ingest(tilted))
+    text = rows_text(blocks)
+
+    assert "SALARIO BASE | 30,00 | 80,2297 | 2.406,89" in text
+    assignment = assign(blocks, SCHEMA)
+    assert assignment.data["nomina"]["devengos"]["salario_base"] == 2406.89

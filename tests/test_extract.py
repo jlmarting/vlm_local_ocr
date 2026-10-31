@@ -186,3 +186,21 @@ def test_vertical_header_expires_after_two_rows() -> None:
     assignment = assign(blocks, SCHEMA)
 
     assert assignment.data["nomina"]["deducciones"]["total_deducciones"] is None
+
+
+def test_ocr_typos_in_labels_still_match() -> None:
+    from vlm_ocr.extract import _closest_label
+
+    known = [
+        "SALARIO BASE",
+        "ANTIGUEDAD",
+        "KILOMETRAJE SUJETO A COTIZACION",
+        "KILOMETRAJE NO SUJETO A COTIZACION",
+    ]
+
+    assert _closest_label("ANTIGOEDAD", known) == "ANTIGUEDAD"
+    assert (
+        _closest_label("KILOMETRAJE SUUETO A COTIZACION", known)
+        == "KILOMETRAJE SUJETO A COTIZACION"
+    )
+    assert _closest_label("TEXTO SIN PARECIDO", known) == "TEXTO SIN PARECIDO"

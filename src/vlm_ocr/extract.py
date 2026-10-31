@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from typing import Any
 
 from .annotations import (
@@ -70,6 +71,7 @@ def _value_cell(
     hint: FieldHint,
     candidates: list[LayoutBlock],
     columns: dict[str, tuple[float, float]] | None,
+    label_position: float = 0.0,
 ) -> LayoutBlock | None:
     numbers = [block for block in candidates if parse_number(block.text) is not None]
     geometric = columns is not None and any(
@@ -88,7 +90,10 @@ def _value_cell(
         return numbers[0] if len(numbers) == 1 else None
     if len(candidates) == 1:
         return candidates[0]
-    return numbers[0] if numbers else None
+    right = [block for block in numbers if _center(block) >= label_position - 2]
+    if right:
+        return min(right, key=lambda block: _center(block) - label_position)
+    return None
 
 
 def _coerce(hint: FieldHint, block: LayoutBlock, label: str) -> Any:
@@ -123,6 +128,23 @@ def _expand_piped(blocks: list[LayoutBlock]) -> list[LayoutBlock]:
     return expanded
 
 
+def _closest_label(label: str, known: list[str]) -> str:
+    """Etiqueta conocida más parecida; tolera erratas del OCR si la ganadora es clara."""
+    if label in known or not label:
+        return label
+    scores = sorted(
+        ((SequenceMatcher(None, label, candidate).ratio(), candidate) for candidate in known),
+        reverse=True,
+    )
+    if not scores:
+        return label
+    best_score, best = scores[0]
+    second = scores[1][0] if len(scores) > 1 else 0.0
+    if best_score >= 0.9 and second < best_score - 0.03:
+        return best
+    return label
+
+
 def _expanded(span: tuple[float, float]) -> tuple[float, float]:
     padding = 0.1 * (span[1] - span[0]) + 4.0
     return span[0] - padding, span[1] + padding
@@ -146,6 +168,7 @@ def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
     for hint in hints:
         for label in hint.labels:
             by_label.setdefault(normalize_label(label), []).append(hint)
+    known = list(by_label)
 
     data: dict = {}
     leaves = leaf_paths(schema)
@@ -172,9 +195,9 @@ def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
 
         for block in row:
             label = normalize_label(block.text)
-            for hint in by_label.get(label, []):
+            for hint in by_label.get(_closest_label(label, known), []):
                 others = [item for item in row if item is not block]
-                cell = _value_cell(hint, others, columns)
+                cell = _value_cell(hint, others, columns, block.box[2])
                 if cell is not None:
                     take(hint, cell, block.text)
                 elif columns is None and hint.source and len(
@@ -196,12 +219,15 @@ def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
 
         for block in row:
             label = normalize_label(block.text)
-            for hint in by_label.get(label, []):
+            for hint in by_label.get(_closest_label(label, known), []):
                 if hint.path in matched or hint.path in {item[0].path for item in pending}:
                     continue
-                if any(parse_number(item.text) is not None for item in row):
+                span = (block.box[0], block.box[2])
+                if _cell_under(
+                    [item for item in row if parse_number(item.text) is not None], span
+                ) is not None:
                     continue
-                pending.append((hint, (block.box[0], block.box[2]), index))
+                pending.append((hint, span, index))
 
     return Assignment(
         data=data,
