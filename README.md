@@ -102,7 +102,7 @@ Un contrato puede anotar cada campo con `x-labels` (etiquetas con las que aparec
 
 Con un contrato anotado el CLI reconstruye la tabla del PDF **en filas** y asigna los valores **sin LLM**; el modelo solo rellena los campos que no casan (`--no-llm` lo desactiva del todo). El prompt se genera del mapa de campos y `--text-format rows|md` elige la representación. `scripts/draft_contract.py` propone un borrador anotado a partir de un documento.
 
-Medido con las dos nóminas de prueba (contrato de 30 campos): **24/24 campos, 0 tokens y sin incidencias de literalidad**; con el texto en columnas y LLM el mejor resultado era 1/24. Detalle en `rondas/20261031d-extraccion-fiable/`.
+Medido con las dos nóminas de prueba (contrato de 30 campos): **24/24 campos, 0 tokens y sin incidencias de literalidad**; con el texto en columnas y LLM el mejor resultado era 1/24. La ruta OCR está cubierta por un test de integración con un escaneo sintético (`tests/integration/test_ocr_rows.py`): RapidOCR separa las celdas cuando hay separación horizontal suficiente y el extractor las resuelve igual. Detalle en `rondas/20261031d-extraccion-fiable/`.
 
 ```bash
 uv run vlm-ocr nomina.pdf --format json --contract contrato-nomina.json --no-llm --metrics
@@ -177,7 +177,7 @@ El cuello de botella es la representación del texto, no el tamaño del modelo.
 - **Manuscrito, tablas complejas y formularios**: fuera de v1.
 - **Idiomas**: el set por defecto cubre chino/inglés/japonés y ~50 lenguas latinas (incl. español); cirílico, árabe, devanagari, **coreano**, etc. requieren modelos adicionales. Con `--lang ar`/`--lang ko` el CLI falla con un hint claro; sin `--lang` el OCR devuelve texto incorrecto en silencio.
 - **Fidelidad semántica**: el JSON válido está garantizado por gramática; la forma del contrato solo se impone como esquema cuando el contrato es un JSON Schema. Los valores dependen del modelo y, sobre todo, del texto: en tablas (nóminas) el orden del texto nativo puede separar etiquetas y valores, y entonces ningún modelo acierta. Ver «Contrato de 30 campos».
-- **Asignación determinista**: depende de que las etiquetas lleguen aisladas. Si un escaneo devuelve la fila entera como un solo bloque de OCR, no hay columnas que cruzar y el campo cae al LLM. Las cabeceras verticales y los totales al pie se resuelven con heurísticas (ventana de filas y unicidad del número), no con una tabla geométrica completa.
+- **Asignación determinista**: depende de que las etiquetas lleguen aisladas. Con un escaneo sintético RapidOCR separa las celdas; si la separación entre columnas es pequeña y devuelve la fila entera como un bloque, no hay columnas que cruzar y el campo cae al LLM. Las cabeceras verticales y los totales al pie se resuelven con heurísticas (ventana de filas y unicidad del número), no con una tabla geométrica completa.
 
 ## Tests
 
