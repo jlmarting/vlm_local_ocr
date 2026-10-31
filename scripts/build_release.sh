@@ -10,6 +10,7 @@ rm -rf "${bundle}"
 mkdir -p "${bundle}"
 cp dist/*.whl "${bundle}/"
 cp scripts/fetch_models.py "${bundle}/"
+cp LICENSE NOTICE README.md CHANGELOG.md "${bundle}/"
 
 if compgen -G "models/*.gguf" > /dev/null; then
   cp models/*.gguf "${bundle}/"
