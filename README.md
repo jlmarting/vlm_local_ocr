@@ -58,6 +58,8 @@ En ese caso se requiere `--model` y la inferencia se hace con una llamada por do
 
 El modelo recibe instrucción explícita de **copiar los valores literales** del texto y **no calcular** (nada de sumas, subtotales, porcentajes, medias ni cifras derivadas). Si un dato no aparece escrito, devuelve `null`; la clave del contrato sigue siendo obligatoria.
 
+Para campos numéricos, si el texto contiene la etiqueta del campo (por ejemplo `Total:`), prevalece ese valor literal sobre lo que devuelva el modelo. Así se evita confundir el total con un precio unitario o una cantidad.
+
 ## Rendimiento medido (T480, CPU)
 
 | Caso | Tiempo |

@@ -137,3 +137,26 @@ def test_prompt_forbids_calculations(monkeypatch, tmp_path: Path) -> None:
     assert "Copy values literally" in prompt
     assert "Do not perform calculations" in prompt
     assert "derived figures" in prompt
+
+
+def test_label_anchor_prefers_explicitly_labelled_number(monkeypatch, tmp_path: Path) -> None:
+    _fake_llama(monkeypatch, ['{"cliente": "ACME", "total": 100.0}'])
+
+    result = infer_contract(
+        "Unit price: 100. Total: 1895 EUR.",
+        {"cliente": "ACME", "total": 0.0},
+        "example",
+        tmp_path / "m.gguf",
+    )
+
+    assert result["total"] == 1895.0
+
+
+def test_label_anchor_keeps_model_value_without_label(monkeypatch, tmp_path: Path) -> None:
+    _fake_llama(monkeypatch, ['{"total": 100.0}'])
+
+    result = infer_contract(
+        "Amount due 100 EUR.", {"total": 0.0}, "example", tmp_path / "m.gguf"
+    )
+
+    assert result["total"] == 100.0

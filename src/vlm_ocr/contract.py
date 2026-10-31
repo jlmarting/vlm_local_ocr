@@ -189,7 +189,7 @@ def infer_contract(
     raw = _chat(llm, messages, contract, kind, base_max_tokens)
     data, errors = _parse_and_validate(raw, contract, kind)
     if not errors:
-        return _coerce_numbers(data, contract)
+        return _apply_label_anchors(_coerce_numbers(data, contract), text, contract)
 
     repair_messages = [
         *messages,
@@ -207,7 +207,7 @@ def infer_contract(
     data, errors = _parse_and_validate(raw_retry, contract, kind)
     if errors:
         raise ContractError("el modelo no produjo un contrato válido: " + "; ".join(errors))
-    return _coerce_numbers(data, contract)
+    return _apply_label_anchors(_coerce_numbers(data, contract), text, contract)
 
 
 def _truncate_text(text: str, max_ocr_tokens: int) -> str:
@@ -265,7 +265,10 @@ def _build_messages(ocr_text: str, contract: dict, kind: str) -> list[dict]:
         "Take every value from the OCR text and never reuse the same value for two different fields "
         "(for example, do not use the date as an invoice number). "
         "Extract the minimal literal value for each field: do not include the field label, "
-        "neighboring fields, or unrelated text.\n\n"
+        "neighboring fields, or unrelated text. "
+        "Match each field to the value that follows its label or a direct synonym. "
+        "Do not use a number that belongs to a different label (for example, do not use a unit "
+        "price or a quantity as the total).\n\n"
         f"{header}:\n{json.dumps(shape, ensure_ascii=False, indent=2)}\n\n"
         f"OCR TEXT:\n{ocr_text}\n"
     )
@@ -329,3 +332,29 @@ def _coerce_numbers(value: Any, shape: Any) -> Any:
         if number is not None and float(number).is_integer():
             return int(number)
     return value
+
+
+def _label_number(text: str, label: str) -> float | None:
+    """Busca ``etiqueta: número`` en el texto y devuelve el número."""
+    pattern = re.compile(
+        rf"(?i)\b{re.escape(label.replace('_', ' '))}\b\s*[:=]?\s*(-?\d[\d.,]*)",
+    )
+    match = pattern.search(text)
+    if match is None:
+        return None
+    return _numeric_value(_normalize_numbers(match.group(1)))
+
+
+def _apply_label_anchors(data: Any, text: str, contract: dict) -> Any:
+    """Si el campo numérico aparece etiquetado, prevalece el literal etiquetado."""
+    if not isinstance(data, dict) or not isinstance(contract, dict):
+        return data
+    anchored = dict(data)
+    for field, shape in contract.items():
+        if isinstance(shape, bool) or not isinstance(shape, int | float):
+            continue
+        value = _label_number(text, field)
+        if value is None:
+            continue
+        anchored[field] = int(value) if isinstance(shape, int) else value
+    return anchored
