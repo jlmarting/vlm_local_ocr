@@ -217,3 +217,57 @@ def test_prompt_wraps_task_instructions(monkeypatch, tmp_path: Path) -> None:
     prompt = calls[0]["messages"][0]["content"]
     assert "<task_instructions>" in prompt
     assert "</task_instructions>" in prompt
+
+
+def _fake_llama_with_usage(monkeypatch, replies: list[tuple[str, dict | None]]) -> None:
+    class FakeLlama:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def create_chat_completion(self, messages, **kwargs):
+            content, usage = replies.pop(0)
+            response = {"choices": [{"message": {"content": content}}]}
+            if usage is not None:
+                response["usage"] = usage
+            return response
+
+    monkeypatch.setattr("vlm_ocr.contract.Llama", FakeLlama)
+
+
+def test_usage_out_accumulates_tokens_across_attempts(monkeypatch, tmp_path: Path) -> None:
+    _fake_llama_with_usage(
+        monkeypatch,
+        [
+            ('{"cliente": "ACME"}', {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}),
+            (
+                json.dumps({"cliente": "ACME", "total": 2}),
+                {"prompt_tokens": 20, "completion_tokens": 4, "total_tokens": 24},
+            ),
+        ],
+    )
+    usage: dict = {}
+
+    result = infer_contract(
+        "texto", EXAMPLE, "example", _model(tmp_path), usage_out=usage
+    )
+
+    assert result == {"cliente": "ACME", "total": 2}
+    assert usage["attempts"] == 2
+    assert usage["prompt_tokens"] == 30
+    assert usage["completion_tokens"] == 6
+    assert usage["total_tokens"] == 36
+    assert usage["tokens_per_second"] is not None
+    assert usage["load_time_ms"] >= 0
+
+
+def test_usage_out_nulls_tokens_without_usage(monkeypatch, tmp_path: Path) -> None:
+    _fake_llama(monkeypatch, [json.dumps({"cliente": "ACME", "total": 2})])
+    usage: dict = {}
+
+    infer_contract("texto", EXAMPLE, "example", _model(tmp_path), usage_out=usage)
+
+    assert usage["attempts"] == 1
+    assert usage["prompt_tokens"] is None
+    assert usage["completion_tokens"] is None
+    assert usage["total_tokens"] is None
+    assert usage["tokens_per_second"] is None

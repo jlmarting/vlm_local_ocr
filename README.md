@@ -88,6 +88,36 @@ El modelo recibe instrucción explícita de **copiar los valores literales** del
 
 Para campos numéricos, si el texto contiene la etiqueta del campo (por ejemplo `Total:`), prevalece ese valor literal sobre lo que devuelva el modelo. Así se evita confundir el total con un precio unitario o una cantidad.
 
+## Métricas (opt-in)
+
+`--metrics` emite un informe JSON por **stderr** (stdout intacto) y `--metrics-out PATH` lo escribe a fichero:
+
+```bash
+uv run vlm-ocr factura.pdf --format json --contract factura.json --metrics
+uv run vlm-ocr documento.pdf --metrics-out metricas.json
+```
+
+El informe incluye tamaño, formato y páginas del fichero; tiempos de ingesta, OCR y SLM; páginas nativas y rasterizadas; bloques y confianza media; el **modelo GGUF** usado (`llm.model`, basename), intentos, tokens de prompt/completado/total y velocidad de generación; tamaño de la salida y tiempo total.
+
+```json
+{
+  "file":   {"path": "factura.pdf", "size_bytes": 53000, "format": "pdf", "pages": 1},
+  "ingest": {"time_ms": 12.3, "native_pages": 0, "rasterized_pages": 1, "dpi": 200},
+  "ocr":    {"time_ms": 1234.5, "blocks": 8, "mean_confidence": 0.92},
+  "llm":    {"enabled": true, "model": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+             "load_time_ms": 800.0, "time_ms": 9000.0, "attempts": 1,
+             "prompt_tokens": 500, "completion_tokens": 40, "total_tokens": 540,
+             "tokens_per_second": 42.1},
+  "output": {"format": "json", "size_bytes": 123},
+  "total":  {"time_ms": 10500.0}
+}
+```
+
+- Sin `--metrics`/`--metrics-out` no hay salida extra ni coste apreciable.
+- En error (exit `1`/`2`) no se emite informe.
+- `mean_confidence` se calcula **solo** sobre bloques de páginas rasterizadas (las nativas llevan confianza `1.0` sintética); `null` si no hay OCR real.
+- Sin contrato/modelo, `llm.enabled` es `false` y el resto se mide igual.
+
 ## Rendimiento medido (T480, CPU)
 
 | Caso | Tiempo |

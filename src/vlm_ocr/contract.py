@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 import jsonschema
@@ -248,8 +249,13 @@ def infer_contract(
     n_ctx: int = 4096,
     max_ocr_tokens: int = 1500,
     instructions: str | None = None,
+    usage_out: dict[str, Any] | None = None,
 ) -> dict:
-    """Pide al LLM local un JSON que cumpla el contrato y lo valida."""
+    """Pide al LLM local un JSON que cumpla el contrato y lo valida.
+
+    ``usage_out``, si se pasa, se rellena con carga, intentos y tokens; sin él
+    (uso normal) no se mide nada.
+    """
     if Llama is None:
         raise ContractError(
             "llama-cpp-python no está instalado; instálalo para usar --format json"
@@ -257,17 +263,28 @@ def infer_contract(
     model = Path(model_path)
     if not model.is_file():
         raise ContractError(f"no existe el modelo: {model}")
+    load_start = perf_counter()
     try:
         llm = Llama(model_path=str(model), n_ctx=n_ctx, verbose=False)
     except Exception as exc:
         raise ContractError(f"no se pudo cargar el modelo {model}: {exc}") from exc
+    if usage_out is not None:
+        usage_out["load_time_ms"] = round((perf_counter() - load_start) * 1000, 1)
+    generation_start = perf_counter()
+    attempts = 0
+    totals: dict[str, int] = {}
+    seen_usage = False
+
     ocr_text = _truncate_text(text, max_ocr_tokens)
     messages = _build_messages(ocr_text, contract, kind, instructions)
     base_max_tokens = max(256, len(json.dumps(contract, ensure_ascii=False)) * 2)
 
-    raw = _chat(llm, messages, contract, kind, base_max_tokens)
+    raw, usage = _chat(llm, messages, contract, kind, base_max_tokens)
+    attempts += 1
+    seen_usage = _accumulate_usage(totals, usage) or seen_usage
     data, errors = _parse_and_validate(raw, contract, kind)
     if not errors:
+        _finish_usage(usage_out, attempts, totals, seen_usage, generation_start)
         return _validated_final(data, contract, kind, text)
 
     repair_messages = [
@@ -282,11 +299,54 @@ def infer_contract(
             ),
         },
     ]
-    raw_retry = _chat(llm, repair_messages, contract, kind, base_max_tokens * 2)
+    raw_retry, usage = _chat(llm, repair_messages, contract, kind, base_max_tokens * 2)
+    attempts += 1
+    seen_usage = _accumulate_usage(totals, usage) or seen_usage
     data, errors = _parse_and_validate(raw_retry, contract, kind)
+    _finish_usage(usage_out, attempts, totals, seen_usage, generation_start)
     if errors:
         raise ContractError("el modelo no produjo un contrato válido: " + "; ".join(errors))
     return _validated_final(data, contract, kind, text)
+
+
+def _accumulate_usage(totals: dict[str, int], usage: dict[str, Any] | None) -> bool:
+    """Suma los tokens de un intento; devuelve si el backend informó de ``usage``."""
+    if not usage:
+        return False
+    found = False
+    for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        value = usage.get(key)
+        if value is not None:
+            totals[key] = totals.get(key, 0) + int(value)
+            found = True
+    return found
+
+
+def _finish_usage(
+    usage_out: dict[str, Any] | None,
+    attempts: int,
+    totals: dict[str, int],
+    seen_usage: bool,
+    generation_start: float,
+) -> None:
+    """Cierra el bloque de uso: intentos, tokens y velocidad de generación."""
+    if usage_out is None:
+        return
+    usage_out["attempts"] = attempts
+    if not seen_usage:
+        usage_out["prompt_tokens"] = None
+        usage_out["completion_tokens"] = None
+        usage_out["total_tokens"] = None
+        usage_out["tokens_per_second"] = None
+        return
+    usage_out["prompt_tokens"] = totals.get("prompt_tokens")
+    usage_out["completion_tokens"] = totals.get("completion_tokens")
+    usage_out["total_tokens"] = totals.get("total_tokens")
+    completion = totals.get("completion_tokens") or 0
+    seconds = perf_counter() - generation_start
+    usage_out["tokens_per_second"] = (
+        round(completion / seconds, 2) if completion and seconds > 0 else None
+    )
 
 
 def _truncate_text(text: str, max_ocr_tokens: int) -> str:
@@ -371,7 +431,7 @@ def _chat(
     contract: dict,
     kind: str,
     max_tokens: int,
-) -> str:
+) -> tuple[str, dict[str, Any] | None]:
     response_format: dict[str, Any] = {"type": "json_object"}
     if kind == "schema":
         response_format["schema"] = contract
@@ -381,7 +441,9 @@ def _chat(
         max_tokens=max_tokens,
         response_format=response_format,
     )
-    return response["choices"][0]["message"]["content"]
+    content = response["choices"][0]["message"]["content"]
+    usage = response.get("usage")
+    return content, usage if isinstance(usage, dict) else None
 
 
 def _parse_and_validate(raw: str, contract: dict, kind: str) -> tuple[Any, list[str]]:

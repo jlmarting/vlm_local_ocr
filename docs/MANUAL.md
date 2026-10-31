@@ -88,6 +88,8 @@ uv run vlm-ocr documento.pdf --out salida.md
 | `--lang LANG` | `default` | Idioma del OCR |
 | `--with-layout` | off | Añade cajas al JSON |
 | `--out PATH` | stdout | Escribe la salida a fichero |
+| `--metrics` | off | Informe de métricas JSON por stderr |
+| `--metrics-out PATH` | — | Escribe el informe de métricas a fichero |
 
 ### Exit codes
 
@@ -98,6 +100,36 @@ uv run vlm-ocr documento.pdf --out salida.md
 | `2` | Error de contrato/modelo/instrucciones |
 
 Los errores de entrada/OCR salen como `1`; contrato, instrucciones o modelo como `2`. Los detalles se imprimen en stderr sin traceback.
+
+### Métricas (opt-in)
+
+`--metrics` emite un informe JSON por stderr (stdout intacto); `--metrics-out PATH` lo escribe a fichero. Sin flags no hay salida extra ni coste apreciable. En error no se emite.
+
+```bash
+uv run vlm-ocr factura.pdf --format json --contract factura.json --metrics
+uv run vlm-ocr documento.pdf --metrics-out metricas.json
+```
+
+```json
+{
+  "file":   {"path": "factura.pdf", "size_bytes": 53000, "format": "pdf", "pages": 1},
+  "ingest": {"time_ms": 12.3, "native_pages": 0, "rasterized_pages": 1, "dpi": 200},
+  "ocr":    {"time_ms": 1234.5, "blocks": 8, "mean_confidence": 0.92},
+  "llm":    {"enabled": true, "model": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+             "load_time_ms": 800.0, "time_ms": 9000.0, "attempts": 1,
+             "prompt_tokens": 500, "completion_tokens": 40, "total_tokens": 540,
+             "tokens_per_second": 42.1},
+  "output": {"format": "json", "size_bytes": 123},
+  "total":  {"time_ms": 10500.0}
+}
+```
+
+- `llm.model` es el basename del GGUF (identifica sin arrastrar rutas absolutas).
+- `attempts` cuenta el reintento correctivo; los tokens son la **suma** de todos los intentos.
+- Sin `usage` del backend, los tokens quedan a `null` (no se inventan).
+- `tokens_per_second` = tokens de completado / tiempo de generación (sin carga).
+- `mean_confidence` solo sobre bloques de páginas rasterizadas; `null` sin OCR real.
+- Sin contrato/modelo: `llm.enabled=false` y el resto se mide igual.
 
 ## 5. Contratos
 
@@ -219,7 +251,7 @@ La revisión fresca previa al cierre encontró:
 
 **Media**: `--lang` no cambia de modelo; presupuesto de tokens no acotado del todo; normalización numérica puede tocar identificadores; sidecar se lee entero antes del límite; arrays vacíos sin aviso; layout nativo con cajas `(0,0,0,0)`; imports eager; documentación desactualizada; tests de formatos/rotación/errores incompletos.
 
-**Propuestas abiertas**: métricas de coste y catálogo/perfiles de modelo (`propuestas/`).
+**Propuestas abiertas**: catálogo/perfiles de modelo (`propuestas/`). Métricas de coste implementadas (`--metrics`/`--metrics-out`).
 
 ## 11. Enlaces
 
