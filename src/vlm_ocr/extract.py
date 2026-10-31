@@ -1,0 +1,210 @@
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from typing import Any
+
+from .annotations import (
+    SOURCE_ALIASES,
+    FieldHint,
+    field_map,
+    leaf_paths,
+    normalize_label,
+)
+from .layout import group_rows
+from .types import LayoutBlock
+
+THOUSANDS_RE = re.compile(r"^-?\d{1,3}(?:\.\d{3})+$")
+
+
+@dataclass
+class Assignment:
+    data: dict
+    matched: list[str] = field(default_factory=list)
+    unmatched: list[str] = field(default_factory=list)
+
+
+def parse_number(raw: str) -> float | None:
+    """Número en formato español (``1.234,56``) o simple; ``None`` si no lo es."""
+    text = raw.strip().replace(" ", "")
+    if not text:
+        return None
+    if "," in text:
+        text = text.replace(".", "").replace(",", ".")
+    elif THOUSANDS_RE.fullmatch(text):
+        text = text.replace(".", "")
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _center(block: LayoutBlock) -> float:
+    return (block.box[0] + block.box[2]) / 2
+
+
+def _overlap(block: LayoutBlock, span: tuple[float, float]) -> float:
+    return max(0.0, min(block.box[2], span[1]) - max(block.box[0], span[0]))
+
+
+def _set(data: dict, path: str, value: Any) -> None:
+    *parents, leaf = path.split(".")
+    current = data
+    for parent in parents:
+        current = current.setdefault(parent, {})
+    current[leaf] = value
+
+
+def _detect_header(row: list[LayoutBlock]) -> dict[str, tuple[float, float]] | None:
+    columns: dict[str, tuple[float, float]] = {}
+    for block in row:
+        source = SOURCE_ALIASES.get(normalize_label(block.text))
+        if source is None:
+            continue
+        columns.setdefault(source, (block.box[0], block.box[2]))
+    return columns if len(columns) >= 2 else None
+
+
+def _value_cell(
+    hint: FieldHint,
+    candidates: list[LayoutBlock],
+    columns: dict[str, tuple[float, float]] | None,
+) -> LayoutBlock | None:
+    numbers = [block for block in candidates if parse_number(block.text) is not None]
+    geometric = columns is not None and any(
+        block.box[2] > block.box[0] for block in candidates
+    )
+    if hint.source and columns and hint.source in columns:
+        span = columns[hint.source]
+        best = max(candidates, key=lambda block: _overlap(block, span), default=None)
+        if best is not None and _overlap(best, span) > 0:
+            return best
+        if geometric:
+            return None
+    if hint.source in ("base", "porcentaje", "cuota") and len(numbers) >= 3:
+        return numbers[{"base": 0, "porcentaje": 1, "cuota": 2}[hint.source]]
+    if hint.source:
+        return numbers[0] if len(numbers) == 1 else None
+    if len(candidates) == 1:
+        return candidates[0]
+    return numbers[0] if numbers else None
+
+
+def _coerce(hint: FieldHint, block: LayoutBlock, label: str) -> Any:
+    number = parse_number(block.text)
+    if hint.kind == "string":
+        if number is not None and any(char.isalpha() for char in label):
+            return f"{label} {block.text}".strip()
+        return block.text
+    if hint.kind in ("integer", "number"):
+        return number
+    return number if number is not None else block.text
+
+
+def _expand_piped(blocks: list[LayoutBlock]) -> list[LayoutBlock]:
+    """Da geometría sintética a bloques sin caja, separando celdas unidas con ``" | "``."""
+    expanded: list[LayoutBlock] = []
+    for index, block in enumerate(blocks):
+        if block.box != (0.0, 0.0, 0.0, 0.0):
+            expanded.append(block)
+            continue
+        parts = block.text.split(" | ") if " | " in block.text else [block.text]
+        for column, part in enumerate(parts):
+            x0 = column * 100.0
+            expanded.append(
+                LayoutBlock(
+                    page=block.page,
+                    text=part.strip(),
+                    confidence=block.confidence,
+                    box=(x0, index * 20.0, x0 + 90.0, index * 20.0 + 10.0),
+                )
+            )
+    return expanded
+
+
+def _expanded(span: tuple[float, float]) -> tuple[float, float]:
+    padding = 0.1 * (span[1] - span[0]) + 4.0
+    return span[0] - padding, span[1] + padding
+
+
+def _cell_under(cells: list[LayoutBlock], span: tuple[float, float]) -> LayoutBlock | None:
+    """Único número bajo una etiqueta; si hay varios (bloque de columnas), no se asigna."""
+    low, high = _expanded(span)
+    inside = [
+        cell
+        for cell in cells
+        if parse_number(cell.text) is not None and low <= _center(cell) <= high
+    ]
+    return inside[0] if len(inside) == 1 else None
+
+
+def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
+    """Asignación determinista: empareja etiquetas del documento con campos del contrato."""
+    hints = field_map(schema)
+    by_label: dict[str, list[FieldHint]] = {}
+    for hint in hints:
+        for label in hint.labels:
+            by_label.setdefault(normalize_label(label), []).append(hint)
+
+    data: dict = {}
+    leaves = leaf_paths(schema)
+    for path in leaves:
+        _set(data, path, None)
+    matched: list[str] = []
+    unmatched: set[str] = set(leaves)
+    columns: dict[str, tuple[float, float]] | None = None
+    pending: list[tuple[FieldHint, tuple[float, float], int]] = []
+
+    def take(hint: FieldHint, cell: LayoutBlock, label: str) -> None:
+        if hint.path in matched or parse_number(cell.text) is None and hint.kind != "string":
+            return
+        _set(data, hint.path, _coerce(hint, cell, label))
+        matched.append(hint.path)
+        unmatched.discard(hint.path)
+
+    rows = group_rows(_expand_piped([block for block in blocks if block.text.strip()]))
+    for index, row in enumerate(rows):
+        header = _detect_header(row)
+        if header is not None:
+            columns = header
+
+        for block in row:
+            label = normalize_label(block.text)
+            for hint in by_label.get(label, []):
+                others = [item for item in row if item is not block]
+                cell = _value_cell(hint, others, columns)
+                if cell is not None:
+                    take(hint, cell, block.text)
+
+        numbers = [block for block in row if parse_number(block.text) is not None]
+        remaining = []
+        for hint, span, origin in pending:
+            wide = span[1] - span[0] > 100.0
+            window = 20 if wide else 2
+            cell = _cell_under(numbers, span) if index - origin <= window else None
+            if cell is not None:
+                take(hint, cell, hint.labels[0])
+            else:
+                remaining.append((hint, span, origin))
+        pending = remaining
+
+        for block in row:
+            label = normalize_label(block.text)
+            for hint in by_label.get(label, []):
+                if hint.path in matched or hint.path in {item[0].path for item in pending}:
+                    continue
+                if any(parse_number(item.text) is not None for item in row):
+                    continue
+                pending.append((hint, (block.box[0], block.box[2]), index))
+
+    return Assignment(data=data, matched=matched, unmatched=sorted(unmatched))
+
+
+def merge(deterministic: Any, fallback: Any) -> Any:
+    """Fusiona resultados: lo determinista gana; el fallback solo rellena huecos."""
+    if isinstance(deterministic, dict) and isinstance(fallback, dict):
+        merged = dict(fallback)
+        for key, value in deterministic.items():
+            merged[key] = merge(value, fallback.get(key))
+        return merged
+    return fallback if deterministic is None else deterministic

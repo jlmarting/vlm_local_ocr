@@ -2,7 +2,7 @@
 
 Manual de uso y mantenimiento de la v1. Documento de proyecto; el diseño y el historial viven en el vault (`rondas/20261030a-definicion/`).
 
-> **Estado de cierre**: v1 funcional y probada (94 tests, `ruff` limpio). Los bloqueantes de la revisión fresca (exit codes, validación `int`, modelo por defecto, golden ≥80 %, prompt injection) están corregidos. La licencia se resolvió sustituyendo PyMuPDF por `pypdfium2` y manteniendo MIT. Ver §10.
+> **Estado de cierre**: v1 funcional y probada (123 tests, `ruff` limpio). Los bloqueantes de la revisión fresca (exit codes, validación `int`, modelo por defecto, golden ≥80 %, prompt injection) están corregidos. La licencia se resolvió sustituyendo PyMuPDF por `pypdfium2` y manteniendo MIT. Ver §10.
 
 ## 1. Qué es
 
@@ -86,6 +86,9 @@ uv run vlm-ocr documento.pdf --out salida.md
 | `--n-ctx N` | 4096 | Contexto del modelo en tokens; súbelo si el prompt no cabe |
 | `--instructions PATH` | sidecar | Instrucciones de ajuste |
 | `--dpi N` | 200 | DPI al rasterizar PDFs |
+| `--text-format md\|rows` | md (rows con contrato anotado) | Representación del texto para el contrato |
+| `--no-llm` | off | Solo asignación determinista; no carga modelo |
+| `--strict` | off | Un valor que no aparece literalmente en el texto es error (`2`) |
 | `--lang LANG` | `default` | Idioma del OCR |
 | `--with-layout` | off | Añade cajas al JSON |
 | `--out PATH` | stdout | Escribe la salida a fichero |
@@ -101,7 +104,15 @@ uv run vlm-ocr documento.pdf --out salida.md
 | `2` | Error de contrato/modelo/instrucciones o flag incoherente |
 | `130` | Interrumpido con Ctrl-C |
 
+`--strict` convierte en error (`2`) cualquier valor numérico del resultado que no aparezca en el texto; sin él solo se avisa por stderr.
+
 Los errores de entrada/OCR salen como `1`; contrato, instrucciones, modelo o flags incoherentes como `2`. Los detalles se imprimen en stderr sin traceback. `--contract`, `--instructions` y `--model` exigen `--format json`: con la salida Markdown por defecto se rechazan con `2` en lugar de ignorarse.
+
+### Contrato anotado y asignación determinista
+
+Un contrato JSON Schema puede anotar cada campo con `x-labels` (etiquetas del documento) y `x-source` (columna: `unidades`, `importe`, `devengado`, `a_deducir`, `base`, `porcentaje`, `cuota`). Con anotaciones, el CLI reconstruye la tabla en filas y **asigna los valores sin LLM**; el modelo solo completa los campos que no casan y el valor determinista gana en el merge. `--no-llm` desactiva el modelo por completo y `--text-format rows` fuerza la representación; el prompt se genera con el mapa de campos.
+
+Prueba real con dos nóminas (30 campos): **24/24 sin LLM, 0 tokens y sin incidencias de literalidad**. `scripts/draft_contract.py` genera un borrador del contrato a partir del documento para revisarlo a mano.
 
 ### Métricas (opt-in)
 
@@ -122,6 +133,8 @@ uv run vlm-ocr documento.pdf --metrics-out metricas.json
              "prompt_tokens": 500, "completion_tokens": 40, "total_tokens": 540,
              "tokens_per_second": 42.1, "finish_reason": "stop"},
   "output": {"format": "json", "size_bytes": 123},
+  "extract": {"deterministic": 24, "llm": false, "unmatched": 5},
+  "verify": {"errors": []},
   "total":  {"time_ms": 10500.0},
   "error":  null
 }

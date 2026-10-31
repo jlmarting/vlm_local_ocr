@@ -32,6 +32,8 @@ def empty_report() -> dict[str, Any]:
             "finish_reason": None,
         },
         "output": {"format": None, "size_bytes": None},
+        "extract": {"deterministic": None, "llm": False, "unmatched": None},
+        "verify": {"errors": []},
         "total": {"time_ms": None},
         "error": None,
     }

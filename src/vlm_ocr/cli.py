@@ -5,7 +5,8 @@ import sys
 import time
 from pathlib import Path
 
-from . import metrics
+from . import extract, metrics, verify
+from .annotations import has_annotations
 from .contract import (
     ContractError,
     default_model_path,
@@ -16,6 +17,7 @@ from .contract import (
 )
 from .errors import InputError
 from .ingest import ingest
+from .layout import native_blocks, rows_text
 from .ocr import ocr_pages
 from .output import to_json_payload, to_markdown, to_text_json
 
@@ -54,6 +56,21 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--dpi", type=int, default=200, help="DPI al rasterizar PDFs")
     parser.add_argument(
+        "--text-format",
+        choices=["md", "rows"],
+        help="texto para el contrato: md (defecto) o filas; con contrato anotado se usan filas",
+    )
+    parser.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="solo asignación determinista: no carga modelo",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="los valores que no aparecen literalmente en el texto son error (exit 2)",
+    )
+    parser.add_argument(
         "--n-ctx",
         type=int,
         default=4096,
@@ -77,6 +94,17 @@ def _build_parser() -> argparse.ArgumentParser:
         help="escribe el informe de métricas en este fichero",
     )
     return parser
+
+
+def _row_blocks(path: Path, pages, lang: str):
+    """ Bloques con caja: celdas nativas del PDF + OCR de las páginas sin texto."""
+    if path.suffix.lower() != ".pdf":
+        return ocr_pages(pages, lang=lang)
+    blocks = native_blocks(path)
+    raster = [page for page in pages if page.image_png is not None]
+    if raster:
+        blocks = blocks + ocr_pages(raster, lang=lang)
+    return blocks
 
 
 def _elapsed_ms(start: float) -> float:
@@ -131,24 +159,37 @@ def main(argv: list[str] | None = None) -> int:
         instructions = None
         model_path = None
 
+        annotated = False
+        use_rows = False
         if args.format == "json" and args.contract is not None:
             contract, detected_kind = load_contract(args.contract)
             kind = args.contract_kind or detected_kind
             instructions = load_instructions(args.contract, args.instructions)
-            model_path = args.model or default_model_path()
-            if model_path is None:
-                return fail(
-                    "usage",
-                    "no hay modelo: pasa --model o descárgalo con "
-                    "`uv run python scripts/fetch_models.py`",
-                    2,
-                )
-            if not Path(model_path).is_file():
-                return fail("usage", f"no existe el modelo: {model_path}", 2)
+            annotated = kind == "schema" and has_annotations(contract)
+            use_rows = args.text_format == "rows" or (
+                args.text_format is None and annotated
+            )
+            if args.model is not None:
+                model_path = args.model
+            elif args.no_llm:
+                model_path = None
+            else:
+                model_path = default_model_path()
+            if not args.no_llm:
+                if model_path is None:
+                    return fail(
+                        "usage",
+                        "no hay modelo: pasa --model o descárgalo con "
+                        "`uv run python scripts/fetch_models.py`",
+                        2,
+                    )
+                if not Path(model_path).is_file():
+                    return fail("usage", f"no existe el modelo: {model_path}", 2)
             usage_out = {} if report is not None else None
             if report is not None:
-                report["llm"]["enabled"] = True
-                report["llm"]["model"] = Path(model_path).name
+                report["llm"]["enabled"] = not args.no_llm
+                if model_path is not None:
+                    report["llm"]["model"] = Path(model_path).name
 
         ingest_start = time.perf_counter()
         pages = ingest(args.file, dpi=args.dpi)
@@ -180,19 +221,62 @@ def main(argv: list[str] | None = None) -> int:
                 blocks if args.with_layout else None,
             )
         else:
-            llm_start = time.perf_counter()
-            data = infer_contract(
-                to_markdown(blocks),
-                contract,
-                kind,
-                model_path,
-                n_ctx=args.n_ctx,
-                instructions=instructions,
-                usage_out=usage_out,
-            )
+            input_text = to_markdown(blocks)
+            assignment = None
+            if use_rows:
+                row_blocks = _row_blocks(args.file, pages, args.lang)
+                input_text = rows_text(row_blocks)
+                assignment = extract.assign(row_blocks, contract)
+                if report is not None:
+                    report["extract"]["deterministic"] = len(assignment.matched)
+                    report["extract"]["unmatched"] = len(assignment.unmatched)
+                    report["extract"]["llm"] = False
+
+            data = assignment.data if assignment is not None else None
+            needs_llm = assignment is None or bool(assignment.unmatched)
+            if needs_llm:
+                if args.no_llm:
+                    if assignment is None:
+                        return fail(
+                            "usage",
+                            "--no-llm requiere un contrato anotado y --text-format rows",
+                            2,
+                        )
+                else:
+                    llm_start = time.perf_counter()
+                    llm_data = infer_contract(
+                        input_text,
+                        contract,
+                        kind,
+                        model_path,
+                        n_ctx=args.n_ctx,
+                        instructions=instructions,
+                        usage_out=usage_out,
+                    )
+                    if report is not None:
+                        report["llm"]["time_ms"] = _elapsed_ms(llm_start)
+                        report["llm"].update(usage_out or {})
+                        report["extract"]["llm"] = True
+                    data = (
+                        extract.merge(assignment.data, llm_data)
+                        if assignment is not None
+                        else llm_data
+                    )
+
+            literal = verify.literal_errors(data, input_text)
             if report is not None:
-                report["llm"]["time_ms"] = _elapsed_ms(llm_start)
-                report["llm"].update(usage_out or {})
+                report["verify"]["errors"] = literal
+            for problem in literal:
+                print(
+                    f"aviso: {problem['field']}: {problem['message']}",
+                    file=sys.stderr,
+                )
+            if literal and args.strict:
+                return fail(
+                    "verify",
+                    f"{len(literal)} valores no aparecen en el texto",
+                    2,
+                )
             errors = validate_payload(data, contract, kind)
             if errors:
                 return fail(

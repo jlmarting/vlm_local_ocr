@@ -40,7 +40,19 @@ def test_empty_report_has_stable_shape() -> None:
     assert report["file"]["pages"] is None
     assert report["llm"]["finish_reason"] is None
     assert report["error"] is None
-    assert set(report) == {"file", "ingest", "ocr", "llm", "output", "total", "error"}
+    assert report["extract"] == {"deterministic": None, "llm": False, "unmatched": None}
+    assert report["verify"] == {"errors": []}
+    assert set(report) == {
+        "file",
+        "ingest",
+        "ocr",
+        "llm",
+        "output",
+        "extract",
+        "verify",
+        "total",
+        "error",
+    }
 
 
 def test_mean_confidence_ignores_native_blocks() -> None:

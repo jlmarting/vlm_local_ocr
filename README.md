@@ -88,6 +88,26 @@ El modelo recibe instrucción explícita de **copiar los valores literales** del
 
 Para campos numéricos, si el texto contiene la etiqueta del campo (por ejemplo `Total:`), prevalece ese valor literal sobre lo que devuelva el modelo. Así se evita confundir el total con un precio unitario o una cantidad.
 
+## Contrato anotado (JSON Schema)
+
+Un contrato puede anotar cada campo con `x-labels` (etiquetas con las que aparece en el documento) y `x-source` (columna de la que se toma el valor: `unidades`, `importe`, `devengado`, `a_deducir`, `base`, `porcentaje`, `cuota`):
+
+```json
+"salario_base": {
+  "type": ["number", "null"],
+  "x-labels": ["SALARIO BASE"],
+  "x-source": "devengado"
+}
+```
+
+Con un contrato anotado el CLI reconstruye la tabla del PDF **en filas** y asigna los valores **sin LLM**; el modelo solo rellena los campos que no casan (`--no-llm` lo desactiva del todo). El prompt se genera del mapa de campos y `--text-format rows|md` elige la representación. `scripts/draft_contract.py` propone un borrador anotado a partir de un documento.
+
+Medido con las dos nóminas de prueba (contrato de 30 campos): **24/24 campos, 0 tokens y sin incidencias de literalidad**; con el texto en columnas y LLM el mejor resultado era 1/24. Detalle en `rondas/20261031d-extraccion-fiable/`.
+
+```bash
+uv run vlm-ocr nomina.pdf --format json --contract contrato-nomina.json --no-llm --metrics
+```
+
 ## Métricas (opt-in)
 
 `--metrics` emite un informe JSON por **stderr** (stdout intacto) y `--metrics-out PATH` lo escribe a fichero:
@@ -144,6 +164,7 @@ intento; 24 campos verificados contra el PDF.
 | Phi-4-mini Q4 (MIT) | 1/24 | 18/24 | 111-120 s |
 | Qwen2.5-3B Q4 | 1-2/24 | 19/24 | 109-121 s |
 | Llama 3.2 3B Q4 | 1/24 | **22/24** | 96-102 s |
+| Contrato anotado + `--no-llm` | — | **24/24** | 0,1 s |
 
 Lectura: con el texto tal como lo emite la ruta nativa (todas las etiquetas y después todos los
 valores) ningún modelo pasa de 2/24; serializando la tabla en filas, Llama 3.2 3B llega a 22/24.
@@ -156,6 +177,7 @@ El cuello de botella es la representación del texto, no el tamaño del modelo.
 - **Manuscrito, tablas complejas y formularios**: fuera de v1.
 - **Idiomas**: el set por defecto cubre chino/inglés/japonés y ~50 lenguas latinas (incl. español); cirílico, árabe, devanagari, **coreano**, etc. requieren modelos adicionales. Con `--lang ar`/`--lang ko` el CLI falla con un hint claro; sin `--lang` el OCR devuelve texto incorrecto en silencio.
 - **Fidelidad semántica**: el JSON válido está garantizado por gramática; la forma del contrato solo se impone como esquema cuando el contrato es un JSON Schema. Los valores dependen del modelo y, sobre todo, del texto: en tablas (nóminas) el orden del texto nativo puede separar etiquetas y valores, y entonces ningún modelo acierta. Ver «Contrato de 30 campos».
+- **Asignación determinista**: depende de que las etiquetas lleguen aisladas. Si un escaneo devuelve la fila entera como un solo bloque de OCR, no hay columnas que cruzar y el campo cae al LLM. Las cabeceras verticales y los totales al pie se resuelven con heurísticas (ventana de filas y unicidad del número), no con una tabla geométrica completa.
 
 ## Tests
 
