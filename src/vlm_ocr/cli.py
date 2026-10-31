@@ -53,6 +53,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="instrucciones de ajuste para el contrato (por defecto <contrato>.prompt.md)",
     )
     parser.add_argument("--dpi", type=int, default=200, help="DPI al rasterizar PDFs")
+    parser.add_argument(
+        "--n-ctx",
+        type=int,
+        default=4096,
+        help="contexto del modelo en tokens (por defecto 4096); súbelo si el prompt no cabe",
+    )
     parser.add_argument("--lang", default="default", help="idioma del OCR")
     parser.add_argument(
         "--with-layout",
@@ -83,6 +89,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.instructions is not None and args.contract is None:
         print("error: --instructions requiere --contract", file=sys.stderr)
         return 2
+    if args.format == "md" and (args.contract or args.instructions or args.model):
+        print(
+            "error: --contract, --instructions y --model requieren --format json",
+            file=sys.stderr,
+        )
+        return 2
 
     start = time.perf_counter()
     report = metrics.empty_report() if (args.metrics or args.metrics_out) else None
@@ -94,12 +106,30 @@ def main(argv: list[str] | None = None) -> int:
         except OSError:
             pass
 
+    llm_start: float | None = None
+    usage_out: dict | None = None
+
+    def fail(kind: str, message: str, code: int) -> int:
+        """Informa del error y, si se pidió, emite el informe parcial de métricas."""
+        print(f"error: {message}", file=sys.stderr)
+        if report is not None:
+            report["error"] = {"kind": kind, "message": message}
+            if llm_start is not None:
+                report["llm"]["time_ms"] = _elapsed_ms(llm_start)
+            if usage_out:
+                report["llm"].update(usage_out)
+            report["total"]["time_ms"] = _elapsed_ms(start)
+            try:
+                metrics.emit(report, to_stderr=args.metrics, out=args.metrics_out)
+            except OSError:
+                pass
+        return code
+
     try:
         contract = None
         kind = None
         instructions = None
         model_path = None
-        usage_out = None
 
         if args.format == "json" and args.contract is not None:
             contract, detected_kind = load_contract(args.contract)
@@ -107,15 +137,14 @@ def main(argv: list[str] | None = None) -> int:
             instructions = load_instructions(args.contract, args.instructions)
             model_path = args.model or default_model_path()
             if model_path is None:
-                print(
-                    "error: no hay modelo: pasa --model o descárgalo con "
+                return fail(
+                    "usage",
+                    "no hay modelo: pasa --model o descárgalo con "
                     "`uv run python scripts/fetch_models.py`",
-                    file=sys.stderr,
+                    2,
                 )
-                return 2
             if not Path(model_path).is_file():
-                print(f"error: no existe el modelo: {model_path}", file=sys.stderr)
-                return 2
+                return fail("usage", f"no existe el modelo: {model_path}", 2)
             usage_out = {} if report is not None else None
             if report is not None:
                 report["llm"]["enabled"] = True
@@ -157,6 +186,7 @@ def main(argv: list[str] | None = None) -> int:
                 contract,
                 kind,
                 model_path,
+                n_ctx=args.n_ctx,
                 instructions=instructions,
                 usage_out=usage_out,
             )
@@ -165,11 +195,9 @@ def main(argv: list[str] | None = None) -> int:
                 report["llm"].update(usage_out or {})
             errors = validate_payload(data, contract, kind)
             if errors:
-                print(
-                    "error: el contrato inferido no es válido: " + "; ".join(errors),
-                    file=sys.stderr,
+                return fail(
+                    "contract", "el contrato inferido no es válido: " + "; ".join(errors), 2
                 )
-                return 2
             output = to_json_payload(data, blocks if args.with_layout else None)
 
         if report is not None:
@@ -180,8 +208,7 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 args.out.write_text(output, encoding="utf-8")
             except OSError as exc:
-                print(f"error: no se pudo escribir {args.out}: {exc}", file=sys.stderr)
-                return 1
+                return fail("io", f"no se pudo escribir {args.out}: {exc}", 1)
         else:
             print(output)
 
@@ -197,11 +224,10 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
         return 0
     except InputError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+        return fail("input", str(exc), 1)
     except ContractError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
+        return fail("contract", str(exc), 2)
     except OSError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+        return fail("io", str(exc), 1)
+    except KeyboardInterrupt:
+        return fail("interrupted", "interrumpido por el usuario", 130)

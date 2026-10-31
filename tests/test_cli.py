@@ -412,3 +412,25 @@ def test_corrupt_pdf_returns_1_without_traceback(tmp_path: Path, capsys) -> None
     err = capsys.readouterr().err
     assert "error" in err
     assert "Traceback" not in err
+
+
+def test_contract_flags_without_json_format_return_2(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    def boom(*args, **kwargs):
+        raise AssertionError("no debe procesar el fichero")
+
+    monkeypatch.setattr(cli, "ingest", boom)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+    contract = _contract_file(tmp_path, EXAMPLE)
+    model = tmp_path / "m.gguf"
+    model.write_bytes(b"")
+
+    code = cli.main([str(source), "--contract", str(contract)])
+    assert code == 2
+    assert "--format json" in capsys.readouterr().err
+
+    code = cli.main([str(source), "--model", str(model)])
+    assert code == 2
+    assert "--format json" in capsys.readouterr().err

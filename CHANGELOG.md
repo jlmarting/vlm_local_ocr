@@ -10,6 +10,15 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 ### Added
 
 - Métricas opt-in: `--metrics` (informe JSON a stderr) y `--metrics-out PATH` (fichero). Miden fichero, ingesta, OCR (bloques y confianza real), SLM (modelo, carga, intentos, tokens y velocidad), salida y total, sin alterar stdout ni los exit codes.
+- `--n-ctx N`: contexto del modelo en tokens (defecto 4096) para dar aire a prompts grandes.
+- El informe de métricas incluye `llm.finish_reason` y se emite también en error e interrupción, con un campo `error` (`kind` + `message`).
+
+### Fixed
+
+- El reintento del contrato ya no pide `max_tokens` a ciegas: el presupuesto de cada intento se ajusta al contexto que deja el prompt y falla antes de generar si no cabe.
+- Una respuesta cortada por el límite de tokens se reporta como truncamiento, no como JSON inválido.
+- `Ctrl-C` sale con `130` sin traceback y emite el informe parcial si se pidió.
+- `--contract`, `--instructions` y `--model` con `--format md` fallan con `2` en vez de ignorarse en silencio.
 
 ## [0.1.0] - 2026-10-30
 

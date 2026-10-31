@@ -20,6 +20,8 @@ _CURRENCY_RE = re.compile(
 )
 MAX_INSTRUCTIONS_CHARS = 4000
 DEFAULT_MODEL_FILENAME = "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+CONTEXT_MARGIN_TOKENS = 64
+MIN_OUTPUT_TOKENS = 256
 
 
 from .errors import ContractError
@@ -279,12 +281,16 @@ def infer_contract(
     messages = _build_messages(ocr_text, contract, kind, instructions)
     base_max_tokens = max(256, len(json.dumps(contract, ensure_ascii=False)) * 2)
 
-    raw, usage = _chat(llm, messages, contract, kind, base_max_tokens)
+    raw, usage, finish_reason, budget = _chat_with_budget(
+        llm, messages, contract, kind, base_max_tokens, n_ctx
+    )
     attempts += 1
     seen_usage = _accumulate_usage(totals, usage) or seen_usage
+    _finish_usage(usage_out, attempts, totals, seen_usage, generation_start, finish_reason)
+    if finish_reason == "length":
+        raise ContractError(_truncated_message(usage, budget))
     data, errors = _parse_and_validate(raw, contract, kind)
     if not errors:
-        _finish_usage(usage_out, attempts, totals, seen_usage, generation_start)
         return _validated_final(data, contract, kind, text)
 
     repair_messages = [
@@ -299,14 +305,74 @@ def infer_contract(
             ),
         },
     ]
-    raw_retry, usage = _chat(llm, repair_messages, contract, kind, base_max_tokens * 2)
+    raw_retry, usage, finish_reason, budget = _chat_with_budget(
+        llm, repair_messages, contract, kind, base_max_tokens, n_ctx
+    )
     attempts += 1
     seen_usage = _accumulate_usage(totals, usage) or seen_usage
+    _finish_usage(usage_out, attempts, totals, seen_usage, generation_start, finish_reason)
+    if finish_reason == "length":
+        raise ContractError(_truncated_message(usage, budget))
     data, errors = _parse_and_validate(raw_retry, contract, kind)
-    _finish_usage(usage_out, attempts, totals, seen_usage, generation_start)
     if errors:
         raise ContractError("el modelo no produjo un contrato válido: " + "; ".join(errors))
     return _validated_final(data, contract, kind, text)
+
+
+def _estimate_prompt_tokens(llm: Llama, messages: list[dict]) -> int:
+    """Estima los tokens del chat con el tokenizador del modelo; sin él, ~4 chars/token."""
+    text = "\n".join(str(message.get("content", "")) for message in messages)
+    tokenize = getattr(llm, "tokenize", None)
+    if callable(tokenize):
+        try:
+            tokens = tokenize(text.encode("utf-8"))
+        except (AttributeError, TypeError, ValueError, RuntimeError):
+            return max(1, len(text) // 4)
+        return max(1, len(tokens))
+    return max(1, len(text) // 4)
+
+
+def _token_budget(
+    prompt_tokens: int,
+    n_ctx: int,
+    requested: int,
+    *,
+    margin: int = CONTEXT_MARGIN_TOKENS,
+    minimum: int = MIN_OUTPUT_TOKENS,
+) -> int | None:
+    """Tokens que caben para la respuesta; ``None`` si el prompt no deja hueco viable."""
+    available = n_ctx - prompt_tokens - margin
+    if available < minimum:
+        return None
+    return min(requested, available)
+
+
+def _chat_with_budget(
+    llm: Llama,
+    messages: list[dict],
+    contract: dict,
+    kind: str,
+    requested: int,
+    n_ctx: int,
+) -> tuple[str, dict[str, Any] | None, str | None, int]:
+    """Llama al modelo con ``max_tokens`` ajustado al contexto disponible."""
+    prompt_tokens = _estimate_prompt_tokens(llm, messages)
+    budget = _token_budget(prompt_tokens, n_ctx, requested)
+    if budget is None:
+        raise ContractError(
+            f"el prompt ocupa ~{prompt_tokens} tokens y no deja hueco en n_ctx={n_ctx}: "
+            "reduce el contrato o el texto, o sube --n-ctx"
+        )
+    content, usage, finish_reason = _chat(llm, messages, contract, kind, budget)
+    return content, usage, finish_reason, budget
+
+
+def _truncated_message(usage: dict[str, Any] | None, budget: int) -> str:
+    written = (usage or {}).get("completion_tokens") or budget
+    return (
+        f"respuesta truncada por límite de tokens ({written} de {budget}): "
+        "el modelo no cerró el JSON; reduce el contrato o sube --n-ctx"
+    )
 
 
 def _accumulate_usage(totals: dict[str, int], usage: dict[str, Any] | None) -> bool:
@@ -328,11 +394,13 @@ def _finish_usage(
     totals: dict[str, int],
     seen_usage: bool,
     generation_start: float,
+    finish_reason: str | None = None,
 ) -> None:
-    """Cierra el bloque de uso: intentos, tokens y velocidad de generación."""
+    """Cierra el bloque de uso: intentos, tokens, velocidad y motivo de parada."""
     if usage_out is None:
         return
     usage_out["attempts"] = attempts
+    usage_out["finish_reason"] = finish_reason
     if not seen_usage:
         usage_out["prompt_tokens"] = None
         usage_out["completion_tokens"] = None
@@ -431,7 +499,7 @@ def _chat(
     contract: dict,
     kind: str,
     max_tokens: int,
-) -> tuple[str, dict[str, Any] | None]:
+) -> tuple[str, dict[str, Any] | None, str | None]:
     response_format: dict[str, Any] = {"type": "json_object"}
     if kind == "schema":
         response_format["schema"] = contract
@@ -441,9 +509,11 @@ def _chat(
         max_tokens=max_tokens,
         response_format=response_format,
     )
-    content = response["choices"][0]["message"]["content"]
+    choice = response["choices"][0]
+    content = choice["message"]["content"]
     usage = response.get("usage")
-    return content, usage if isinstance(usage, dict) else None
+    finish_reason = choice.get("finish_reason")
+    return content, usage if isinstance(usage, dict) else None, finish_reason
 
 
 def _parse_and_validate(raw: str, contract: dict, kind: str) -> tuple[Any, list[str]]:

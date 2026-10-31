@@ -2,7 +2,7 @@
 
 Manual de uso y mantenimiento de la v1. Documento de proyecto; el diseño y el historial viven en el vault (`rondas/20261030a-definicion/`).
 
-> **Estado de cierre**: v1 funcional y probada (76 tests, `ruff` limpio). Los bloqueantes de la revisión fresca (exit codes, validación `int`, modelo por defecto, golden ≥80 %, prompt injection) están corregidos. La licencia se resolvió sustituyendo PyMuPDF por `pypdfium2` y manteniendo MIT. Ver §10.
+> **Estado de cierre**: v1 funcional y probada (94 tests, `ruff` limpio). Los bloqueantes de la revisión fresca (exit codes, validación `int`, modelo por defecto, golden ≥80 %, prompt injection) están corregidos. La licencia se resolvió sustituyendo PyMuPDF por `pypdfium2` y manteniendo MIT. Ver §10.
 
 ## 1. Qué es
 
@@ -83,6 +83,7 @@ uv run vlm-ocr documento.pdf --out salida.md
 | `--contract PATH` | — | Ejemplo de payload o JSON Schema |
 | `--contract-kind example\|schema` | autodetecta | Fuerza la interpretación |
 | `--model PATH` | — | GGUF para inferir el contrato |
+| `--n-ctx N` | 4096 | Contexto del modelo en tokens; súbelo si el prompt no cabe |
 | `--instructions PATH` | sidecar | Instrucciones de ajuste |
 | `--dpi N` | 200 | DPI al rasterizar PDFs |
 | `--lang LANG` | `default` | Idioma del OCR |
@@ -97,13 +98,14 @@ uv run vlm-ocr documento.pdf --out salida.md
 |---|---|
 | `0` | OK |
 | `1` | Error de entrada/OCR |
-| `2` | Error de contrato/modelo/instrucciones |
+| `2` | Error de contrato/modelo/instrucciones o flag incoherente |
+| `130` | Interrumpido con Ctrl-C |
 
-Los errores de entrada/OCR salen como `1`; contrato, instrucciones o modelo como `2`. Los detalles se imprimen en stderr sin traceback.
+Los errores de entrada/OCR salen como `1`; contrato, instrucciones, modelo o flags incoherentes como `2`. Los detalles se imprimen en stderr sin traceback. `--contract`, `--instructions` y `--model` exigen `--format json`: con la salida Markdown por defecto se rechazan con `2` en lugar de ignorarse.
 
 ### Métricas (opt-in)
 
-`--metrics` emite un informe JSON por stderr (stdout intacto); `--metrics-out PATH` lo escribe a fichero. Sin flags no hay salida extra ni coste apreciable. En error no se emite.
+`--metrics` emite un informe JSON por stderr (stdout intacto); `--metrics-out PATH` lo escribe a fichero. Sin flags no hay salida extra ni coste apreciable. El informe se emite **también** cuando la ejecución falla (`exit 1`/`2`) o se interrumpe (`130`): lleva las etapas ya medidas, `llm.attempts`, los tokens consumidos, `llm.finish_reason` y un campo `error` con `kind` y `message`.
 
 ```bash
 uv run vlm-ocr factura.pdf --format json --contract factura.json --metrics
@@ -118,9 +120,10 @@ uv run vlm-ocr documento.pdf --metrics-out metricas.json
   "llm":    {"enabled": true, "model": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
              "load_time_ms": 800.0, "time_ms": 9000.0, "attempts": 1,
              "prompt_tokens": 500, "completion_tokens": 40, "total_tokens": 540,
-             "tokens_per_second": 42.1},
+             "tokens_per_second": 42.1, "finish_reason": "stop"},
   "output": {"format": "json", "size_bytes": 123},
-  "total":  {"time_ms": 10500.0}
+  "total":  {"time_ms": 10500.0},
+  "error":  null
 }
 ```
 

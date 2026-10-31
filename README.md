@@ -23,7 +23,7 @@ uv run python scripts/fetch_models.py   # descarga y verifica el GGUF (~491 MB)
 
 El script descarga `Qwen2.5-0.5B-Instruct Q4_K_M` (Apache-2.0). Los modelos OCR por defecto vienen en el wheel de `rapidocr` y funcionan offline.
 
-El CLI busca el GGUF por defecto en `models/` del repo, `./models/` o `~/.local/share/vlm-local-ocr/models/`; `--model` lo sobrescribe. `scripts/build_release.sh` genera un artefacto con el modelo incluido.
+El CLI busca el GGUF por defecto en `models/` del repo, `./models/` o `~/.local/share/vlm-local-ocr/models/`; `--model` lo sobrescribe. `--contract`, `--instructions` y `--model` requieren `--format json`: con Markdown el CLI los rechaza con `2` en vez de ignorarlos. `scripts/build_release.sh` genera un artefacto con el modelo incluido.
 
 ## Uso
 
@@ -82,7 +82,7 @@ El contrato es **opcional**. Si no se indica `--contract`, `--format json` devue
 - un **JSON Schema** (con `$schema` o `--contract-kind schema`): validación estricta;
 - un **ejemplo de datos** (defecto): se usa como **forma y tipos** (los valores no se copian) y se valida de forma recursiva (arrays, objetos anidados, `null` como nullable, claves extra prohibidas).
 
-En ese caso se requiere `--model` y la inferencia se hace con una llamada por documento, `n_ctx=4096` y el texto OCR truncado a ~1500 tokens.
+En ese caso se requiere `--model` y la inferencia se hace con una llamada por documento, `n_ctx=4096` (`--n-ctx` lo cambia) y el texto OCR truncado a ~1500 tokens. La respuesta se pide con un presupuesto de tokens que siempre cabe en el contexto; si el modelo corta el JSON, el error lo dice (`respuesta truncada por límite de tokens`) en lugar de fingir un JSON inválido.
 
 El modelo recibe instrucción explícita de **copiar los valores literales** del texto y **no calcular** (nada de sumas, subtotales, porcentajes, medias ni cifras derivadas). Si un dato no aparece escrito, devuelve `null`; la clave del contrato sigue siendo obligatoria.
 
@@ -97,7 +97,7 @@ uv run vlm-ocr factura.pdf --format json --contract factura.json --metrics
 uv run vlm-ocr documento.pdf --metrics-out metricas.json
 ```
 
-El informe incluye tamaño, formato y páginas del fichero; tiempos de ingesta, OCR y SLM; páginas nativas y rasterizadas; bloques y confianza media; el **modelo GGUF** usado (`llm.model`, basename), intentos, tokens de prompt/completado/total y velocidad de generación; tamaño de la salida y tiempo total.
+El informe incluye tamaño, formato y páginas del fichero; tiempos de ingesta, OCR y SLM; páginas nativas y rasterizadas; bloques y confianza media; el **modelo GGUF** usado (`llm.model`, basename), intentos, tokens de prompt/completado/total, velocidad de generación y motivo de parada (`llm.finish_reason`); tamaño de la salida y tiempo total.
 
 ```json
 {
@@ -107,14 +107,15 @@ El informe incluye tamaño, formato y páginas del fichero; tiempos de ingesta, 
   "llm":    {"enabled": true, "model": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
              "load_time_ms": 800.0, "time_ms": 9000.0, "attempts": 1,
              "prompt_tokens": 500, "completion_tokens": 40, "total_tokens": 540,
-             "tokens_per_second": 42.1},
+             "tokens_per_second": 42.1, "finish_reason": "stop"},
   "output": {"format": "json", "size_bytes": 123},
-  "total":  {"time_ms": 10500.0}
+  "total":  {"time_ms": 10500.0},
+  "error":  null
 }
 ```
 
 - Sin `--metrics`/`--metrics-out` no hay salida extra ni coste apreciable.
-- En error (exit `1`/`2`) no se emite informe.
+- En error (exit `1`/`2`) o interrupción (`130`) el informe se emite igualmente, con las etapas medidas y un campo `error` (`kind` + `message`).
 - `mean_confidence` se calcula **solo** sobre bloques de páginas rasterizadas (las nativas llevan confianza `1.0` sintética); `null` si no hay OCR real.
 - Sin contrato/modelo, `llm.enabled` es `false` y el resto se mide igual.
 

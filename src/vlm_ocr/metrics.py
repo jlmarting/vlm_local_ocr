@@ -29,9 +29,11 @@ def empty_report() -> dict[str, Any]:
             "completion_tokens": None,
             "total_tokens": None,
             "tokens_per_second": None,
+            "finish_reason": None,
         },
         "output": {"format": None, "size_bytes": None},
         "total": {"time_ms": None},
+        "error": None,
     }
 
 
