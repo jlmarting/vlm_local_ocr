@@ -5,7 +5,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import extract, metrics, verify
+from . import extract, homologate, metrics, templates, verify
 from .annotations import field_map, has_annotations
 from .contract import (
     ContractError,
@@ -13,6 +13,7 @@ from .contract import (
     infer_contract,
     load_contract,
     load_instructions,
+    subschema,
     validate_payload,
 )
 from .errors import InputError
@@ -20,6 +21,8 @@ from .ingest import ingest
 from .layout import native_blocks, rows_text
 from .ocr import ocr_pages
 from .output import to_json_payload, to_markdown, to_text_json
+
+TEMPLATE_MIN_COVERAGE = 0.75
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -71,6 +74,21 @@ def _build_parser() -> argparse.ArgumentParser:
         help="los valores que no aparecen literalmente en el texto son error (exit 2)",
     )
     parser.add_argument(
+        "--homologate",
+        action="store_true",
+        help="registra la variante del documento tras una extracción buena",
+    )
+    parser.add_argument(
+        "--templates-dir",
+        type=Path,
+        help="directorio de variantes (por defecto, el de datos del usuario)",
+    )
+    parser.add_argument(
+        "--no-template",
+        action="store_true",
+        help="ignora las variantes registradas",
+    )
+    parser.add_argument(
         "--n-ctx",
         type=int,
         default=4096,
@@ -96,15 +114,12 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _row_blocks(path: Path, pages, lang: str):
-    """ Bloques con caja: celdas nativas del PDF + OCR de las páginas sin texto."""
+def _row_blocks(path: Path, pages, blocks, lang: str):
+    """Bloques con caja: celdas nativas del PDF + OCR ya calculado de las rasterizadas."""
     if path.suffix.lower() != ".pdf":
-        return ocr_pages(pages, lang=lang)
-    blocks = native_blocks(path)
-    raster = [page for page in pages if page.image_png is not None]
-    if raster:
-        blocks = blocks + ocr_pages(raster, lang=lang)
-    return blocks
+        return blocks
+    raster = {page.index for page in pages if page.image_png is not None}
+    return native_blocks(path) + [block for block in blocks if block.page in raster]
 
 
 def _elapsed_ms(start: float) -> float:
@@ -161,6 +176,9 @@ def main(argv: list[str] | None = None) -> int:
 
         annotated = False
         use_rows = False
+        templates_enabled = False
+        template_contract_hash: str | None = None
+        variants: list[templates.Template] = []
         if args.format == "json" and args.contract is not None:
             contract, detected_kind = load_contract(args.contract)
             kind = args.contract_kind or detected_kind
@@ -169,13 +187,19 @@ def main(argv: list[str] | None = None) -> int:
             use_rows = args.text_format == "rows" or (
                 args.text_format is None and annotated
             )
+            templates_enabled = not args.no_template
+            if templates_enabled:
+                template_contract_hash = templates.contract_hash(contract)
+                variants = templates.list_templates(
+                    template_contract_hash, directory=args.templates_dir
+                )
             if args.model is not None:
                 model_path = args.model
             elif args.no_llm:
                 model_path = None
             else:
                 model_path = default_model_path()
-            if not args.no_llm and not use_rows:
+            if not args.no_llm and not use_rows and not templates_enabled:
                 if model_path is None:
                     return fail(
                         "usage",
@@ -221,42 +245,126 @@ def main(argv: list[str] | None = None) -> int:
         else:
             input_text = to_markdown(blocks)
             assignment = None
-            if use_rows:
-                row_blocks = _row_blocks(args.file, pages, args.lang)
-                input_text = rows_text(row_blocks)
-                assignment = extract.assign(row_blocks, contract)
-                annotated_fields = len(field_map(contract))
-                coverage = (
-                    len(assignment.matched) / annotated_fields if annotated_fields else 1.0
-                )
-                if annotated_fields and coverage < 0.75:
-                    print(
-                        f"aviso: cobertura baja: {len(assignment.matched)}/{annotated_fields} "
-                        "campos anotados (¿escaneo de baja calidad?)",
-                        file=sys.stderr,
-                    )
-                    if args.strict:
-                        return fail(
-                            "verify",
-                            f"cobertura baja: {len(assignment.matched)}/{annotated_fields} "
-                            "campos anotados",
-                            2,
-                        )
-                if report is not None:
-                    report["extract"]["coverage"] = round(coverage, 2)
-                    report["extract"]["deterministic"] = len(assignment.matched)
-                    report["extract"]["unmatched"] = len(assignment.unmatched)
-                    report["extract"]["pending"] = len(assignment.pending)
-                    report["extract"]["llm"] = False
+            template = None
+            template_data = None
+            template_covered: set[str] = set()
+            contract_assignment = None
+            row_blocks = None
 
-            data = assignment.data if assignment is not None else None
-            needs_llm = assignment is None or bool(assignment.pending)
+            need_rows = use_rows or (
+                templates_enabled and (bool(variants) or args.homologate)
+            )
+            if need_rows:
+                row_blocks = _row_blocks(args.file, pages, blocks, args.lang)
+            if use_rows and row_blocks is not None:
+                input_text = rows_text(row_blocks)
+
+            if variants and row_blocks is not None and template_contract_hash is not None:
+                found = templates.best_template(
+                    row_blocks,
+                    template_contract_hash,
+                    directory=args.templates_dir,
+                )
+                if found is not None:
+                    candidate, candidate_score = found
+                    hint = templates.hint_from_template(candidate, contract, kind)
+                    candidate_assignment = extract.assign(row_blocks, hint)
+                    mapped = len(candidate.map)
+                    coverage = (
+                        len(candidate_assignment.matched) / mapped if mapped else 0.0
+                    )
+                    if mapped and coverage >= TEMPLATE_MIN_COVERAGE:
+                        template = candidate
+                        assignment = candidate_assignment
+                        template_data = candidate_assignment.data
+                        template_covered = set(candidate_assignment.matched)
+                        if annotated:
+                            contract_assignment = extract.assign(row_blocks, contract)
+                            template_data = extract.merge(
+                                candidate_assignment.data, contract_assignment.data
+                            )
+                            template_covered |= set(contract_assignment.matched)
+                        input_text = rows_text(row_blocks)
+                        if report is not None:
+                            report["template"].update(
+                                {
+                                    "found": True,
+                                    "digest": candidate.digest,
+                                    "score": round(candidate_score, 4),
+                                    "version": candidate.version,
+                                    "coverage": round(coverage, 2),
+                                }
+                            )
+                            report["extract"]["coverage"] = round(coverage, 2)
+                            report["extract"]["deterministic"] = len(template_covered)
+                            report["extract"]["unmatched"] = len(assignment.unmatched)
+                            report["extract"]["pending"] = len(assignment.pending)
+                            report["extract"]["llm"] = False
+                    else:
+                        if report is not None:
+                            report["template"]["drift"] = True
+                        print(
+                            "aviso: la variante registrada ya no cubre el documento "
+                            f"({len(candidate_assignment.matched)}/{mapped}); se usa el LLM.",
+                            file=sys.stderr,
+                        )
+
+            if template is None and use_rows and row_blocks is not None:
+                input_text = rows_text(row_blocks)
+                if annotated:
+                    assignment = extract.assign(row_blocks, contract)
+                    annotated_fields = len(field_map(contract))
+                    coverage = (
+                        len(assignment.matched) / annotated_fields
+                        if annotated_fields
+                        else 1.0
+                    )
+                    if annotated_fields and coverage < 0.75:
+                        print(
+                            f"aviso: cobertura baja: {len(assignment.matched)}/"
+                            f"{annotated_fields} campos anotados (¿escaneo de baja calidad?)",
+                            file=sys.stderr,
+                        )
+                        if args.strict:
+                            return fail(
+                                "verify",
+                                f"cobertura baja: {len(assignment.matched)}/"
+                                f"{annotated_fields} campos anotados",
+                                2,
+                            )
+                    if report is not None:
+                        report["extract"]["coverage"] = round(coverage, 2)
+                        report["extract"]["deterministic"] = len(assignment.matched)
+                        report["extract"]["unmatched"] = len(assignment.unmatched)
+                        report["extract"]["pending"] = len(assignment.pending)
+                        report["extract"]["llm"] = False
+
+            if template is not None:
+                data = template_data
+            else:
+                data = assignment.data if assignment is not None else None
+            missing: list[str] = []
+            if template is not None and assignment is not None:
+                contract_pending = (
+                    set(contract_assignment.pending)
+                    if contract_assignment is not None
+                    else set()
+                )
+                missing = sorted(
+                    (set(template.unlocated) | set(assignment.pending) | contract_pending)
+                    - template_covered
+                )
+            elif assignment is not None:
+                missing = list(assignment.pending)
+            needs_llm = assignment is None or bool(missing)
+
             if needs_llm:
                 if args.no_llm:
                     if assignment is None:
                         return fail(
                             "usage",
-                            "--no-llm requiere un contrato anotado y --text-format rows",
+                            "--no-llm requiere un contrato anotado, una variante o "
+                            "--text-format rows",
                             2,
                         )
                 else:
@@ -272,9 +380,12 @@ def main(argv: list[str] | None = None) -> int:
                     if report is not None:
                         report["llm"]["enabled"] = True
                     llm_start = time.perf_counter()
+                    prompt_contract = (
+                        subschema(contract, missing, kind) if missing else contract
+                    )
                     llm_data = infer_contract(
                         input_text,
-                        contract,
+                        prompt_contract,
                         kind,
                         model_path,
                         n_ctx=args.n_ctx,
@@ -286,7 +397,7 @@ def main(argv: list[str] | None = None) -> int:
                         report["llm"].update(usage_out or {})
                         report["extract"]["llm"] = True
                     data = (
-                        extract.merge(assignment.data, llm_data)
+                        extract.merge(data, llm_data)
                         if assignment is not None
                         else llm_data
                     )
@@ -310,6 +421,73 @@ def main(argv: list[str] | None = None) -> int:
                 return fail(
                     "contract", "el contrato inferido no es válido: " + "; ".join(errors), 2
                 )
+
+            if args.homologate:
+                if not templates_enabled or row_blocks is None:
+                    print(
+                        "aviso: --homologate requiere plantillas habilitadas y filas",
+                        file=sys.stderr,
+                    )
+                else:
+                    learned, absent, unlocated = homologate.learn_map(
+                        data, row_blocks, contract, kind, assignment
+                    )
+                    literal_fields = {problem["field"] for problem in literal}
+                    for path in literal_fields:
+                        learned.pop(path, None)
+                    if literal_fields:
+                        unlocated = sorted(set(unlocated) | literal_fields)
+                        print(
+                            "aviso: no se homologan "
+                            f"{len(literal_fields)} campos con valores no literales; "
+                            "quedarán para el LLM.",
+                            file=sys.stderr,
+                        )
+                    labels = [
+                        label for item in learned.values() for label in item.labels
+                    ]
+                    fingerprint = templates.signature(row_blocks, labels)
+                    if fingerprint is None:
+                        print(
+                            "aviso: no se pudo aprender el mapa; no se homologa",
+                            file=sys.stderr,
+                        )
+                    else:
+                        saved = templates.save_template(
+                            fingerprint,
+                            templates.Template(
+                                contract_hash=template_contract_hash
+                                or templates.contract_hash(contract),
+                                fingerprint=fingerprint,
+                                map=learned,
+                                absent=tuple(absent),
+                                unlocated=tuple(unlocated),
+                            ),
+                            directory=args.templates_dir,
+                        )
+                        if report is not None:
+                            report["template"].update(
+                                {
+                                    "found": True,
+                                    "homologated": True,
+                                    "digest": saved.digest,
+                                    "version": saved.version,
+                                }
+                            )
+
+            if (
+                templates_enabled
+                and not args.homologate
+                and template is None
+                and not literal
+                and sys.stderr.isatty()
+            ):
+                print(
+                    "aviso: documento no homologado; usa --homologate para "
+                    "registrar esta variante",
+                    file=sys.stderr,
+                )
+
             output = to_json_payload(data, blocks if args.with_layout else None)
 
         if report is not None:

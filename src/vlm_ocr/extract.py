@@ -18,12 +18,21 @@ from .types import LayoutBlock
 THOUSANDS_RE = re.compile(r"^-?\d{1,3}(?:\.\d{3})+$")
 
 
+@dataclass(frozen=True)
+class SourceCell:
+    """Etiqueta y columna con las que se resolvió un campo."""
+
+    label: str
+    source: str | None = None
+
+
 @dataclass
 class Assignment:
     data: dict
     matched: list[str] = field(default_factory=list)
     unmatched: list[str] = field(default_factory=list)
     pending: list[str] = field(default_factory=list)
+    sources: dict[str, SourceCell] = field(default_factory=dict)
 
 
 def parse_number(raw: str) -> float | None:
@@ -57,7 +66,8 @@ def _set(data: dict, path: str, value: Any) -> None:
     current[leaf] = value
 
 
-def _detect_header(row: list[LayoutBlock]) -> dict[str, tuple[float, float]] | None:
+def detect_columns(row: list[LayoutBlock]) -> dict[str, tuple[float, float]] | None:
+    """Columnas de una fila de cabecera, por sinónimos de ``x-source``."""
     columns: dict[str, tuple[float, float]] = {}
     for block in row:
         source = SOURCE_ALIASES.get(normalize_label(block.text))
@@ -65,6 +75,21 @@ def _detect_header(row: list[LayoutBlock]) -> dict[str, tuple[float, float]] | N
             continue
         columns.setdefault(source, (block.box[0], block.box[2]))
     return columns if len(columns) >= 2 else None
+
+
+def _detect_header(row: list[LayoutBlock]) -> dict[str, tuple[float, float]] | None:
+    return detect_columns(row)
+
+
+def _column_for(
+    cell: LayoutBlock, columns: dict[str, tuple[float, float]] | None
+) -> str | None:
+    if not columns:
+        return None
+    best = max(columns.items(), key=lambda item: _overlap(cell, item[1]), default=None)
+    if best is None or _overlap(cell, best[1]) <= 0:
+        return None
+    return best[0]
 
 
 def _value_cell(
@@ -99,6 +124,10 @@ def _value_cell(
 def _coerce(hint: FieldHint, block: LayoutBlock, label: str) -> Any:
     number = parse_number(block.text)
     if hint.kind == "string":
+        if hint.join_label is True:
+            return f"{label} {block.text}".strip()
+        if hint.join_label is False:
+            return block.text
         if number is not None and any(char.isalpha() for char in label):
             return f"{label} {block.text}".strip()
         return block.text
@@ -178,7 +207,8 @@ def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
     ambiguous: set[str] = set()
     unmatched: set[str] = set(leaves)
     columns: dict[str, tuple[float, float]] | None = None
-    pending: list[tuple[FieldHint, tuple[float, float], int]] = []
+    sources: dict[str, SourceCell] = {}
+    pending: list[tuple[FieldHint, tuple[float, float], int, str]] = []
 
     def take(hint: FieldHint, cell: LayoutBlock, label: str) -> None:
         if hint.path in matched or parse_number(cell.text) is None and hint.kind != "string":
@@ -186,6 +216,10 @@ def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
         _set(data, hint.path, _coerce(hint, cell, label))
         matched.append(hint.path)
         unmatched.discard(hint.path)
+        sources[hint.path] = SourceCell(
+            label=label,
+            source=hint.source if hint.source and columns and hint.source in columns else _column_for(cell, columns),
+        )
 
     rows = group_rows(_expand_piped([block for block in blocks if block.text.strip()]))
     for index, row in enumerate(rows):
@@ -207,14 +241,14 @@ def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
 
         numbers = [block for block in row if parse_number(block.text) is not None]
         remaining = []
-        for hint, span, origin in pending:
+        for hint, span, origin, label in pending:
             wide = span[1] - span[0] > 100.0
             window = 20 if wide else 2
             cell = _cell_under(numbers, span) if index - origin <= window else None
             if cell is not None:
-                take(hint, cell, hint.labels[0])
+                take(hint, cell, label)
             else:
-                remaining.append((hint, span, origin))
+                remaining.append((hint, span, origin, label))
         pending = remaining
 
         for block in row:
@@ -227,13 +261,14 @@ def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
                     [item for item in row if parse_number(item.text) is not None], span
                 ) is not None:
                     continue
-                pending.append((hint, span, index))
+                pending.append((hint, span, index, block.text))
 
     return Assignment(
         data=data,
         matched=matched,
         unmatched=sorted(unmatched),
         pending=sorted(ambiguous - set(matched)),
+        sources=sources,
     )
 
 

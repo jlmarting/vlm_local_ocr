@@ -89,6 +89,9 @@ uv run vlm-ocr documento.pdf --out salida.md
 | `--text-format md\|rows` | md (rows con contrato anotado) | Representación del texto para el contrato |
 | `--no-llm` | off | Solo asignación determinista; no carga modelo |
 | `--strict` | off | Un valor que no aparece literalmente en el texto es error (`2`) |
+| `--homologate` | off | Registra la variante del documento tras una extracción válida |
+| `--templates-dir PATH` | datos del usuario | Directorio de variantes |
+| `--no-template` | off | Ignora las variantes registradas |
 | `--lang LANG` | `default` | Idioma del OCR |
 | `--with-layout` | off | Añade cajas al JSON |
 | `--out PATH` | stdout | Escribe la salida a fichero |
@@ -113,6 +116,14 @@ Los errores de entrada/OCR salen como `1`; contrato, instrucciones, modelo o fla
 Un contrato JSON Schema puede anotar cada campo con `x-labels` (etiquetas del documento) y `x-source` (columna: `unidades`, `importe`, `devengado`, `a_deducir`, `base`, `porcentaje`, `cuota`). Con anotaciones, el CLI reconstruye la tabla en filas y **asigna los valores sin LLM**; el modelo solo completa los campos que no casan y el valor determinista gana en el merge. `--no-llm` desactiva el modelo por completo y `--text-format rows` fuerza la representación; el prompt se genera con el mapa de campos.
 
 Prueba real con dos nóminas (30 campos): **24/24 sin LLM, 0 tokens y sin incidencias de literalidad**. Las imágenes se enderezan (giro de hasta ±30°) y se recortan antes del OCR; las etiquetas toleran erratas del OCR si la coincidencia es clara. Si la cobertura baja del 75 % de los campos anotados se avisa por stderr (y `--strict` falla): un escaneo ilegible puede producir valores que aparecen en el texto pero están en la fila equivocada. Con un escaneo sintético (PNG y PDF sin capa de texto, rasterizado a `--dpi`), el mismo camino (OCR → filas → extractor) resuelve la tabla; si el OCR devuelve la fila entera como un bloque, los campos caen al LLM. `scripts/draft_contract.py` genera un borrador del contrato a partir del documento para revisarlo a mano.
+
+### Plantillas homologadas (variantes)
+
+El contrato identifica la **tipología**; cada disposición estructural distinta de esa tipología es una **variante**. `--homologate` aprende el mapa de una extracción válida (`campo → etiqueta + columna`) y lo guarda en `$XDG_DATA_HOME/vlm-local-ocr/templates/<hash-contrato>/` (por defecto `~/.local/share/vlm-local-ocr/templates/`; `--templates-dir` lo cambia). La huella solo mira las filas que mapean a campos y las cabeceras, con zonas horizontales relativas: membretes, observaciones y tags no cuentan. **No se guardan valores**; los campos no literales se excluyen y quedan `unlocated`.
+
+En la siguiente pasada, si hay variante válida, la asignación es determinista y no se carga el modelo (0 tokens); los campos `unlocated` piden LLM solo por ellos y los `absent` quedan `null`. Si el layout deriva (cobertura del mapa por debajo del 75 %), se avisa y se usa el LLM completo. Con un contrato anotado, sus anotaciones rellenan lo que la variante no cubra. Puede haber N variantes por contrato: se busca la huella exacta y, si no, una similitud estructural (0,85 con margen 0,05 sobre la segunda). `--no-template` desactiva la búsqueda. El informe de métricas añade `template.found/digest/score/version/coverage/homologated/drift`.
+
+Prueba real: dos pedidos sintéticos de clientes distintos (PNG, membrete, tabla y observaciones diferentes) sobre el mismo contrato sin anotar. La primera pasada de cada variante usó Llama 3.2 3B (`--homologate`); la segunda resolvió **4/4 campos con 0 tokens** en ambas, y añadir una observación al cliente A mantuvo la misma variante. Con las nóminas anotadas, la variante del PDF y la del escaneo también resuelven 24/24 sin modelo.
 
 ### Métricas (opt-in)
 

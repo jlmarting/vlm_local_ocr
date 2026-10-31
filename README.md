@@ -110,6 +110,26 @@ uv run vlm-ocr nomina.pdf --format json --contract examples/contrato-nomina.json
 
 El ejemplo completo (29 campos de una nómina) está en [`examples/contrato-nomina.json`](examples/contrato-nomina.json).
 
+## Plantillas homologadas (variantes)
+
+Un contrato puede recibir documentos de clientes distintos: cambia el membrete, la disposición de los datos o las observaciones, pero la información converge en el mismo contrato. La **tipología** es el contrato (su hash) y cada disposición distinta es una **variante** registrada bajo esa tipología.
+
+- `--homologate` registra la variante al terminar una extracción válida. Solo se guardan las etiquetas que mapean a campos, las cabeceras y las zonas relativas: **nunca valores**. Los campos con valores no literales se excluyen y quedan para el LLM.
+- La huella ignora membretes, observaciones y tags: añadir una observación no rompe el reconocimiento.
+- En la siguiente pasada, si la variante cubre el documento, **no se carga el modelo** (0 tokens). Si falta algún campo, el LLM recibe solo ese subconjunto; si el layout deriva, se avisa y cae al LLM completo.
+- Puede haber **N variantes por contrato** (dos clientes, mismo pedido). Se elige por huella exacta o por similitud estructural (0,85 con margen sobre la segunda).
+
+```bash
+# Primera pasada: paga el LLM una vez por variante y la registra
+uv run vlm-ocr pedido-cliente-a.png --format json --contract contrato-pedido.json \
+  --model models/Llama-3.2-3B-Instruct-Q4_K_M.gguf --text-format rows --homologate --metrics
+
+# Siguientes pasadas: asignación determinista, sin modelo
+uv run vlm-ocr pedido-cliente-a.png --format json --contract contrato-pedido.json --no-llm --metrics
+```
+
+Las variantes viven en `$XDG_DATA_HOME/vlm-local-ocr/templates/<hash-contrato>/` (por defecto `~/.local/share/vlm-local-ocr/templates/`); `--templates-dir` lo cambia y `--no-template` las ignora. El informe de métricas añade `template.found/digest/score/version/coverage/homologated/drift`. Si el contrato cambia, su hash cambia y las variantes caducan solas.
+
 ## Métricas (opt-in)
 
 `--metrics` emite un informe JSON por **stderr** (stdout intacto) y `--metrics-out PATH` lo escribe a fichero:

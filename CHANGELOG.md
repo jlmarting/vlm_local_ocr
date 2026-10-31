@@ -9,6 +9,10 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- Plantillas homologadas (variantes): huella estructural sin valores (solo etiquetas de campo + cabeceras + zonas horizontales relativas), N variantes por contrato, búsqueda por digest exacto o similitud, y `--homologate` para registrar el mapa de una extracción válida. `--templates-dir` y `--no-template`.
+- Enrutado determinista con variante: segunda pasada sin LLM (0 tokens); los campos `unlocated` usan un subcontrato y los `absent` quedan `null`; deriva con aviso y caída al LLM.
+- `join_label` aprendido por campo (reproduce `GRUPO 3` sin pegar `PEDIDO: 123`) y equivalencia de fechas (`2026-02-02` ≡ `02/02/2026`) al aprender el mapa.
+- Métricas `template.found/digest/score/version/coverage/homologated/drift`.
 - Contrato JSON Schema anotado: `x-labels` (etiquetas del documento) y `x-source` (columna del valor).
 - Asignación determinista sin LLM cuando el contrato está anotado: el modelo solo rellena los campos que no casan y lo determinista gana.
 - `--text-format md|rows` (filas automáticas con contrato anotado), `--no-llm` y `--strict`.
@@ -24,6 +28,8 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Fixed
 
+- `--text-format rows` con contrato sin anotar ya no se salta el LLM: la asignación determinista solo corre con anotaciones o variante.
+- `_row_blocks` reutiliza los bloques OCR ya calculados en vez de repetir el OCR de las páginas rasterizadas.
 - El reintento del contrato ya no pide `max_tokens` a ciegas: el presupuesto de cada intento se ajusta al contexto que deja el prompt y falla antes de generar si no cabe.
 - Una respuesta cortada por el límite de tokens se reporta como truncamiento, no como JSON inválido.
 - `Ctrl-C` sale con `130` sin traceback y emite el informe parcial si se pidió.

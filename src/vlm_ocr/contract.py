@@ -603,3 +603,38 @@ def _apply_label_anchors(data: Any, text: str, contract: dict) -> Any:
         else:
             anchored[field] = value
     return anchored
+
+
+def _prune_schema(node: Any, wanted: set[str], prefix: str = "") -> Any:
+    if not isinstance(node, dict):
+        return node
+    properties = node.get("properties")
+    if not isinstance(properties, dict):
+        return node
+    kept: dict[str, Any] = {}
+    for key, sub in properties.items():
+        full = f"{prefix}.{key}" if prefix else key
+        if full in wanted:
+            kept[key] = sub
+        elif any(path.startswith(full + ".") for path in wanted):
+            kept[key] = _prune_schema(sub, wanted, full)
+    result = {key: value for key, value in node.items() if key != "properties"}
+    result["properties"] = kept
+    required = result.get("required")
+    if isinstance(required, list):
+        result["required"] = [item for item in required if item in kept]
+    return result
+
+
+def subschema(contract: dict, paths: list[str], kind: str) -> dict:
+    """Reduce el contrato a las rutas pedidas, conservando anidamiento y ``required``."""
+    wanted = {path for path in paths if path}
+    if not wanted:
+        return contract
+    if kind == "schema":
+        return _prune_schema(contract, wanted)
+    if kind == "example":
+        # El validador de ejemplo es estricto con campos extra; podar el payload haría
+        # que el LLM devolviera el contrato completo y fallara. Se pide el contrato entero.
+        return contract
+    raise ContractError(f"tipo de contrato desconocido: {kind!r}")
