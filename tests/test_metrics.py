@@ -55,6 +55,7 @@ def test_empty_report_has_stable_shape() -> None:
         "llm",
         "output",
         "extract",
+        "template",
         "verify",
         "total",
         "error",
