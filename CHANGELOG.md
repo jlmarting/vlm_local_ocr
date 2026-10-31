@@ -25,4 +25,5 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Coerción de strings numéricos inequívocos al tipo numérico del contrato.
 - Instrucción al modelo para copiar valores literales y no calcular cifras; `null` aceptado para datos ausentes.
 - Anclaje determinista a etiquetas para campos numéricos (`Total: 1895` prevalece sobre un precio unitario).
+- Sidecar `*.prompt.md` con instrucciones de ajuste por contrato, autodetectado o vía `--instructions`, con límite de 4 000 caracteres.
 - Few-shot mínimo en el prompt para evitar que el modelo reutilice un valor (p. ej. la fecha) en otro campo.

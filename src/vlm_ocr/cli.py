@@ -4,7 +4,13 @@ import argparse
 import sys
 from pathlib import Path
 
-from .contract import ContractError, infer_contract, load_contract, validate_payload
+from .contract import (
+    ContractError,
+    infer_contract,
+    load_contract,
+    load_instructions,
+    validate_payload,
+)
 from .ingest import ingest
 from .ocr import ocr_pages
 from .output import to_json_payload, to_markdown, to_text_json
@@ -33,6 +39,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="fuerza la interpretación del contrato",
     )
     parser.add_argument("--model", type=Path, help="modelo GGUF para inferir el contrato")
+    parser.add_argument(
+        "--instructions",
+        type=Path,
+        help="instrucciones de ajuste para el contrato (por defecto <contrato>.prompt.md)",
+    )
     parser.add_argument("--dpi", type=int, default=200, help="DPI al rasterizar PDFs")
     parser.add_argument("--lang", default="default", help="idioma del OCR")
     parser.add_argument(
@@ -50,8 +61,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.format == "json" and args.contract is not None and args.model is None:
         print("error: --format json con --contract requiere --model", file=sys.stderr)
         return 2
+    if args.instructions is not None and args.contract is None:
+        print("error: --instructions requiere --contract", file=sys.stderr)
+        return 2
 
     try:
+        instructions = load_instructions(args.contract, args.instructions) if (
+            args.format == "json" and args.contract is not None
+        ) else None
+
         pages = ingest(args.file, dpi=args.dpi)
         blocks = ocr_pages(pages, lang=args.lang)
 
@@ -70,6 +88,7 @@ def main(argv: list[str] | None = None) -> int:
                 contract,
                 kind,
                 args.model,
+                instructions=instructions,
             )
             errors = validate_payload(data, contract, kind)
             if errors:

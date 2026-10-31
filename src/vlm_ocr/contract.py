@@ -17,6 +17,7 @@ _EN_NUMBER_RE = re.compile(r"^-?\d{1,3}(?:,\d{3})+(?:\.\d+)?$")
 _CURRENCY_RE = re.compile(
     r"(EUR|USD|GBP|MXN|ARS|CLP|COP|JPY|KRW|SAR|AED|[$€£¥])", re.IGNORECASE
 )
+MAX_INSTRUCTIONS_CHARS = 4000
 
 
 class ContractError(RuntimeError):
@@ -30,6 +31,34 @@ def load_contract(path: Path | str) -> tuple[dict, str]:
         raise ContractError("el contrato debe ser un objeto JSON")
     kind = "schema" if ("$schema" in data or "$defs" in data) else "example"
     return data, kind
+
+
+def sidecar_path(contract_path: Path | str) -> Path:
+    """Devuelve la ruta del sidecar de instrucciones para un contrato."""
+    return Path(contract_path).with_suffix(".prompt.md")
+
+
+def load_instructions(
+    contract_path: Path | str, explicit: Path | str | None = None
+) -> str | None:
+    """Lee las instrucciones de ajuste (explícitas o sidecar). None si no hay."""
+    if explicit is not None:
+        path = Path(explicit)
+        if not path.exists():
+            raise ContractError(f"no existe el fichero de instrucciones: {path}")
+    else:
+        path = sidecar_path(contract_path)
+        if not path.exists():
+            return None
+
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        return None
+    if len(text) > MAX_INSTRUCTIONS_CHARS:
+        raise ContractError(
+            f"las instrucciones superan {MAX_INSTRUCTIONS_CHARS} caracteres ({len(text)})"
+        )
+    return text
 
 
 def validate_payload(data: Any, contract: dict, kind: str) -> list[str]:
@@ -175,6 +204,7 @@ def infer_contract(
     *,
     n_ctx: int = 4096,
     max_ocr_tokens: int = 1500,
+    instructions: str | None = None,
 ) -> dict:
     """Pide al LLM local un JSON que cumpla el contrato y lo valida."""
     if Llama is None:
@@ -183,7 +213,7 @@ def infer_contract(
         )
     llm = Llama(model_path=str(model_path), n_ctx=n_ctx, verbose=False)
     ocr_text = _truncate_text(text, max_ocr_tokens)
-    messages = _build_messages(ocr_text, contract, kind)
+    messages = _build_messages(ocr_text, contract, kind, instructions)
     base_max_tokens = max(256, len(json.dumps(contract, ensure_ascii=False)) * 2)
 
     raw = _chat(llm, messages, contract, kind, base_max_tokens)
@@ -239,11 +269,16 @@ def _shape_template(value: Any) -> Any:
     return value
 
 
-def _build_messages(ocr_text: str, contract: dict, kind: str) -> list[dict]:
+def _build_messages(
+    ocr_text: str, contract: dict, kind: str, instructions: str | None = None
+) -> list[dict]:
     ocr_text = _normalize_numbers(ocr_text)
     label = "JSON Schema" if kind == "schema" else "shape"
     header = "SCHEMA" if kind == "schema" else "SHAPE"
     shape = contract if kind == "schema" else _shape_template(contract)
+    task_block = (
+        f"TASK-SPECIFIC INSTRUCTIONS:\n{instructions}\n\n" if instructions else ""
+    )
     prompt = (
         "You extract structured data from OCR text.\n"
         "Example:\n"
@@ -268,7 +303,8 @@ def _build_messages(ocr_text: str, contract: dict, kind: str) -> list[dict]:
         "neighboring fields, or unrelated text. "
         "Match each field to the value that follows its label or a direct synonym. "
         "Do not use a number that belongs to a different label (for example, do not use a unit "
-        "price or a quantity as the total).\n\n"
+        "        price or a quantity as the total).\n\n"
+        f"{task_block}"
         f"{header}:\n{json.dumps(shape, ensure_ascii=False, indent=2)}\n\n"
         f"OCR TEXT:\n{ocr_text}\n"
     )

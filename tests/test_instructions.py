@@ -1,0 +1,70 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from vlm_ocr.contract import (
+    MAX_INSTRUCTIONS_CHARS,
+    ContractError,
+    load_instructions,
+    sidecar_path,
+)
+
+
+def _contract(tmp_path: Path, name: str = "factura.json") -> Path:
+    path = tmp_path / name
+    path.write_text("{}", encoding="utf-8")
+    return path
+
+
+def test_sidecar_path_uses_stem_plus_prompt(tmp_path: Path) -> None:
+    assert sidecar_path(tmp_path / "factura.json") == tmp_path / "factura.prompt.md"
+    assert (
+        sidecar_path(tmp_path / "factura.schema.json")
+        == tmp_path / "factura.schema.prompt.md"
+    )
+
+
+def test_missing_sidecar_returns_none(tmp_path: Path) -> None:
+    assert load_instructions(_contract(tmp_path)) is None
+
+
+def test_auto_detected_sidecar_is_loaded(tmp_path: Path) -> None:
+    contract = _contract(tmp_path)
+    (tmp_path / "factura.prompt.md").write_text("  El total va tras TOTAL:  ", encoding="utf-8")
+
+    assert load_instructions(contract) == "El total va tras TOTAL:"
+
+
+def test_explicit_instructions_override_sidecar(tmp_path: Path) -> None:
+    contract = _contract(tmp_path)
+    (tmp_path / "factura.prompt.md").write_text("auto", encoding="utf-8")
+    explicit = tmp_path / "otro.md"
+    explicit.write_text("explicito", encoding="utf-8")
+
+    assert load_instructions(contract, explicit) == "explicito"
+
+
+def test_empty_sidecar_returns_none(tmp_path: Path) -> None:
+    contract = _contract(tmp_path)
+    (tmp_path / "factura.prompt.md").write_text("   \n", encoding="utf-8")
+
+    assert load_instructions(contract) is None
+
+
+def test_explicit_missing_file_raises(tmp_path: Path) -> None:
+    contract = _contract(tmp_path)
+
+    with pytest.raises(ContractError, match="no existe"):
+        load_instructions(contract, tmp_path / "no-existe.md")
+
+
+def test_too_long_sidecar_raises(tmp_path: Path) -> None:
+    contract = _contract(tmp_path)
+    (tmp_path / "factura.prompt.md").write_text(
+        "x" * (MAX_INSTRUCTIONS_CHARS + 1), encoding="utf-8"
+    )
+
+    with pytest.raises(ContractError, match="4000"):
+        load_instructions(contract)

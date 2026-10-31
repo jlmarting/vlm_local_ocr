@@ -160,3 +160,30 @@ def test_label_anchor_keeps_model_value_without_label(monkeypatch, tmp_path: Pat
     )
 
     assert result["total"] == 100.0
+
+
+def test_prompt_includes_task_instructions_after_invariants(monkeypatch, tmp_path: Path) -> None:
+    calls = _fake_llama(monkeypatch, [json.dumps({"cliente": "ACME", "total": 2})])
+
+    infer_contract(
+        "texto",
+        EXAMPLE,
+        "example",
+        tmp_path / "m.gguf",
+        instructions="El campo total va tras la etiqueta TOTAL:",
+    )
+
+    prompt = calls[0]["messages"][0]["content"]
+    assert "TASK-SPECIFIC INSTRUCTIONS:" in prompt
+    assert "El campo total va tras la etiqueta TOTAL:" in prompt
+    assert "Copy values literally" in prompt
+    assert prompt.index("Copy values literally") < prompt.index("TASK-SPECIFIC INSTRUCTIONS:")
+    assert prompt.index("TASK-SPECIFIC INSTRUCTIONS:") < prompt.rindex("SHAPE:")
+
+
+def test_prompt_without_instructions_has_no_task_block(monkeypatch, tmp_path: Path) -> None:
+    calls = _fake_llama(monkeypatch, [json.dumps({"cliente": "ACME", "total": 2})])
+
+    infer_contract("texto", EXAMPLE, "example", tmp_path / "m.gguf")
+
+    assert "TASK-SPECIFIC INSTRUCTIONS:" not in calls[0]["messages"][0]["content"]

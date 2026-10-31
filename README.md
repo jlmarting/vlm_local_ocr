@@ -43,9 +43,33 @@ uv run vlm-ocr factura.pdf --format json \
 uv run vlm-ocr escaneo.jpg --format json --contract schema.json --contract-kind schema \
   --model models/qwen2.5-0.5b-instruct-q4_k_m.gguf --with-layout
 
+# Instrucciones de ajuste junto al contrato (autodetectadas)
+# Si existe factura.prompt.md, se usa automáticamente
+uv run vlm-ocr factura.pdf --format json --contract factura.json \
+  --model models/qwen2.5-0.5b-instruct-q4_k_m.gguf
+
+# O un fichero de instrucciones explícito
+uv run vlm-ocr factura.pdf --format json --contract factura.json \
+  --instructions ajuste.md \
+  --model models/qwen2.5-0.5b-instruct-q4_k_m.gguf
+
 # Escribir a fichero
 uv run vlm-ocr documento.pdf --out salida.md
 ```
+
+### Ajuste por contrato (sidecar)
+
+Cada contrato puede llevar su propio fichero de instrucciones:
+
+```
+factura.json          # contrato
+factura.prompt.md     # ajuste específico (autodetectado)
+```
+
+- Se añade como `TASK-SPECIFIC INSTRUCTIONS` **después** de los invariantes (literales, no calcular, JSON, `null`) y antes de la forma y el OCR. No puede desactivarlos.
+- `--instructions PATH` tiene prioridad sobre la autodetección.
+- Límite: 4 000 caracteres; si se supera, error claro.
+- Solo aplica con `--contract`.
 
 ### Contrato
 

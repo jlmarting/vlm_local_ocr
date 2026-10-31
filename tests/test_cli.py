@@ -206,3 +206,96 @@ def test_missing_file_returns_1(tmp_path: Path, capsys) -> None:
 
     assert code == 1
     assert capsys.readouterr().err
+
+
+def test_instructions_without_contract_returns_2(monkeypatch, tmp_path: Path, capsys) -> None:
+    _mock_pipeline(monkeypatch)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+
+    code = cli.main([str(source), "--format", "json", "--instructions", "x.md"])
+
+    assert code == 2
+    assert "contract" in capsys.readouterr().err
+
+
+def test_missing_explicit_instructions_returns_2(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    _mock_pipeline(monkeypatch)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+    contract = _contract_file(tmp_path, EXAMPLE)
+
+    code = cli.main(
+        [
+            str(source),
+            "--format",
+            "json",
+            "--contract",
+            str(contract),
+            "--model",
+            "m.gguf",
+            "--instructions",
+            str(tmp_path / "no-existe.md"),
+        ]
+    )
+
+    assert code == 2
+    assert "no existe" in capsys.readouterr().err
+
+
+def test_auto_sidecar_is_forwarded(monkeypatch, tmp_path: Path, capsys) -> None:
+    _mock_pipeline(monkeypatch)
+    seen: dict[str, object] = {}
+
+    def fake_infer(text, contract, kind, model_path, **kwargs):
+        seen["instructions"] = kwargs.get("instructions")
+        return {"cliente": "ACME", "total": 2}
+
+    monkeypatch.setattr(cli, "infer_contract", fake_infer)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+    contract = _contract_file(tmp_path, EXAMPLE)
+    (tmp_path / "contrato.prompt.md").write_text("AJUSTE AUTO", encoding="utf-8")
+
+    code = cli.main(
+        [str(source), "--format", "json", "--contract", str(contract), "--model", "m.gguf"]
+    )
+
+    assert code == 0
+    assert seen["instructions"] == "AJUSTE AUTO"
+
+
+def test_explicit_instructions_override_sidecar(monkeypatch, tmp_path: Path) -> None:
+    _mock_pipeline(monkeypatch)
+    seen: dict[str, object] = {}
+
+    def fake_infer(text, contract, kind, model_path, **kwargs):
+        seen["instructions"] = kwargs.get("instructions")
+        return {"cliente": "ACME", "total": 2}
+
+    monkeypatch.setattr(cli, "infer_contract", fake_infer)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+    contract = _contract_file(tmp_path, EXAMPLE)
+    (tmp_path / "contrato.prompt.md").write_text("AUTO", encoding="utf-8")
+    explicit = tmp_path / "otro.md"
+    explicit.write_text("EXPLICITO", encoding="utf-8")
+
+    code = cli.main(
+        [
+            str(source),
+            "--format",
+            "json",
+            "--contract",
+            str(contract),
+            "--model",
+            "m.gguf",
+            "--instructions",
+            str(explicit),
+        ]
+    )
+
+    assert code == 0
+    assert seen["instructions"] == "EXPLICITO"
