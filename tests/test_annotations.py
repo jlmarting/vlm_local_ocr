@@ -110,6 +110,7 @@ def test_prompt_includes_generated_field_map(monkeypatch, tmp_path: Path) -> Non
 
     prompt = calls[0]["messages"][0]["content"]
     assert "MAPA DE CAMPOS" in prompt
+    assert "conforms to the JSON Schema" in prompt
     assert "SALARIO BASE -> nomina.devengos.salario_base (devengado)" in prompt
     assert "ANTIGÜEDAD -> nomina.devengos.antiguedad.unidades (unidades)" in prompt
 

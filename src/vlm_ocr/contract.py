@@ -459,8 +459,8 @@ def _build_messages(
         lines = ["MAPA DE CAMPOS (etiqueta del documento -> campo):"]
         for hint in field_map(contract):
             suffix = f" ({hint.source})" if hint.source else ""
-            for label in hint.labels:
-                lines.append(f"- {label} -> {hint.path}{suffix}")
+            for text_label in hint.labels:
+                lines.append(f"- {text_label} -> {hint.path}{suffix}")
         field_block = "\n".join(lines) + "\n\n"
     task_block = (
         "TASK-SPECIFIC INSTRUCTIONS:\n"
