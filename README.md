@@ -19,7 +19,9 @@ uv sync
 uv run python scripts/fetch_models.py   # descarga y verifica el GGUF (~491 MB)
 ```
 
-El modelo por defecto es `Qwen2.5-0.5B-Instruct Q4_K_M` (Apache-2.0). Los modelos OCR por defecto vienen en el wheel de `rapidocr` y funcionan offline.
+El script descarga `Qwen2.5-0.5B-Instruct Q4_K_M` (Apache-2.0). Los modelos OCR por defecto vienen en el wheel de `rapidocr` y funcionan offline.
+
+> Hoy el CLI requiere `--model` cuando hay contrato; la ruta por defecto y el empaquetado del GGUF están pendientes (ver `docs/MANUAL.md` §10).
 
 ## Uso
 
@@ -108,7 +110,12 @@ En A4 escaneado completo el JSON de contrato puede superar los 10 s: el OCR va e
 ## Tests
 
 ```bash
-uv run pytest -q              # unitarios
-uv run pytest -m integration -v  # golden tests con el modelo real
+uv run pytest -q -m "not integration"   # unitarios
+uv run pytest -m integration -v         # golden con el modelo real
 uv run ruff check .
 ```
+
+## Documentación
+
+- [docs/MANUAL.md](docs/MANUAL.md) — manual de uso, contratos, límites y estado de cierre.
+- [CHANGELOG.md](CHANGELOG.md) — historial de cambios.
