@@ -112,7 +112,7 @@ Los errores de entrada/OCR salen como `1`; contrato, instrucciones, modelo o fla
 
 Un contrato JSON Schema puede anotar cada campo con `x-labels` (etiquetas del documento) y `x-source` (columna: `unidades`, `importe`, `devengado`, `a_deducir`, `base`, `porcentaje`, `cuota`). Con anotaciones, el CLI reconstruye la tabla en filas y **asigna los valores sin LLM**; el modelo solo completa los campos que no casan y el valor determinista gana en el merge. `--no-llm` desactiva el modelo por completo y `--text-format rows` fuerza la representación; el prompt se genera con el mapa de campos.
 
-Prueba real con dos nóminas (30 campos): **24/24 sin LLM, 0 tokens y sin incidencias de literalidad**. Con un escaneo sintético, el mismo camino (OCR → filas → extractor) resuelve la tabla; si el OCR devuelve la fila entera como un bloque, los campos caen al LLM. `scripts/draft_contract.py` genera un borrador del contrato a partir del documento para revisarlo a mano.
+Prueba real con dos nóminas (30 campos): **24/24 sin LLM, 0 tokens y sin incidencias de literalidad**. Con un escaneo sintético (PNG y PDF sin capa de texto, rasterizado a `--dpi`), el mismo camino (OCR → filas → extractor) resuelve la tabla; si el OCR devuelve la fila entera como un bloque, los campos caen al LLM. `scripts/draft_contract.py` genera un borrador del contrato a partir del documento para revisarlo a mano.
 
 ### Métricas (opt-in)
 

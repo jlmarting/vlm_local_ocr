@@ -102,7 +102,7 @@ Un contrato puede anotar cada campo con `x-labels` (etiquetas con las que aparec
 
 Con un contrato anotado el CLI reconstruye la tabla del PDF **en filas** y asigna los valores **sin LLM**; el modelo solo rellena los campos que no casan (`--no-llm` lo desactiva del todo). El prompt se genera del mapa de campos y `--text-format rows|md` elige la representación. `scripts/draft_contract.py` propone un borrador anotado a partir de un documento.
 
-Medido con las dos nóminas de prueba (contrato de 30 campos): **24/24 campos, 0 tokens y sin incidencias de literalidad**; con el texto en columnas y LLM el mejor resultado era 1/24. La ruta OCR está cubierta por un test de integración con un escaneo sintético (`tests/integration/test_ocr_rows.py`): RapidOCR separa las celdas cuando hay separación horizontal suficiente y el extractor las resuelve igual. Detalle en `rondas/20261031d-extraccion-fiable/`.
+Medido con las dos nóminas de prueba (contrato de 30 campos): **24/24 campos, 0 tokens y sin incidencias de literalidad**; con el texto en columnas y LLM el mejor resultado era 1/24. La ruta OCR está cubierta por tests de integración con un escaneo sintético en PNG y en PDF sin capa de texto (`tests/integration/test_ocr_rows.py`): el PDF se rasteriza a `--dpi`, RapidOCR separa las celdas cuando hay separación horizontal suficiente y el extractor las resuelve igual. Detalle en `rondas/20261031d-extraccion-fiable/`.
 
 ```bash
 uv run vlm-ocr nomina.pdf --format json --contract contrato-nomina.json --no-llm --metrics

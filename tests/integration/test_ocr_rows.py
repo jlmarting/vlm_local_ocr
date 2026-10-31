@@ -5,6 +5,9 @@ from pathlib import Path
 
 import pytest
 from PIL import Image, ImageDraw, ImageFont
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
 
 from vlm_ocr import cli
 from vlm_ocr.extract import assign
@@ -153,6 +156,60 @@ def test_cli_processes_the_scan_without_a_model(tmp_path: Path, capsys) -> None:
     payload = json.loads(captured.out)
     assert payload["nomina"]["devengos"]["salario_base"] == 2406.89
     report = json.loads(captured.err)
+    assert report["extract"]["deterministic"] == 6
+    assert report["extract"]["llm"] is False
+    assert report["verify"]["errors"] == []
+
+
+def _scanned_pdf(path: Path, image_path: Path) -> Path:
+    """PDF sin capa de texto: la página solo lleva la imagen, como un escaneo real."""
+    document = canvas.Canvas(str(path), pagesize=A4)
+    width, height = A4
+    document.drawImage(
+        ImageReader(str(image_path)),
+        36,
+        height - 436,
+        width=width - 72,
+        height=400,
+        preserveAspectRatio=True,
+    )
+    document.showPage()
+    document.save()
+    return path
+
+
+def test_pdf_without_text_layer_is_rasterized_and_resolved_without_llm(
+    tmp_path: Path, capsys
+) -> None:
+    image = _scan(tmp_path / "nomina.png")
+    pdf = _scanned_pdf(tmp_path / "escaneo.pdf", image)
+    contract = tmp_path / "contrato.json"
+    contract.write_text(json.dumps(SCHEMA), encoding="utf-8")
+
+    pages = ingest(pdf)
+    assert pages[0].text is None
+    assert pages[0].image_png is not None
+
+    code = cli.main(
+        [
+            str(pdf),
+            "--format",
+            "json",
+            "--contract",
+            str(contract),
+            "--no-llm",
+            "--metrics",
+        ]
+    )
+
+    assert code == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["nomina"]["devengos"]["salario_base"] == 2406.89
+    assert payload["nomina"]["deducciones"]["irpf"]["retencion"] == 443.74
+    report = json.loads(captured.err)
+    assert report["ingest"]["native_pages"] == 0
+    assert report["ingest"]["rasterized_pages"] == 1
     assert report["extract"]["deterministic"] == 6
     assert report["extract"]["llm"] is False
     assert report["verify"]["errors"] == []
