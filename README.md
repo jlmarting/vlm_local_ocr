@@ -1,11 +1,31 @@
 # vlm_local_ocr
 
-CLI local para extraer texto de PDFs e imágenes y mapearlo a un contrato JSON, sin servicios en la nube.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python ≥ 3.11](https://img.shields.io/badge/Python-≥%203.11-blue.svg)](https://www.python.org/)
 
-- **OCR** con RapidOCR (ONNX Runtime), offline.
-- **PDFs con capa de texto** se leen directamente, sin OCR.
-- **Contrato** por ejemplo de payload o JSON Schema, inferido con `llama.cpp`/GGUF.
-- Pensado para CPU (probado en un ThinkPad T480).
+**CLI local para extraer texto de PDFs e imágenes y mapearlo a un contrato JSON, sin servicios en la nube.**
+
+Corre en tu CPU (probado en un ThinkPad T480); sin llaves, sin cuentas, sin telemetría. OCR con RapidOCR/ONNX offline, PDFs con capa de texto leídos directamente y contrato por ejemplo o JSON Schema, inferido si hace falta con `llama.cpp`/GGUF.
+
+## Quickstart (3 comandos)
+
+```bash
+uv sync
+uv run vlm-ocr models fetch llama32-3b --accept-license   # ~1,9 GB, modelo por defecto
+uv run vlm-ocr factura.pdf --format json --contract ejemplos.json
+```
+
+Si solo quieres el texto, el modelo ni se carga: `uv run vlm-ocr documento.pdf`.
+
+## Contenido
+
+- [Requisitos](#requisitos) · [Instalación](#instalación)
+- [Modelos: catálogo, alias y perfiles](#modelos-catálogo-alias-y-perfiles) · [Proveedor remoto (ollama)](#proveedor-remoto-ollama)
+- [Uso](#uso) · [stdin](#entrada-por-stdin) · [Prompt libre](#prompt-libre-sin-contrato) · [Contrato](#contrato) · [Contrato anotado](#contrato-anotado-json-schema)
+- [Tickets](#listas-repetidas-tickets) · [Plantillas homologadas](#plantillas-homologadas-variantes) · [Métricas](#métricas-opt-in)
+- [Rendimiento](#rendimiento-medido-t480-cpu) · [Límites](#límites-conocidos) · [Tests](#tests) · [Documentación](#documentación) · [Licencia](#licencia)
+
+---
 
 ## Requisitos
 
@@ -368,8 +388,15 @@ uv run python scripts/score_bench.py --bench bench.jsonl --truth verdad.json
 
 ## Documentación
 
-- [docs/MANUAL.md](docs/MANUAL.md) — manual de uso, contratos, límites y estado de cierre.
-- [CHANGELOG.md](CHANGELOG.md) — historial de cambios.
+| Documento | Para qué |
+|---|---|
+| [docs/GUIA-USO.md](docs/GUIA-USO.md) | recetas por tarea y tabla de problemas frecuentes |
+| [docs/MANUAL.md](docs/MANUAL.md) | referencia completa: flags, límites, seguridad, rendimiento |
+| [docs/DESARROLLO.md](docs/DESARROLLO.md) | setup dev, mapa de módulos, cómo extender, release |
+| [docs/learn/](docs/learn/README.md) | 7 píldoras didácticas del stack para el desarrollador junior |
+| [docs/DECISIONES.md](docs/DECISIONES.md) | por qué este stack (ADR-lite de las 11 decisiones estructurales) |
+| [CHANGELOG.md](CHANGELOG.md) | historial versionado |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | cómo contribuir (bugs, commits, test-first) |
 
 ## Licencia
 
