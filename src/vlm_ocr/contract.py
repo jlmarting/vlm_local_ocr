@@ -235,6 +235,7 @@ def infer_contract(
     n_ctx: int = 4096,
     max_ocr_tokens: int = 1500,
     instructions: str | None = None,
+    max_output_tokens: int | None = None,
     usage_out: dict[str, Any] | None = None,
 ) -> dict:
     """Pide al LLM local un JSON que cumpla el contrato y lo valida.
@@ -253,14 +254,17 @@ def infer_contract(
 
     ocr_text = _truncate_text(text, max_ocr_tokens)
     prompt = build_prompt(ref, ocr_text, contract, kind, instructions)
-    base_max_tokens = max(256, len(json.dumps(contract, ensure_ascii=False)) * 2)
-
-    raw, usage, finish_reason, budget = _chat_with_budget(
-        runner, prompt, base_max_tokens, n_ctx
+    requested = (
+        max_output_tokens
+        or ref.entry.max_tokens
+        or max(256, len(json.dumps(contract, ensure_ascii=False)) * 2)
     )
+    limit = n_ctx if not ref.is_remote else (ref.entry.context or n_ctx)
+
+    raw, usage, finish_reason, budget = _chat_with_budget(runner, prompt, requested, limit)
     attempts += 1
     seen_usage = _accumulate_usage(totals, usage) or seen_usage
-    _finish_usage(usage_out, attempts, totals, seen_usage, generation_start, finish_reason)
+    _finish_usage(usage_out, attempts, totals, seen_usage, generation_start, finish_reason, budget)
     if finish_reason == "length":
         raise ContractError(_truncated_message(usage, budget))
     data, errors = _parse_and_validate(raw, contract, kind)
@@ -271,11 +275,11 @@ def infer_contract(
 
     repair_prompt = build_repair_prompt(ref, prompt, raw, errors)
     raw_retry, usage, finish_reason, budget = _chat_with_budget(
-        runner, repair_prompt, base_max_tokens, n_ctx
+        runner, repair_prompt, requested, limit
     )
     attempts += 1
     seen_usage = _accumulate_usage(totals, usage) or seen_usage
-    _finish_usage(usage_out, attempts, totals, seen_usage, generation_start, finish_reason)
+    _finish_usage(usage_out, attempts, totals, seen_usage, generation_start, finish_reason, budget)
     if finish_reason == "length":
         raise ContractError(_truncated_message(usage, budget))
     data, errors = _parse_and_validate(raw_retry, contract, kind)
@@ -286,14 +290,14 @@ def infer_contract(
 
 def _token_budget(
     prompt_tokens: int,
-    n_ctx: int,
+    limit: int,
     requested: int,
     *,
     margin: int = CONTEXT_MARGIN_TOKENS,
     minimum: int = MIN_OUTPUT_TOKENS,
 ) -> int | None:
     """Tokens que caben para la respuesta; ``None`` si el prompt no deja hueco viable."""
-    available = n_ctx - prompt_tokens - margin
+    available = limit - prompt_tokens - margin
     if available < minimum:
         return None
     return min(requested, available)
@@ -303,15 +307,15 @@ def _chat_with_budget(
     runner: Runner,
     prompt: BuiltPrompt,
     requested: int,
-    n_ctx: int,
+    limit: int,
 ) -> tuple[str, dict[str, Any] | None, str | None, int]:
     """Llama al modelo con ``max_tokens`` ajustado al contexto disponible."""
     prompt_tokens = runner.estimate_tokens(prompt)
-    budget = _token_budget(prompt_tokens, n_ctx, requested)
+    budget = _token_budget(prompt_tokens, limit, requested)
     if budget is None:
         raise ContractError(
-            f"el prompt ocupa ~{prompt_tokens} tokens y no deja hueco en n_ctx={n_ctx}: "
-            "reduce el contrato o el texto, o sube --n-ctx"
+            f"el prompt ocupa ~{prompt_tokens} tokens y no deja hueco en el contexto "
+            f"({limit}): reduce el contrato o el texto, o sube --max-tokens / --n-ctx"
         )
     content, usage, finish_reason = runner.complete(prompt, budget)
     return content, usage, finish_reason, budget
@@ -321,7 +325,7 @@ def _truncated_message(usage: dict[str, Any] | None, budget: int) -> str:
     written = (usage or {}).get("completion_tokens") or budget
     return (
         f"respuesta truncada por límite de tokens ({written} de {budget}): "
-        "el modelo no cerró el JSON; reduce el contrato o sube --n-ctx"
+        "el modelo no cerró el JSON; reduce el contrato o sube --max-tokens / --n-ctx"
     )
 
 
@@ -345,12 +349,14 @@ def _finish_usage(
     seen_usage: bool,
     generation_start: float,
     finish_reason: str | None = None,
+    budget: int | None = None,
 ) -> None:
-    """Cierra el bloque de uso: intentos, tokens, velocidad y motivo de parada."""
+    """Cierra el bloque de uso: intentos, tokens, velocidad, techo y motivo de parada."""
     if usage_out is None:
         return
     usage_out["attempts"] = attempts
     usage_out["finish_reason"] = finish_reason
+    usage_out["max_tokens"] = budget
     if not seen_usage:
         usage_out["prompt_tokens"] = None
         usage_out["completion_tokens"] = None

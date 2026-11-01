@@ -31,6 +31,7 @@ def empty_report() -> dict[str, Any]:
             "total_tokens": None,
             "tokens_per_second": None,
             "finish_reason": None,
+            "max_tokens": None,
         },
         "output": {"format": None, "size_bytes": None},
         "extract": {

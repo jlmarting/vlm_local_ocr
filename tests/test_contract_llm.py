@@ -379,3 +379,87 @@ def test_nuextract_does_not_retry_on_invalid_json(monkeypatch, tmp_path: Path) -
 
     assert len(calls) == 1
     assert usage["attempts"] == 1
+
+
+def _ref_with(tmp_path: Path, **overrides):
+    from vlm_ocr.catalog import ModelEntry, ModelRef
+
+    fields = {"alias": "a", "name": "A", "kind": "gguf", "license": "MIT"}
+    fields.update(overrides)
+    return ModelRef(ModelEntry(**fields), _model(tmp_path))
+
+
+def test_entry_max_tokens_sets_the_budget(monkeypatch, tmp_path: Path) -> None:
+    calls = _fake_llama(monkeypatch, [json.dumps({"cliente": "ACME", "total": 2})])
+
+    infer_contract("texto", EXAMPLE, "example", _ref_with(tmp_path, max_tokens=2048))
+
+    assert calls[0]["max_tokens"] == 2048
+
+
+def test_max_output_tokens_overrides_entry(monkeypatch, tmp_path: Path) -> None:
+    calls = _fake_llama(monkeypatch, [json.dumps({"cliente": "ACME", "total": 2})])
+
+    infer_contract(
+        "texto",
+        EXAMPLE,
+        "example",
+        _ref_with(tmp_path, max_tokens=2048),
+        max_output_tokens=3000,
+    )
+
+    assert calls[0]["max_tokens"] == 3000
+
+
+def test_usage_reports_the_budget(monkeypatch, tmp_path: Path) -> None:
+    _fake_llama(monkeypatch, [json.dumps({"cliente": "ACME", "total": 2})])
+    usage: dict = {}
+
+    infer_contract(
+        "texto",
+        EXAMPLE,
+        "example",
+        _ref_with(tmp_path, max_tokens=2048),
+        usage_out=usage,
+    )
+
+    assert usage["max_tokens"] == 2048
+
+
+def test_remote_budget_is_capped_by_entry_context(monkeypatch, tmp_path: Path) -> None:
+    from vlm_ocr.catalog import ModelEntry, ModelRef
+
+    seen: dict = {}
+
+    class FakeRunner:
+        load_time_ms = None
+
+        def estimate_tokens(self, prompt) -> int:
+            return 600
+
+        def complete(self, prompt, max_tokens):
+            seen["max_tokens"] = max_tokens
+            return json.dumps({"cliente": "ACME", "total": 2}), None, "stop"
+
+    monkeypatch.setattr("vlm_ocr.contract.runner_for", lambda **kwargs: FakeRunner())
+    entry = ModelEntry(
+        alias="remoto",
+        name="Remoto",
+        kind="ollama",
+        license="MIT",
+        model="m:1b",
+        base_url="https://ollama.com",
+        requires_key=False,
+        context=1000,
+        max_tokens=2048,
+    )
+
+    infer_contract("texto", EXAMPLE, "example", ModelRef(entry))
+
+    assert seen["max_tokens"] == 1000 - 600 - 64
+
+
+def test_metrics_expose_the_budget() -> None:
+    from vlm_ocr.metrics import empty_report
+
+    assert empty_report()["llm"]["max_tokens"] is None
