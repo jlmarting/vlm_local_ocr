@@ -177,3 +177,121 @@ def _read_json(path: Path, label: str) -> Any:
         raise CatalogError(f"{label} JSON inválido en {path} (línea {exc.lineno}): {exc.msg}") from exc
     except OSError as exc:
         raise CatalogError(f"no se pudo leer el {label} {path}: {exc}") from exc
+
+
+@dataclass(frozen=True)
+class ModelRef:
+    """Modelo resuelto: entrada del catálogo y, si es local, su fichero."""
+
+    entry: ModelEntry
+    path: Path | None = None
+
+    @property
+    def label(self) -> str:
+        return self.entry.alias
+
+    @property
+    def is_remote(self) -> bool:
+        return self.entry.kind != "gguf"
+
+
+def search_dirs() -> list[Path]:
+    """Dónde se buscan los GGUF: repo, directorio actual y datos del usuario."""
+    repo_models = Path(__file__).resolve().parents[2] / "models"
+    return [
+        repo_models,
+        Path.cwd() / "models",
+        Path.home() / ".local" / "share" / "vlm-local-ocr" / "models",
+    ]
+
+
+def find_downloaded(entry: ModelEntry) -> Path | None:
+    """Primer fichero del modelo que aparezca en los directorios de búsqueda."""
+    if entry.kind != "gguf" or not entry.file:
+        return None
+    for directory in search_dirs():
+        candidate = Path(directory) / entry.file
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def ad_hoc(path: Path | str) -> ModelRef:
+    """Entrada sintética para una ruta explícita a un GGUF."""
+    target = Path(path)
+    entry = ModelEntry(
+        alias=target.name,
+        name=str(target),
+        kind="gguf",
+        license="desconocida",
+        file=target.name,
+        prompt_style="chat",
+    )
+    return ModelRef(entry, target)
+
+
+def resolve(value: str) -> ModelRef:
+    """Alias del catálogo o ruta a un .gguf; el alias gana siempre."""
+    entries = load_catalog()
+    if value in entries:
+        entry = entries[value]
+        if entry.kind == "gguf":
+            found = find_downloaded(entry)
+            if found is None:
+                raise CatalogError(
+                    f"el modelo {value} no está descargado: vlm-ocr models fetch {value}"
+                )
+            return ModelRef(entry, found)
+        return ModelRef(entry)
+    if value.lower().endswith(".gguf") or Path(value).is_file():
+        return ad_hoc(value)
+    disponibles = ", ".join(sorted(entries))
+    raise CatalogError(
+        f"alias desconocido: {value}. Alias disponibles: {disponibles}. "
+        "También se admite una ruta .gguf"
+    )
+
+
+def by_profile(profile: str) -> ModelRef:
+    """Modelo local con ese perfil; nunca resuelve a un proveedor remoto."""
+    entries = load_catalog()
+    candidates = [entry for entry in entries.values() if entry.kind == "gguf" and entry.profile == profile]
+    if not candidates:
+        available = sorted(
+            {entry.profile for entry in entries.values() if entry.kind == "gguf" and entry.profile}
+        )
+        raise CatalogError(
+            f"perfil desconocido: {profile!r}. Perfiles disponibles: {', '.join(available) or '—'}"
+        )
+    if len(candidates) > 1:
+        aliases = ", ".join(sorted(entry.alias for entry in candidates))
+        raise CatalogError(f"perfil ambiguo {profile!r}: {aliases}")
+    entry = candidates[0]
+    found = find_downloaded(entry)
+    if found is None:
+        raise CatalogError(
+            f"el modelo {entry.alias} no está descargado: vlm-ocr models fetch {entry.alias}"
+        )
+    return ModelRef(entry, found)
+
+
+def default_ref() -> ModelRef | None:
+    """Modelo por defecto, solo si está descargado."""
+    entry = _default_entry()
+    if entry is None:
+        return None
+    found = find_downloaded(entry)
+    return ModelRef(entry, found) if found is not None else None
+
+
+def default_alias() -> str | None:
+    """Alias del modelo por defecto, exista o no en disco."""
+    entry = _default_entry()
+    return entry.alias if entry is not None else None
+
+
+def _default_entry() -> ModelEntry | None:
+    for entry in load_catalog().values():
+        if entry.default:
+            return entry
+    return None

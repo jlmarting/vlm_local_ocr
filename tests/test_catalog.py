@@ -124,3 +124,110 @@ def test_unknown_kind_raises(tmp_path: Path) -> None:
 def test_missing_catalog_raises(tmp_path: Path) -> None:
     with pytest.raises(catalog.CatalogError, match="no existe"):
         catalog.load_catalog(tmp_path / "nada.json")
+
+
+@pytest.fixture
+def install(monkeypatch, tmp_path: Path):
+    def _install(models: dict) -> None:
+        pack = write_catalog(tmp_path / "pack.json", models)
+        monkeypatch.setattr(catalog, "packaged_catalog_path", lambda: pack)
+        monkeypatch.setattr(catalog, "user_catalog_path", lambda: tmp_path / "nada.json")
+
+    return _install
+
+
+@pytest.fixture
+def models_dir(monkeypatch, tmp_path: Path) -> Path:
+    directory = tmp_path / "models"
+    directory.mkdir()
+    monkeypatch.setattr(catalog, "search_dirs", lambda: [directory])
+    return directory
+
+
+def test_resolve_alias_returns_downloaded_path(install, models_dir: Path) -> None:
+    install({"a": gguf()})
+    (models_dir / "m.gguf").write_bytes(b"")
+
+    ref = catalog.resolve("a")
+
+    assert ref.label == "a"
+    assert ref.path == models_dir / "m.gguf"
+    assert ref.is_remote is False
+
+
+def test_resolve_alias_not_downloaded_raises(install, models_dir: Path) -> None:
+    install({"a": gguf()})
+
+    with pytest.raises(catalog.CatalogError, match="models fetch a"):
+        catalog.resolve("a")
+
+
+def test_alias_wins_over_existing_file(install, models_dir, monkeypatch, tmp_path: Path) -> None:
+    install({"m.gguf": gguf(file="otro.gguf")})
+    (models_dir / "otro.gguf").write_bytes(b"")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "m.gguf").write_bytes(b"")
+
+    ref = catalog.resolve("m.gguf")
+
+    assert ref.entry.name == "Modelo de prueba"
+
+
+def test_resolve_gguf_path_is_ad_hoc(install, tmp_path: Path) -> None:
+    install({})
+    path = tmp_path / "x.gguf"
+    path.write_bytes(b"")
+
+    ref = catalog.resolve(str(path))
+
+    assert ref.label == "x.gguf"
+    assert ref.path == path
+    assert ref.entry.prompt_style == "chat"
+
+
+def test_resolve_unknown_lists_aliases(install) -> None:
+    install({"a": gguf()})
+
+    with pytest.raises(catalog.CatalogError) as excinfo:
+        catalog.resolve("nope")
+
+    message = str(excinfo.value)
+    assert "alias desconocido" in message
+    assert "a" in message
+
+
+def test_by_profile_selects_local_model(install, models_dir: Path) -> None:
+    install({"a": gguf(profile="balanced")})
+    (models_dir / "m.gguf").write_bytes(b"")
+
+    assert catalog.by_profile("balanced").label == "a"
+
+
+def test_by_profile_ignores_remote(install) -> None:
+    install({"r": ollama(profile="balanced")})
+
+    with pytest.raises(catalog.CatalogError, match="perfil"):
+        catalog.by_profile("balanced")
+
+
+def test_by_profile_not_downloaded_raises(install, models_dir: Path) -> None:
+    install({"a": gguf(profile="fast")})
+
+    with pytest.raises(catalog.CatalogError, match="models fetch a"):
+        catalog.by_profile("fast")
+
+
+def test_default_ref_only_when_downloaded(install, models_dir: Path) -> None:
+    install({"d": gguf(default=True)})
+
+    assert catalog.default_ref() is None
+
+    (models_dir / "m.gguf").write_bytes(b"")
+
+    assert catalog.default_ref().label == "d"
+
+
+def test_default_alias_ignores_download_state(install) -> None:
+    install({"d": gguf(default=True)})
+
+    assert catalog.default_alias() == "d"
