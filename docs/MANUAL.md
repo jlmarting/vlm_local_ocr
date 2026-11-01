@@ -219,6 +219,8 @@ El modelo recibe instrucciones explícitas de:
 
 Además, para campos numéricos, si el texto contiene la etiqueta del campo (p. ej. `Total:`), prevalece ese número literal sobre lo que diga el modelo.
 
+`parse_number` acepta símbolos de moneda (`$`, `€`, `£`, `¥`) y códigos ISO (`EUR`, `USD`, `MXN`…): `$29.35` y `1.234,56 €` se leen como números. Un valor con etiqueta encontrada pero ilegible pasa a `pending` y se le pide al LLM; un campo sin etiqueta se considera ausente (`null`) y no dispara el modelo.
+
 `verify.literal_errors` comprueba el resultado contra el texto al terminar:
 
 - **Números**: por valor, no por notación (`30`, `30,00` y `30.0` casan).

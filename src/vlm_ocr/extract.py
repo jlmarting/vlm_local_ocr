@@ -35,9 +35,14 @@ class Assignment:
     sources: dict[str, SourceCell] = field(default_factory=dict)
 
 
+_CURRENCY_RE = re.compile(
+    r"[$€£¥]|\b(?:EUR|USD|GBP|MXN|ARS|CLP|COP|JPY|KRW|SAR|AED)\b", re.IGNORECASE
+)
+
+
 def parse_number(raw: str) -> float | None:
-    """Número en formato español (``1.234,56``) o simple; ``None`` si no lo es."""
-    text = raw.strip().replace(" ", "")
+    """Número en formato español (``1.234,56``) o simple; admite moneda."""
+    text = _CURRENCY_RE.sub("", raw).strip().replace(" ", "")
     if not text:
         return None
     if "," in text:
@@ -210,9 +215,11 @@ def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
     sources: dict[str, SourceCell] = {}
     pending: list[tuple[FieldHint, tuple[float, float], int, str]] = []
 
-    def take(hint: FieldHint, cell: LayoutBlock, label: str) -> None:
-        if hint.path in matched or parse_number(cell.text) is None and hint.kind != "string":
-            return
+    def take(hint: FieldHint, cell: LayoutBlock, label: str) -> bool:
+        if hint.path in matched:
+            return True
+        if parse_number(cell.text) is None and hint.kind != "string":
+            return False
         _set(data, hint.path, _coerce(hint, cell, label))
         matched.append(hint.path)
         unmatched.discard(hint.path)
@@ -220,6 +227,7 @@ def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
             label=label,
             source=hint.source if hint.source and columns and hint.source in columns else _column_for(cell, columns),
         )
+        return True
 
     rows = group_rows(_expand_piped([block for block in blocks if block.text.strip()]))
     for index, row in enumerate(rows):
@@ -233,11 +241,14 @@ def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
                 others = [item for item in row if item is not block]
                 cell = _value_cell(hint, others, columns, block.box[2])
                 if cell is not None:
-                    take(hint, cell, block.text)
+                    if not take(hint, cell, block.text):
+                        ambiguous.add(hint.path)
+                        unmatched.discard(hint.path)
                 elif columns is None and hint.source and len(
                     [item for item in others if parse_number(item.text) is not None]
                 ) > 1:
                     ambiguous.add(hint.path)
+                    unmatched.discard(hint.path)
 
         numbers = [block for block in row if parse_number(block.text) is not None]
         remaining = []
@@ -245,10 +256,9 @@ def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
             wide = span[1] - span[0] > 100.0
             window = 20 if wide else 2
             cell = _cell_under(numbers, span) if index - origin <= window else None
-            if cell is not None:
-                take(hint, cell, label)
-            else:
-                remaining.append((hint, span, origin, label))
+            if cell is not None and take(hint, cell, label):
+                continue
+            remaining.append((hint, span, origin, label))
         pending = remaining
 
         for block in row:
