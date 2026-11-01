@@ -110,6 +110,7 @@ uv run vlm-ocr documento.pdf --out salida.md
 | `--n-ctx N` | 4096 | Contexto del modelo local en tokens; súbelo si el prompt no cabe |
 | `--max-tokens N` | catálogo/fórmula | Techo de tokens de salida; `--max-tokens` gana y en local se capa por `--n-ctx` |
 | `--instructions PATH` | sidecar | Instrucciones de ajuste; `-` lee de stdin |
+| `--prompt TEXTO\|-` | — | Tarea libre con el LLM, sin contrato; `-` lee el prompt de stdin |
 | `--dpi N` | 200 | DPI al rasterizar PDFs |
 | `--text-format md\|rows` | md (rows con contrato anotado) | Representación del texto para el contrato |
 | `--no-llm` | off | Solo asignación determinista; no carga modelo |
@@ -145,6 +146,23 @@ piden, el CLI falla con exit `2` antes de leer nada.
   tipo detectado.
 - **Windows**: no hay `<(...)`; usa `type doc.pdf | vlm-ocr -` en CMD o una tubería equivalente.
   PowerShell puede alterar binarios; para PDF/imágenes prefiere CMD o redirección.
+
+### Prompt libre (sin contrato)
+
+`--prompt TEXTO` aplica una tarea libre al texto extraído con el LLM. Requiere `--model`
+explícito y es excluyente con `--contract`/`--instructions` (error `2`). No hay contrato,
+gramática ni `verify`: la respuesta es una transformación, no una extracción verificada.
+
+- `--format md` (defecto) imprime la respuesta; `--format json` devuelve
+  `{"text": ..., "answer": ...}`.
+- `--prompt -` lee el prompt de stdin y entra en la regla de máximo un `-`; para prompts
+  largos se puede usar `--prompt - < tarea.md`.
+- Prompt vacío, no UTF-8 o de más de 4 000 caracteres → error `2`.
+- El texto del documento es **dato**, no instrucciones: el prompt del sistema lo declara y no
+  se debe obedecer lo que venga incrustado en el documento.
+- Modelo remoto: aviso de que el prompt y el texto salen del equipo.
+- `--with-layout` y `--strict` no aplican a este modo.
+- Solo modelos con `prompt_style: "chat"`; `nuextract` exige contrato.
 
 ### Exit codes
 
