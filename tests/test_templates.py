@@ -268,3 +268,93 @@ def test_hint_from_template_reuses_assign() -> None:
 
     assert result.data["cliente"] == "ACME"
     assert result.data["total"] == 9.99
+
+
+ITEM_CONTRACT = {
+    "type": "object",
+    "properties": {
+        "pedido": {
+            "type": ["array", "null"],
+            "items": {
+                "type": "object",
+                "properties": {
+                    "producto": {"type": "string"},
+                    "cantidad": {"type": ["integer", "null"]},
+                    "precio": {"type": ["number", "null"]},
+                    "observaciones": {"type": ["string", "null"]},
+                },
+            },
+        },
+        "total": {"type": ["number", "null"], "x-labels": ["TOTAL"]},
+    },
+}
+
+
+def test_template_roundtrip_preserves_items() -> None:
+    from vlm_ocr.templates import ItemMap, template_from_dict, template_to_dict
+
+    fp = signature(_order(), LABELS)
+    assert fp is not None
+    tpl = Template(
+        contract_hash="c" * 64,
+        fingerprint=fp,
+        map={"total": FieldMap(labels=("TOTAL",), source=None)},
+        items={
+            "pedido": ItemMap(
+                columns={"producto": "text", "precio": "number_right"},
+                stop_labels=("TAX",),
+                start_labels=("CHECK",),
+            )
+        },
+    )
+
+    again = template_from_dict(template_to_dict(tpl))
+
+    assert again.items["pedido"].columns["precio"] == "number_right"
+    assert again.items["pedido"].stop_labels == ("TAX",)
+    assert again.items["pedido"].start_labels == ("CHECK",)
+
+
+def test_old_template_without_items_loads() -> None:
+    from vlm_ocr.templates import template_from_dict
+
+    old = {
+        "contract_hash": "d" * 64,
+        "digest": "e" * 64,
+        "fingerprint": {"rows": [], "columns": []},
+        "map": {},
+    }
+
+    assert template_from_dict(old).items == {}
+
+
+def test_hint_from_template_reinjects_item_annotations() -> None:
+    from vlm_ocr.templates import ItemMap, hint_from_template
+
+    fp = signature(_order(), LABELS)
+    assert fp is not None
+    tpl = Template(
+        contract_hash=contract_hash(ITEM_CONTRACT),
+        fingerprint=fp,
+        map={"total": FieldMap(labels=("TOTAL",), source=None)},
+        items={
+            "pedido": ItemMap(
+                columns={
+                    "producto": "text",
+                    "cantidad": "quantity",
+                    "precio": "number_right",
+                    "observaciones": "observation",
+                },
+                stop_labels=("TAX",),
+                start_labels=("CHECK",),
+            )
+        },
+    )
+
+    hint = hint_from_template(tpl, ITEM_CONTRACT)
+    pedido = hint["properties"]["pedido"]
+
+    assert pedido["x-item-columns"]["precio"] == "number_right"
+    assert pedido["x-stop-labels"] == ["TAX"]
+    assert pedido["x-item-labels"] == ["CHECK"]
+    assert pedido["items"] == ITEM_CONTRACT["properties"]["pedido"]["items"]

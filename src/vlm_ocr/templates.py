@@ -21,7 +21,7 @@ from .extract import detect_columns
 from .layout import group_rows
 from .types import LayoutBlock
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 BANDS = 20
 MIN_SCORE = 0.85
 MIN_MARGIN = 0.05
@@ -57,12 +57,22 @@ class FieldMap:
 
 
 @dataclass(frozen=True)
+class ItemMap:
+    """Cómo se localiza un array repetido: roles por propiedad y stop/inicio."""
+
+    columns: dict[str, str]
+    stop_labels: tuple[str, ...]
+    start_labels: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Template:
     """Una variante de una tipología (el hash del contrato)."""
 
     contract_hash: str
     fingerprint: Fingerprint
     map: dict[str, FieldMap] = field(default_factory=dict)
+    items: dict[str, ItemMap] = field(default_factory=dict)
     absent: tuple[str, ...] = ()
     unlocated: tuple[str, ...] = ()
     version: int = 1
@@ -206,6 +216,14 @@ def template_to_dict(template: Template) -> dict[str, Any]:
             "columns": list(template.fingerprint.columns),
         },
         "map": {path: _field_map_to_dict(item) for path, item in template.map.items()},
+        "items": {
+            path: {
+                "columns": dict(item.columns),
+                "stop_labels": list(item.stop_labels),
+                "start_labels": list(item.start_labels),
+            }
+            for path, item in template.items.items()
+        },
         "absent": list(template.absent),
         "unlocated": list(template.unlocated),
     }
@@ -233,6 +251,19 @@ def template_from_dict(value: dict[str, Any]) -> Template:
         map={
             str(path): _field_map_from_dict(item)
             for path, item in value.get("map", {}).items()
+        },
+        items={
+            str(path): ItemMap(
+                columns={
+                    str(prop): str(role)
+                    for prop, role in item.get("columns", {}).items()
+                },
+                stop_labels=tuple(str(label) for label in item.get("stop_labels", [])),
+                start_labels=tuple(
+                    str(label) for label in item.get("start_labels", [])
+                ),
+            )
+            for path, item in value.get("items", {}).items()
         },
         absent=tuple(str(path) for path in value.get("absent", [])),
         unlocated=tuple(str(path) for path in value.get("unlocated", [])),
@@ -313,6 +344,7 @@ def save_template(
         contract_hash=template.contract_hash,
         fingerprint=fingerprint,
         map=template.map,
+        items=template.items,
         absent=template.absent,
         unlocated=template.unlocated,
         version=version,
@@ -423,6 +455,26 @@ def best_template(
     return best, best_score
 
 
+def _contract_node(contract: dict, path: str) -> dict | None:
+    node: Any = contract
+    for part in path.split("."):
+        properties = node.get("properties") if isinstance(node, dict) else None
+        if not isinstance(properties, dict) or part not in properties:
+            return None
+        node = properties[part]
+    return node if isinstance(node, dict) else None
+
+
+def _hint_node(root: dict, path: str) -> dict | None:
+    node: Any = root
+    for part in path.split("."):
+        properties = node.get("properties") if isinstance(node, dict) else None
+        if not isinstance(properties, dict) or part not in properties:
+            return None
+        node = properties[part]
+    return node if isinstance(node, dict) else None
+
+
 def hint_from_template(template: Template, contract: dict, kind: str = "schema") -> dict:
     """Esquema sintético anotado con el mapa aprendido, para reutilizar ``assign``."""
     paths = leaf_paths_for(contract, kind)
@@ -446,6 +498,19 @@ def hint_from_template(template: Template, contract: dict, kind: str = "schema")
             if learned.join_label is not None:
                 leaf["x-join-label"] = learned.join_label
         node.setdefault("properties", {})[parts[-1]] = leaf
+
+    for path, item in template.items.items():
+        hint_node = _hint_node(root, path)
+        contract_node = _contract_node(contract, path)
+        if hint_node is None or contract_node is None:
+            continue
+        hint_node["x-item-columns"] = dict(item.columns)
+        hint_node["x-stop-labels"] = list(item.stop_labels)
+        if item.start_labels:
+            hint_node["x-item-labels"] = list(item.start_labels)
+        if "items" in contract_node:
+            hint_node["items"] = contract_node["items"]
+
     return root
 
 
