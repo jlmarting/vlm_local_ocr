@@ -84,6 +84,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="registra la variante del documento tras una extracción buena",
     )
     parser.add_argument(
+        "--homologate-partial",
+        action="store_true",
+        help="permite homologar aunque queden campos sin localizar",
+    )
+    parser.add_argument(
+        "--homologate-report",
+        type=Path,
+        help="escribe el mapa aprendido sin guardarlo (inspección)",
+    )
+    parser.add_argument(
         "--templates-dir",
         type=Path,
         help="directorio de variantes (por defecto, el de datos del usuario)",
@@ -186,6 +196,15 @@ def _human_size(size: int | None) -> str:
     return f"{size / (1024 ** 3):.2f} GB" if size else "—"
 
 
+def _homologate_report(path: Path, payload: dict) -> None:
+    try:
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+    except OSError as exc:
+        print(f"aviso: no se pudo escribir el informe de homologación: {exc}", file=sys.stderr)
+
+
 def _models_list(args: argparse.Namespace) -> int:
     entries = catalog.load_catalog()
     rows: list[dict[str, object]] = []
@@ -233,6 +252,102 @@ def _models_list(args: argparse.Namespace) -> int:
     for row in [header, *cells]:
         print("  ".join(value.ljust(width) for value, width in zip(row, widths)).rstrip())
     return 0
+
+
+def _templates_rows(entries: list[templates.Template]) -> list[dict[str, object]]:
+    return [
+        {
+            "contract_hash": entry.contract_hash,
+            "digest": entry.digest,
+            "version": entry.version,
+            "fields_mapped": len(entry.map),
+            "fields_unlocated": len(entry.unlocated),
+            "updated_at": entry.updated_at,
+        }
+        for entry in entries
+    ]
+
+
+def _templates_list(args: argparse.Namespace) -> int:
+    rows = _templates_rows(templates.all_templates(directory=args.templates_dir))
+    if args.json:
+        print(json.dumps(rows, ensure_ascii=False))
+        return 0
+    header = ("CONTRATO", "DIGEST", "VER", "MAPA", "SIN_LOC", "ACTUALIZADO")
+    cells = [
+        (
+            str(row["contract_hash"])[:12],
+            str(row["digest"])[:12],
+            str(row["version"]),
+            str(row["fields_mapped"]),
+            str(row["fields_unlocated"]),
+            str(row["updated_at"]),
+        )
+        for row in rows
+    ]
+    widths = [len(value) for value in header]
+    for row in cells:
+        widths = [max(width, len(value)) for width, value in zip(widths, row)]
+    for row in [header, *cells]:
+        print("  ".join(value.ljust(width) for value, width in zip(row, widths)).rstrip())
+    return 0
+
+
+def _templates_find(digest: str, directory: Path | str | None) -> templates.Template:
+    matches = templates.find_templates(digest, directory=directory)
+    if not matches:
+        raise catalog.CatalogError(f"no hay variante que empiece por «{digest}»")
+    if len(matches) > 1:
+        options = ", ".join(match.digest[:12] for match in matches)
+        raise catalog.CatalogError(f"prefijo ambiguo «{digest}»: {options}")
+    return matches[0]
+
+
+def _templates_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="vlm-ocr templates", description="Variantes homologadas.")
+    commands = parser.add_subparsers(dest="command")
+    listing = commands.add_parser("list", help="lista las variantes registradas")
+    listing.add_argument("--json", action="store_true", help="salida JSON")
+    listing.add_argument("--templates-dir", type=Path, help="directorio de variantes")
+    showing = commands.add_parser("show", help="muestra una variante (por prefijo de digest)")
+    showing.add_argument("digest")
+    showing.add_argument("--templates-dir", type=Path, help="directorio de variantes")
+    dropping = commands.add_parser("drop", help="elimina una variante (por prefijo de digest)")
+    dropping.add_argument("digest")
+    dropping.add_argument("--yes", action="store_true", help="confirma el borrado")
+    dropping.add_argument("--templates-dir", type=Path, help="directorio de variantes")
+    return parser
+
+
+def _templates_main(argv: list[str]) -> int:
+    parser = _templates_parser()
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "list":
+            return _templates_list(args)
+        if args.command == "show":
+            entry = _templates_find(args.digest, args.templates_dir)
+            print(json.dumps(templates.template_to_dict(entry), ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "drop":
+            entry = _templates_find(args.digest, args.templates_dir)
+            if not args.yes:
+                print(
+                    f"error: borrar {entry.digest[:12]} es destructivo; repite con --yes",
+                    file=sys.stderr,
+                )
+                return 2
+            path = templates.drop_template(entry, directory=args.templates_dir)
+            print(f"variante eliminada: {path}")
+            return 0
+    except catalog.CatalogError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    parser.print_help(sys.stderr)
+    return 2
 
 
 def _models_parser() -> argparse.ArgumentParser:
@@ -309,6 +424,8 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "models":
         return _models_main(argv[1:])
+    if argv and argv[0] == "templates":
+        return _templates_main(argv[1:])
     args = _build_parser().parse_args(argv)
 
     if args.max_tokens is not None and args.max_tokens <= 0:
@@ -443,7 +560,8 @@ def main(argv: list[str] | None = None) -> int:
             row_blocks = None
 
             need_rows = use_rows or (
-                templates_enabled and (bool(variants) or args.homologate)
+                templates_enabled
+                and (bool(variants) or args.homologate or args.homologate_report is not None)
             )
             if need_rows:
                 row_blocks = _row_blocks(args.file, pages, blocks, args.lang)
@@ -614,7 +732,7 @@ def main(argv: list[str] | None = None) -> int:
                     "contract", "el contrato inferido no es válido: " + "; ".join(errors), 2
                 )
 
-            if args.homologate:
+            if args.homologate or args.homologate_report is not None:
                 if not templates_enabled or row_blocks is None:
                     print(
                         "aviso: --homologate requiere plantillas habilitadas y filas",
@@ -635,16 +753,28 @@ def main(argv: list[str] | None = None) -> int:
                             "quedarán para el LLM.",
                             file=sys.stderr,
                         )
+                    blockers = sorted(set(unlocated))
                     labels = [
                         label for item in learned.values() for label in item.labels
                     ]
                     fingerprint = templates.signature(row_blocks, labels)
+                    blocked = bool(blockers) and not args.homologate_partial
+                    saved = None
                     if fingerprint is None:
+                        if args.homologate:
+                            print(
+                                "aviso: no se pudo aprender el mapa; no se homologa",
+                                file=sys.stderr,
+                            )
+                    elif blocked:
                         print(
-                            "aviso: no se pudo aprender el mapa; no se homologa",
+                            "aviso: no se homologa: "
+                            f"{len(blockers)} campos sin localizar "
+                            f"({', '.join(blockers)}); usa --homologate-partial "
+                            "para guardar solo los localizados",
                             file=sys.stderr,
                         )
-                    else:
+                    elif args.homologate:
                         saved = templates.save_template(
                             fingerprint,
                             templates.Template(
@@ -657,7 +787,15 @@ def main(argv: list[str] | None = None) -> int:
                             ),
                             directory=args.templates_dir,
                         )
-                        if report is not None:
+                    if report is not None:
+                        report["template"].update(
+                            {
+                                "fields_mapped": len(learned),
+                                "fields_unlocated": len(unlocated),
+                                "blocked": blocked,
+                            }
+                        )
+                        if saved is not None:
                             report["template"].update(
                                 {
                                     "found": True,
@@ -666,10 +804,34 @@ def main(argv: list[str] | None = None) -> int:
                                     "version": saved.version,
                                 }
                             )
+                    if args.homologate_report is not None:
+                        _homologate_report(
+                            args.homologate_report,
+                            {
+                                "contract_hash": template_contract_hash
+                                or templates.contract_hash(contract),
+                                "digest": fingerprint.digest if fingerprint else None,
+                                "labels": labels,
+                                "map": {
+                                    path: {
+                                        "labels": list(item.labels),
+                                        "source": item.source,
+                                        "join_label": item.join_label,
+                                    }
+                                    for path, item in learned.items()
+                                },
+                                "absent": list(absent),
+                                "unlocated": list(unlocated),
+                                "blockers": blockers,
+                                "blocked": blocked,
+                                "saved": saved is not None,
+                            },
+                        )
 
             if (
                 templates_enabled
                 and not args.homologate
+                and args.homologate_report is None
                 and template is None
                 and not literal
                 and sys.stderr.isatty()
@@ -678,6 +840,14 @@ def main(argv: list[str] | None = None) -> int:
                     "aviso: documento no homologado; usa --homologate para "
                     "registrar esta variante",
                     file=sys.stderr,
+                )
+
+            if report is not None and contract is not None:
+                filled, total = verify.field_coverage(data, contract, kind)
+                report["extract"]["fields_total"] = total
+                report["extract"]["fields_filled"] = filled
+                report["extract"]["coverage_contract"] = (
+                    round(filled / total, 2) if total else None
                 )
 
             output = to_json_payload(data, blocks if args.with_layout else None)

@@ -89,3 +89,33 @@ def test_long_strings_are_truncated_in_the_message() -> None:
     errors = literal_errors({"nota": "x" * 200}, "")
 
     assert len(errors[0]["message"]) < 120
+
+
+def test_field_coverage_counts_top_level_contract_keys() -> None:
+    from vlm_ocr.verify import field_coverage
+
+    contract = {"fecha": "", "hora": "", "pedido": [{"producto": ""}], "total": 0.0}
+    data = {"fecha": None, "hora": None, "pedido": [{"producto": "X"}], "total": 29.35}
+
+    assert field_coverage(data, contract, "example") == (2, 4)
+
+
+def test_field_coverage_uses_annotated_paths_for_schemas() -> None:
+    from vlm_ocr.verify import field_coverage
+
+    schema = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+            "nomina": {
+                "type": "object",
+                "properties": {
+                    "a": {"type": ["number", "null"], "x-labels": ["A"]},
+                    "b": {"type": ["number", "null"], "x-labels": ["B"]},
+                },
+            }
+        },
+    }
+    data = {"nomina": {"a": 1.0, "b": None}}
+
+    assert field_coverage(data, schema, "schema") == (1, 2)

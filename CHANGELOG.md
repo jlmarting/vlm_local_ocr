@@ -9,6 +9,8 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- Guardas de homologación: `--homologate` no guarda si quedan campos sin localizar (salvo `--homologate-partial`), `--homologate-report PATH` escribe el mapa aprendido sin persistirlo, y `vlm-ocr templates list|show|drop` gestiona variantes.
+- Métricas honestas: `template.fields_mapped`/`fields_unlocated`/`blocked` y `extract.coverage_contract`/`fields_total`/`fields_filled` (la cobertura de la variante no es la del contrato).
 - Literalidad extendida en `verify`: además de números, comprueba fechas (por valor parseado, no por formato), horas (`14:04` ≡ `1404`) y strings normalizados (acentos, mayúsculas, puntuación, saltos de línea), y recorre listas (`pedido[0].producto`). Aviso por defecto; `--strict` bloquea.
 - Techo de salida y contexto por entrada del catálogo: `max_tokens` y `think` (tri-estado), `--max-tokens N` como override y `num_ctx` calculado en el proveedor remoto (prompt + techo, mínimo 8.192, capado por `context`). `llm.max_tokens` en el informe de métricas.
 - Alias cloud `cloud-deepseek` (`deepseek-v4.1-flash:1017`), que sustituye al placeholder `llama3.2` (id inexistente en `/api/tags`); desactiva el razonamiento con `think: false`.
