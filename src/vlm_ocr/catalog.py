@@ -1,0 +1,179 @@
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass, fields
+from importlib import resources
+from pathlib import Path
+from typing import Any
+
+CATALOG_VERSION = 1
+PROMPT_STYLES = ("chat", "nuextract")
+KINDS = ("gguf", "ollama")
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+class CatalogError(Exception):
+    """Catálogo inválido, alias desconocido o modelo no disponible."""
+
+
+@dataclass(frozen=True)
+class ModelEntry:
+    alias: str
+    name: str
+    kind: str
+    license: str
+    params: str | None = None
+    file: str | None = None
+    url: str | None = None
+    sha256: str | None = None
+    size_bytes: int | None = None
+    context: int | None = None
+    license_url: str | None = None
+    license_file: str | None = None
+    redistributable: bool = False
+    acceptance_required: bool = False
+    gated: bool = False
+    profile: str | None = None
+    prompt_style: str = "chat"
+    prompt_hints: str | None = None
+    model: str | None = None
+    base_url: str | None = None
+    api_key_env: str | None = None
+    requires_key: bool = False
+    default: bool = False
+
+
+def packaged_catalog_path() -> Path:
+    """Ruta del catálogo que viaja dentro del paquete."""
+    return Path(str(resources.files("vlm_ocr").joinpath("catalog.json")))
+
+
+def user_catalog_path() -> Path:
+    """Catálogo de usuario: añade o pisa alias sin tocar el paquete."""
+    return Path.home() / ".config" / "vlm-local-ocr" / "catalog.json"
+
+
+def load_catalog(path: Path | str | None = None) -> dict[str, ModelEntry]:
+    """Carga y valida el catálogo; con overlay de usuario cuando no se da ruta."""
+    explicit = path is not None
+    source = Path(path) if explicit else packaged_catalog_path()
+    raw = _read_json(source, "catálogo")
+    _check_version(raw, source)
+
+    models = raw.get("models")
+    if not isinstance(models, dict):
+        raise CatalogError(f"el catálogo no tiene un objeto 'models': {source}")
+
+    if not explicit:
+        overlay = user_catalog_path()
+        if overlay.is_file():
+            extra = _read_json(overlay, "catálogo de usuario")
+            _check_version(extra, overlay)
+            extra_models = extra.get("models")
+            if not isinstance(extra_models, dict):
+                raise CatalogError(f"el catálogo de usuario no tiene 'models': {overlay}")
+            models = {**models, **extra_models}
+
+    return {str(alias): build_entry(str(alias), data) for alias, data in models.items()}
+
+
+def build_entry(alias: str, data: Any) -> ModelEntry:
+    """Convierte un diccionario del catálogo en ``ModelEntry`` validada."""
+    if not isinstance(data, dict):
+        raise CatalogError(f"{alias}: la entrada debe ser un objeto JSON")
+    for key in ("name", "kind", "license"):
+        if not _text(data.get(key)):
+            raise CatalogError(f"{alias}: falta '{key}'")
+
+    kind = str(data["kind"])
+    if kind not in KINDS:
+        raise CatalogError(f"{alias}: tipo desconocido {kind!r} (usa {' o '.join(KINDS)})")
+
+    prompt_style = str(data.get("prompt_style") or "chat")
+    if prompt_style not in PROMPT_STYLES:
+        raise CatalogError(f"{alias}: prompt_style desconocido {prompt_style!r}")
+
+    if kind == "gguf":
+        for key in ("file", "url", "sha256"):
+            if not _text(data.get(key)):
+                raise CatalogError(f"{alias}: un modelo gguf requiere '{key}'")
+        sha = str(data["sha256"])
+        if not _SHA256_RE.match(sha):
+            raise CatalogError(f"{alias}: sha256 inválido (64 hex): {sha!r}")
+        size = data.get("size_bytes")
+        if not isinstance(size, int) or isinstance(size, bool) or size <= 0:
+            raise CatalogError(f"{alias}: size_bytes debe ser un entero positivo")
+    else:
+        for key in ("model", "base_url"):
+            if not _text(data.get(key)):
+                raise CatalogError(f"{alias}: un modelo ollama requiere '{key}'")
+        if bool(data.get("requires_key")) and not _text(data.get("api_key_env")):
+            raise CatalogError(f"{alias}: requires_key exige 'api_key_env'")
+
+    values: dict[str, Any] = {"alias": alias}
+    for field in fields(ModelEntry):
+        if field.name == "alias" or field.name in values:
+            continue
+        if field.name in data:
+            values[field.name] = data[field.name]
+    values["name"] = str(data["name"])
+    values["kind"] = kind
+    values["license"] = str(data["license"])
+    values["prompt_style"] = prompt_style
+    values["redistributable"] = bool(data.get("redistributable", False))
+    values["acceptance_required"] = bool(data.get("acceptance_required", False))
+    values["gated"] = bool(data.get("gated", False))
+    values["requires_key"] = bool(data.get("requires_key", False))
+    values["default"] = bool(data.get("default", False))
+    return ModelEntry(**_coerce(values))
+
+
+def _coerce(values: dict[str, Any]) -> dict[str, Any]:
+    """Recorta textos opcionales y normaliza tipos declarados del catálogo."""
+    out = dict(values)
+    for key in (
+        "params",
+        "file",
+        "url",
+        "sha256",
+        "context",
+        "license_url",
+        "license_file",
+        "profile",
+        "prompt_hints",
+        "model",
+        "base_url",
+        "api_key_env",
+        "size_bytes",
+    ):
+        if key in out and out[key] is None:
+            out.pop(key)
+    return out
+
+
+def _text(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _check_version(raw: Any, source: Path) -> None:
+    if not isinstance(raw, dict):
+        raise CatalogError(f"el catálogo debe ser un objeto JSON: {source}")
+    version = raw.get("version")
+    if version != CATALOG_VERSION:
+        raise CatalogError(
+            f"versión de catálogo no soportada: {version!r} (se espera {CATALOG_VERSION})"
+        )
+
+
+def _read_json(path: Path, label: str) -> Any:
+    if not path.is_file():
+        raise CatalogError(f"no existe el {label}: {path}")
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        raise CatalogError(f"el {label} no es UTF-8 válido: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise CatalogError(f"{label} JSON inválido en {path} (línea {exc.lineno}): {exc.msg}") from exc
+    except OSError as exc:
+        raise CatalogError(f"no se pudo leer el {label} {path}: {exc}") from exc
