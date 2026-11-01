@@ -6,8 +6,10 @@ import pytest
 
 from vlm_ocr.contract import (
     MAX_INSTRUCTIONS_CHARS,
+    MAX_PROMPT_CHARS,
     ContractError,
     load_instructions,
+    load_prompt,
     sidecar_path,
 )
 
@@ -91,3 +93,29 @@ def test_instructions_from_stdin_respect_the_limit() -> None:
 def test_instructions_from_stdin_without_data_is_error() -> None:
     with pytest.raises(ContractError, match="stdin"):
         load_instructions("c.json", "-")
+
+
+def test_load_prompt_from_file(tmp_path: Path) -> None:
+    path = tmp_path / "tarea.md"
+    path.write_text("  resume el ticket  ", encoding="utf-8")
+
+    assert load_prompt(path) == "resume el ticket"
+
+
+def test_load_prompt_from_stdin_with_bom() -> None:
+    assert load_prompt("-", data=b"\xef\xbb\xbfresume") == "resume"
+
+
+def test_load_prompt_empty_is_error() -> None:
+    with pytest.raises(ContractError, match="vacío"):
+        load_prompt("-", data=b"   ")
+
+
+def test_load_prompt_respects_the_limit() -> None:
+    with pytest.raises(ContractError, match="4000"):
+        load_prompt("-", data=b"x" * (MAX_PROMPT_CHARS + 1))
+
+
+def test_load_prompt_rejects_non_utf8() -> None:
+    with pytest.raises(ContractError, match="UTF-8"):
+        load_prompt("-", data=b"\xff")

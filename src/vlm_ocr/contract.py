@@ -14,6 +14,7 @@ _CURRENCY_RE = re.compile(
     r"(EUR|USD|GBP|MXN|ARS|CLP|COP|JPY|KRW|SAR|AED|[$€£¥])", re.IGNORECASE
 )
 MAX_INSTRUCTIONS_CHARS = 4000
+MAX_PROMPT_CHARS = 4000
 CONTEXT_MARGIN_TOKENS = 64
 MIN_OUTPUT_TOKENS = 256
 
@@ -22,7 +23,12 @@ from .catalog import ModelRef, ad_hoc
 from .errors import ContractError
 from .inputs import is_stdin
 from .llmrun import BuiltPrompt, Runner, runner_for
-from .promptstyles import build_prompt, build_repair_prompt, normalize_numbers
+from .promptstyles import (
+    build_free_prompt,
+    build_prompt,
+    build_repair_prompt,
+    normalize_numbers,
+)
 
 
 def load_contract(
@@ -126,6 +132,43 @@ def _instructions_from_bytes(data: bytes) -> str | None:
     if len(text) > MAX_INSTRUCTIONS_CHARS:
         raise ContractError(
             f"las instrucciones superan {MAX_INSTRUCTIONS_CHARS} caracteres ({len(text)})"
+        )
+    return text
+
+
+def load_prompt(path: Path | str, *, data: bytes | None = None) -> str:
+    """Lee el prompt de una tarea libre desde fichero o stdin."""
+    where = "stdin" if data is not None else str(path)
+    if data is not None:
+        if len(data) > MAX_PROMPT_CHARS * 4:
+            raise ContractError(
+                f"el prompt supera {MAX_PROMPT_CHARS} caracteres (stdin)"
+            )
+        try:
+            text = data.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise ContractError(f"el prompt no es UTF-8 válido: {where}") from exc
+    else:
+        prompt_path = Path(path)
+        if not prompt_path.exists():
+            raise ContractError(f"no existe el prompt: {prompt_path}")
+        if prompt_path.stat().st_size > MAX_PROMPT_CHARS * 4:
+            raise ContractError(
+                f"el prompt supera {MAX_PROMPT_CHARS} caracteres ({prompt_path})"
+            )
+        try:
+            text = prompt_path.read_text(encoding="utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise ContractError(f"el prompt no es UTF-8 válido: {prompt_path}") from exc
+        except OSError as exc:
+            raise ContractError(f"no se pudo leer el prompt {prompt_path}: {exc}") from exc
+
+    text = text.strip()
+    if not text:
+        raise ContractError(f"el prompt está vacío: {where}")
+    if len(text) > MAX_PROMPT_CHARS:
+        raise ContractError(
+            f"el prompt supera {MAX_PROMPT_CHARS} caracteres ({len(text)})"
         )
     return text
 
@@ -334,6 +377,47 @@ def infer_contract(
     if errors:
         raise ContractError("el modelo no produjo un contrato válido: " + "; ".join(errors))
     return _validated_final(data, contract, kind, text)
+
+
+def infer_answer(
+    text: str,
+    task: str,
+    model: ModelRef | Path | str,
+    *,
+    n_ctx: int = 4096,
+    max_ocr_tokens: int = 1500,
+    max_output_tokens: int | None = None,
+    usage_out: dict[str, Any] | None = None,
+) -> str:
+    """Aplica una tarea libre al texto con el LLM, sin contrato ni verificación."""
+    ref = model if isinstance(model, ModelRef) else ad_hoc(model)
+    if ref.entry.prompt_style != "chat":
+        raise ContractError("el estilo del modelo no admite --prompt; usa --contract")
+    runner: Runner = runner_for(n_ctx=n_ctx, ref=ref)
+    if usage_out is not None:
+        usage_out["load_time_ms"] = runner.load_time_ms
+    generation_start = perf_counter()
+    prompt = build_free_prompt(ref, _truncate_text(text, max_ocr_tokens), task)
+    requested = max_output_tokens or ref.entry.max_tokens or 1200
+    limit = n_ctx if not ref.is_remote else (ref.entry.context or n_ctx)
+    raw, usage, finish_reason, budget = _chat_with_budget(
+        runner, prompt, requested, limit
+    )
+    totals: dict[str, int] = {}
+    seen_usage = _accumulate_usage(totals, usage)
+    _finish_usage(
+        usage_out, 1, totals, seen_usage, generation_start, finish_reason, budget
+    )
+    if finish_reason == "length":
+        written = (usage or {}).get("completion_tokens") or budget
+        raise ContractError(
+            f"respuesta truncada por límite de tokens ({written} de {budget}); "
+            "sube --max-tokens o --n-ctx"
+        )
+    answer = raw.strip()
+    if not answer:
+        raise ContractError("el modelo devolvió una respuesta vacía")
+    return answer
 
 
 def _token_budget(
