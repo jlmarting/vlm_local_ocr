@@ -230,6 +230,18 @@ def ad_hoc(path: Path | str) -> ModelRef:
     return ModelRef(entry, target)
 
 
+def ref_for_path(path: Path | str) -> ModelRef:
+    """ModelRef de la entrada cuyo fichero es ``path``; si no casa, entrada ad-hoc."""
+    target = Path(path)
+    for entry in load_catalog().values():
+        if entry.kind != "gguf" or entry.file != target.name:
+            continue
+        found = find_downloaded(entry)
+        if found is not None and found.resolve() == target.resolve():
+            return ModelRef(entry, found)
+    return ad_hoc(target)
+
+
 def resolve(value: str) -> ModelRef:
     """Alias del catálogo o ruta a un .gguf; el alias gana siempre."""
     entries = load_catalog()

@@ -19,26 +19,13 @@ _CURRENCY_RE = re.compile(
     r"(EUR|USD|GBP|MXN|ARS|CLP|COP|JPY|KRW|SAR|AED|[$€£¥])", re.IGNORECASE
 )
 MAX_INSTRUCTIONS_CHARS = 4000
-DEFAULT_MODEL_FILENAME = "qwen2.5-0.5b-instruct-q4_k_m.gguf"
 CONTEXT_MARGIN_TOKENS = 64
 MIN_OUTPUT_TOKENS = 256
 
 
 from .annotations import field_map, has_annotations
+from .catalog import ModelRef, ad_hoc
 from .errors import ContractError
-
-
-def default_model_path() -> Path | None:
-    """Busca el GGUF por defecto en las ubicaciones habituales."""
-    candidates = [
-        Path(__file__).resolve().parents[2] / "models" / DEFAULT_MODEL_FILENAME,
-        Path.cwd() / "models" / DEFAULT_MODEL_FILENAME,
-        Path.home() / ".local/share/vlm-local-ocr/models" / DEFAULT_MODEL_FILENAME,
-    ]
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate
-    return None
 
 
 def load_contract(path: Path | str) -> tuple[dict, str]:
@@ -247,7 +234,7 @@ def infer_contract(
     text: str,
     contract: dict,
     kind: str,
-    model_path: Path | str,
+    model: ModelRef | Path | str,
     *,
     n_ctx: int = 4096,
     max_ocr_tokens: int = 1500,
@@ -263,14 +250,17 @@ def infer_contract(
         raise ContractError(
             "llama-cpp-python no está instalado; instálalo para usar --format json"
         )
-    model = Path(model_path)
-    if not model.is_file():
-        raise ContractError(f"no existe el modelo: {model}")
+    ref = model if isinstance(model, ModelRef) else ad_hoc(model)
+    model_path = ref.path
+    if model_path is None:
+        raise ContractError(f"el modelo {ref.label} no es local")
+    if not model_path.is_file():
+        raise ContractError(f"no existe el modelo: {model_path}")
     load_start = perf_counter()
     try:
-        llm = Llama(model_path=str(model), n_ctx=n_ctx, verbose=False)
+        llm = Llama(model_path=str(model_path), n_ctx=n_ctx, verbose=False)
     except Exception as exc:
-        raise ContractError(f"no se pudo cargar el modelo {model}: {exc}") from exc
+        raise ContractError(f"no se pudo cargar el modelo {model_path}: {exc}") from exc
     if usage_out is not None:
         usage_out["load_time_ms"] = round((perf_counter() - load_start) * 1000, 1)
     generation_start = perf_counter()

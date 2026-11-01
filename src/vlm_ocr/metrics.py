@@ -22,6 +22,7 @@ def empty_report() -> dict[str, Any]:
         "llm": {
             "enabled": False,
             "model": None,
+            "provider": None,
             "load_time_ms": None,
             "time_ms": None,
             "attempts": None,

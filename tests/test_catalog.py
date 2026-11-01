@@ -283,3 +283,21 @@ def test_redistributable_models_have_a_license_text() -> None:
         license_path = root / entry.license_file
         assert license_path.is_file(), license_path
         assert license_path.stat().st_size > 0
+
+
+def test_ref_for_path_matches_catalog_entry(install, models_dir: Path) -> None:
+    install({"a": gguf()})
+    path = models_dir / "m.gguf"
+    path.write_bytes(b"")
+
+    ref = catalog.ref_for_path(path)
+
+    assert ref.label == "a"
+
+
+def test_ref_for_path_falls_back_to_ad_hoc(install, tmp_path: Path) -> None:
+    install({"a": gguf()})
+    path = tmp_path / "otro.gguf"
+    path.write_bytes(b"")
+
+    assert catalog.ref_for_path(path).label == "otro.gguf"
