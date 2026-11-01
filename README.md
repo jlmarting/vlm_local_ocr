@@ -128,6 +128,8 @@ En ese caso se requiere `--model` y la inferencia se hace con una llamada por do
 
 El modelo recibe instrucción explícita de **copiar los valores literales** del texto y **no calcular** (nada de sumas, subtotales, porcentajes, medias ni cifras derivadas). Si un dato no aparece escrito, devuelve `null`; la clave del contrato sigue siendo obligatoria.
 
+Al terminar, `verify` comprueba que cada valor aparezca en el texto: números, fechas (comparadas por valor, no por formato), horas (`14:04` casa con `1404`) y strings (normalizados: acentos, mayúsculas y puntuación), incluidos los elementos de listas. Por defecto **avisa** por stderr; `--strict` lo convierte en error (`2`). Un string reformulado por el modelo (paráfrasis) también avisa: es la contrapartida de comprobar literalidad.
+
 Para campos numéricos, si el texto contiene la etiqueta del campo (por ejemplo `Total:`), prevalece ese valor literal sobre lo que devuelva el modelo. Así se evita confundir el total con un precio unitario o una cantidad.
 
 ## Contrato anotado (JSON Schema)
@@ -251,6 +253,7 @@ El cuello de botella es la representación del texto, no el tamaño del modelo.
 - **Manuscrito, tablas complejas y formularios**: fuera de v1.
 - **Idiomas**: el set por defecto cubre chino/inglés/japonés y ~50 lenguas latinas (incl. español); cirílico, árabe, devanagari, **coreano**, etc. requieren modelos adicionales. Con `--lang ar`/`--lang ko` el CLI falla con un hint claro; sin `--lang` el OCR devuelve texto incorrecto en silencio.
 - **Fidelidad semántica**: el JSON válido está garantizado por gramática; la forma del contrato solo se impone como esquema cuando el contrato es un JSON Schema. Los valores dependen del modelo y, sobre todo, del texto: en tablas (nóminas) el orden del texto nativo puede separar etiquetas y valores, y entonces ningún modelo acierta. Ver «Contrato de 30 campos».
+- **Literalidad ≠ corrección**: `verify` comprueba que el valor esté en el texto, no que sea el campo correcto; y con strings, una paráfrasis legítima puede avisar. `--strict` bloquea lo que no es literal, no lo que es semánticamente falso.
 - **Cobertura baja**: si menos del 75 % de los campos anotados se resuelven, se avisa por stderr (`--strict` lo convierte en error). Protege de OCR de baja calidad que devuelve valores plausibles pero falsos: los números salen del texto y pasan la literalidad, aunque estén en la fila equivocada.
 - **Asignación determinista**: depende de que las etiquetas lleguen aisladas. El enderezado cubre giros de hasta ±30°; la perspectiva (foto inclinada en un eje) no se corrige.
 - **Asignación determinista (etiquetas)**: se toleran erratas del OCR (`ANTIGOEDAD`) si la etiqueta ganadora es claramente la más parecida. Con un escaneo sintético RapidOCR separa las celdas; si la separación entre columnas es pequeña y devuelve la fila entera como un bloque, no hay columnas que cruzar y el campo cae al LLM. Las cabeceras verticales y los totales al pie se resuelven con heurísticas (ventana de filas y unicidad del número), no con una tabla geométrica completa.

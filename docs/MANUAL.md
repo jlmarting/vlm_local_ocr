@@ -217,6 +217,15 @@ El modelo recibe instrucciones explícitas de:
 
 Además, para campos numéricos, si el texto contiene la etiqueta del campo (p. ej. `Total:`), prevalece ese número literal sobre lo que diga el modelo.
 
+`verify.literal_errors` comprueba el resultado contra el texto al terminar:
+
+- **Números**: por valor, no por notación (`30`, `30,00` y `30.0` casan).
+- **Fechas**: por fecha parseada (`2026-02-02` ≡ `02/02/2026`), con ambas orientaciones si día/mes es ambiguo. Una fecha inventada (`02/14/2022` sobre `064 2 1404 2022`) avisa.
+- **Horas**: `14:04` casa con `1404` (el OCR suele perder los dos puntos).
+- **Strings**: subcadena normalizada (acentos, mayúsculas, puntuación y saltos de línea); se comprueban también los elementos de listas (`pedido[0].producto`).
+
+Por defecto solo avisa por stderr; `--strict` convierte cualquier incidencia en error (`2`). La comprobación es de literalidad, no de corrección semántica: un valor puede estar en el texto y ser del campo equivocado, y una paráfrasis legítima puede avisar.
+
 ### 5.4 Ajuste por contrato (sidecar)
 
 ```

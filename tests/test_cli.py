@@ -662,3 +662,37 @@ def test_low_coverage_fails_with_strict(monkeypatch, tmp_path: Path, capsys) -> 
 
     assert code == 2
     assert "cobertura baja" in capsys.readouterr().err
+
+
+def test_strict_fails_on_an_invented_string(monkeypatch, tmp_path: Path, capsys) -> None:
+    _mock_pipeline(monkeypatch, blocks=[LayoutBlock(0, "sin nombres", 1.0, (0.0, 0.0, 1.0, 1.0))])
+    monkeypatch.setattr(cli, "infer_contract", lambda *args, **kwargs: {"cliente": "ACME", "total": 2})
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+
+    code = cli.main(
+        [str(source), "--format", "json", "--contract",
+         str(_contract_file(tmp_path, EXAMPLE)), "--model", _model(tmp_path), "--strict"]
+    )
+
+    assert code == 2
+    assert "no aparecen en el texto" in capsys.readouterr().err
+
+
+def test_without_strict_an_invented_string_only_warns(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    _mock_pipeline(monkeypatch, blocks=[LayoutBlock(0, "sin nombres", 1.0, (0.0, 0.0, 1.0, 1.0))])
+    monkeypatch.setattr(cli, "infer_contract", lambda *args, **kwargs: {"cliente": "ACME", "total": 2})
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+
+    code = cli.main(
+        [str(source), "--format", "json", "--contract",
+         str(_contract_file(tmp_path, EXAMPLE)), "--model", _model(tmp_path)]
+    )
+
+    assert code == 0
+    err = capsys.readouterr().err
+    assert "aviso: cliente:" in err
+    assert "ACME" in err
