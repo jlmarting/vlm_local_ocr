@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import catalog, extract, homologate, metrics, templates, verify
+from . import catalog, extract, homologate, inputs, metrics, templates, verify
 from .annotations import field_map, has_annotations
 from .bench import run_bench
 from .contract import (
@@ -61,6 +61,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--instructions",
         type=Path,
         help="instrucciones de ajuste para el contrato (por defecto <contrato>.prompt.md)",
+    )
+    parser.add_argument(
+        "--input-format",
+        choices=["pdf", "png", "jpg", "jpeg", "tiff", "bmp", "webp"],
+        help="tipo del documento cuando llega por stdin (se detecta solo si se omite)",
     )
     parser.add_argument("--dpi", type=int, default=200, help="DPI al rasterizar PDFs")
     parser.add_argument(
@@ -134,12 +139,22 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _row_blocks(path: Path, pages, blocks, lang: str):
+def _row_blocks(
+    path: Path,
+    pages,
+    blocks,
+    lang: str,
+    *,
+    kind: str | None = None,
+    data: bytes | None = None,
+):
     """Bloques con caja: celdas nativas del PDF + OCR ya calculado de las rasterizadas."""
-    if path.suffix.lower() != ".pdf":
+    document_kind = kind or path.suffix.lower().lstrip(".")
+    if document_kind != "pdf":
         return blocks
     raster = {page.index for page in pages if page.image_png is not None}
-    return native_blocks(path) + [block for block in blocks if block.page in raster]
+    native = native_blocks(path) if data is None else native_blocks(path, data=data)
+    return native + [block for block in blocks if block.page in raster]
 
 
 def _elapsed_ms(start: float) -> float:
@@ -432,6 +447,28 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --max-tokens debe ser un entero positivo", file=sys.stderr)
         return 2
 
+    stdin_uses = [
+        name
+        for name, value in (
+            ("documento", args.file),
+            ("--contract", args.contract),
+            ("--instructions", args.instructions),
+        )
+        if value is not None and inputs.is_stdin(value)
+    ]
+    if len(stdin_uses) > 1:
+        print(
+            "error: solo una entrada puede ser '-' (documento, --contract, --instructions)",
+            file=sys.stderr,
+        )
+        return 2
+    if stdin_uses and inputs.stdin_is_tty():
+        print(
+            "error: stdin es un terminal; usa una tubería o un fichero",
+            file=sys.stderr,
+        )
+        return 2
+
     if args.instructions is not None and args.contract is None:
         print("error: --instructions requiere --contract", file=sys.stderr)
         return 2
@@ -485,9 +522,24 @@ def main(argv: list[str] | None = None) -> int:
         template_contract_hash: str | None = None
         variants: list[templates.Template] = []
         if args.format == "json" and args.contract is not None:
-            contract, detected_kind = load_contract(args.contract)
+            contract_data = (
+                inputs.read_stdin_bytes() if inputs.is_stdin(args.contract) else None
+            )
+            if contract_data is None:
+                contract, detected_kind = load_contract(args.contract)
+            else:
+                contract, detected_kind = load_contract(
+                    args.contract, data=contract_data
+                )
             kind = args.contract_kind or detected_kind
-            instructions = load_instructions(args.contract, args.instructions)
+            instructions_data = (
+                inputs.read_stdin_bytes()
+                if args.instructions is not None and inputs.is_stdin(args.instructions)
+                else None
+            )
+            instructions = load_instructions(
+                args.contract, args.instructions, data=instructions_data
+            )
             annotated = kind == "schema" and has_annotations(contract)
             use_rows = args.text_format == "rows" or (
                 args.text_format is None and annotated
@@ -521,8 +573,38 @@ def main(argv: list[str] | None = None) -> int:
                 report["llm"]["model"] = model_ref.label
                 report["llm"]["provider"] = model_ref.entry.kind
 
+        document_data = None
+        document_kind = None
+        if inputs.is_stdin(args.file):
+            document_data = inputs.read_stdin_bytes()
+            if not document_data:
+                return fail("input", "el documento por stdin está vacío", 1)
+            if args.input_format is not None:
+                document_kind = (
+                    "jpg" if args.input_format == "jpeg" else args.input_format
+                )
+            else:
+                document_kind = inputs.detect_document_kind(document_data)
+                if document_kind is None:
+                    return fail(
+                        "input",
+                        "no se reconoce el tipo del documento por stdin; "
+                        "usa --input-format",
+                        1,
+                    )
+            if report is not None:
+                report["file"]["size_bytes"] = len(document_data)
+                report["file"]["format"] = document_kind
+        elif args.input_format is not None:
+            print("aviso: --input-format se ignora con ficheros", file=sys.stderr)
+
         ingest_start = time.perf_counter()
-        pages = ingest(args.file, dpi=args.dpi)
+        if document_data is None:
+            pages = ingest(args.file, dpi=args.dpi)
+        else:
+            pages = ingest(
+                args.file, dpi=args.dpi, data=document_data, kind=document_kind
+            )
         raster_pages: set[int] = set()
         if report is not None:
             report["ingest"]["time_ms"] = _elapsed_ms(ingest_start)
@@ -564,7 +646,14 @@ def main(argv: list[str] | None = None) -> int:
                 and (bool(variants) or args.homologate or args.homologate_report is not None)
             )
             if need_rows:
-                row_blocks = _row_blocks(args.file, pages, blocks, args.lang)
+                row_blocks = _row_blocks(
+                    args.file,
+                    pages,
+                    blocks,
+                    args.lang,
+                    kind=document_kind,
+                    data=document_data,
+                )
             if use_rows and row_blocks is not None:
                 input_text = rows_text(row_blocks)
 
