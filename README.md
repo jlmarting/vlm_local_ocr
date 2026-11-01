@@ -216,6 +216,30 @@ uv run vlm-ocr nomina.pdf --format json --contract examples/contrato-nomina.json
 
 El ejemplo completo (29 campos de una nómina) está en [`examples/contrato-nomina.json`](examples/contrato-nomina.json).
 
+## Listas repetidas (tickets)
+
+Un ticket no es un objeto de campos únicos: tiene una lista variable de líneas. El contrato
+`examples/contrato-ticket.schema.json` anota el array `pedido` con `x-item-columns` (roles
+`text`, `quantity`, `number_right` y `observation`), `x-stop-labels` para cortar la zona de
+pagos y los campos `producto`, `cantidad`, `precio` y `observaciones`.
+
+```bash
+uv run vlm-ocr ticket.webp --format json \
+  --contract examples/contrato-ticket.schema.json --no-llm
+```
+
+- `1 Hamburger | 3.60` → item con `producto: "Hamburger"`, `cantidad: 1`, `precio: 3.6`.
+- `- Tomato`, `+ Onion`, `Well Done` se asocian al item anterior; varias observaciones se unen
+  con espacio + salto de línea (`"Tomate \n+ Onion"`).
+- `1 Water` (sin precio) → item con `precio: null`.
+- `COUNTER`, `TAX`, `AMOUNT DUE`, `TENDER` y `CHANGE` terminan la lista; nunca se convierten en
+  producto.
+- Si la cobertura de líneas baja del 75 % o una línea viene fusionada en un solo bloque, el
+  array queda `pending` y decide el LLM; nunca se devuelve `[]` en silencio.
+- `verify` comprueba cada precio literal; el total sigue siendo un campo aparte y no se calcula.
+- La plantilla/homologación aprende también el mapa de líneas: una extracción buena (LLM o
+  determinista) se repite después con 0 tokens.
+
 ## Plantillas homologadas (variantes)
 
 Un contrato puede recibir documentos de clientes distintos: cambia el membrete, la disposición de los datos o las observaciones, pero la información converge en el mismo contrato. La **tipología** es el contrato (su hash) y cada disposición distinta es una **variante** registrada bajo esa tipología.

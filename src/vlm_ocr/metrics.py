@@ -53,6 +53,7 @@ def empty_report() -> dict[str, Any]:
             "homologated": False,
             "drift": False,
             "fields_mapped": None,
+            "items_mapped": None,
             "fields_unlocated": None,
             "blocked": False,
         },

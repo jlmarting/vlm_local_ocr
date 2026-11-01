@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from . import catalog, extract, homologate, inputs, metrics, templates, verify
-from .annotations import field_map, has_annotations
+from .annotations import field_map, has_annotations, item_hints
 from .bench import run_bench
 from .contract import (
     ContractError,
@@ -731,7 +731,7 @@ def main(argv: list[str] | None = None) -> int:
                     candidate, candidate_score = found
                     hint = templates.hint_from_template(candidate, contract, kind)
                     candidate_assignment = extract.assign(row_blocks, hint)
-                    mapped = len(candidate.map)
+                    mapped = len(candidate.map) + len(candidate.items)
                     coverage = (
                         len(candidate_assignment.matched) / mapped if mapped else 0.0
                     )
@@ -775,7 +775,7 @@ def main(argv: list[str] | None = None) -> int:
                 input_text = rows_text(row_blocks)
                 if annotated:
                     assignment = extract.assign(row_blocks, contract)
-                    annotated_fields = len(field_map(contract))
+                    annotated_fields = len(field_map(contract)) + len(item_hints(contract))
                     coverage = (
                         len(assignment.matched) / annotated_fields
                         if annotated_fields
@@ -895,6 +895,10 @@ def main(argv: list[str] | None = None) -> int:
                     learned, absent, unlocated = homologate.learn_map(
                         data, row_blocks, contract, kind, assignment
                     )
+                    learned_items, item_unlocated = homologate.learn_items(
+                        data, row_blocks, contract, kind, assignment
+                    )
+                    unlocated = sorted(set(unlocated) | set(item_unlocated))
                     literal_fields = {problem["field"] for problem in literal}
                     for path in literal_fields:
                         learned.pop(path, None)
@@ -910,6 +914,11 @@ def main(argv: list[str] | None = None) -> int:
                     labels = [
                         label for item in learned.values() for label in item.labels
                     ]
+                    labels.extend(
+                        label
+                        for item in learned_items.values()
+                        for label in (*item.start_labels, *item.stop_labels)
+                    )
                     fingerprint = templates.signature(row_blocks, labels)
                     blocked = bool(blockers) and not args.homologate_partial
                     saved = None
@@ -935,6 +944,7 @@ def main(argv: list[str] | None = None) -> int:
                                 or templates.contract_hash(contract),
                                 fingerprint=fingerprint,
                                 map=learned,
+                                items=learned_items,
                                 absent=tuple(absent),
                                 unlocated=tuple(unlocated),
                             ),
@@ -944,6 +954,7 @@ def main(argv: list[str] | None = None) -> int:
                         report["template"].update(
                             {
                                 "fields_mapped": len(learned),
+                                "items_mapped": len(learned_items),
                                 "fields_unlocated": len(unlocated),
                                 "blocked": blocked,
                             }
@@ -972,6 +983,14 @@ def main(argv: list[str] | None = None) -> int:
                                         "join_label": item.join_label,
                                     }
                                     for path, item in learned.items()
+                                },
+                                "items": {
+                                    path: {
+                                        "columns": dict(item.columns),
+                                        "stop_labels": list(item.stop_labels),
+                                        "start_labels": list(item.start_labels),
+                                    }
+                                    for path, item in learned_items.items()
                                 },
                                 "absent": list(absent),
                                 "unlocated": list(unlocated),

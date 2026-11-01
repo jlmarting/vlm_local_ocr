@@ -185,6 +185,35 @@ Un contrato JSON Schema puede anotar cada campo con `x-labels` (etiquetas del do
 
 Prueba real con dos nóminas (30 campos): **24/24 sin LLM, 0 tokens y sin incidencias de literalidad**. Las imágenes se enderezan (giro de hasta ±30°) y se recortan antes del OCR; las etiquetas toleran erratas del OCR si la coincidencia es clara. Si la cobertura baja del 75 % de los campos anotados se avisa por stderr (y `--strict` falla): un escaneo ilegible puede producir valores que aparecen en el texto pero están en la fila equivocada. Con un escaneo sintético (PNG y PDF sin capa de texto, rasterizado a `--dpi`), el mismo camino (OCR → filas → extractor) resuelve la tabla; si el OCR devuelve la fila entera como un bloque, los campos caen al LLM. `scripts/draft_contract.py` genera un borrador del contrato a partir del documento para revisarlo a mano.
 
+#### Listas repetidas (tickets)
+
+El contrato anotado admite arrays de líneas repetidas. En el nodo del array:
+
+- `x-item-columns`: asigna un rol a cada propiedad del item. `text` (producto) y
+  `number_right` (precio) son obligatorios; `quantity` (entero inicial) y `observation`
+  (observaciones) son opcionales.
+- `x-stop-labels`: **obligatorio** (puede ser `[]`). La lista termina en la primera fila cuya
+  etiqueta izquierda empieza por una de estas etiquetas; `COUNTER`, `TAX`, `AMOUNT DUE`,
+  `TENDER` y `CHANGE` cubren el ticket de referencia.
+- `x-item-labels`: opcional; marca la fila tras la que empieza la lista (por ejemplo `CHECK`).
+  Sin él, se empieza en la primera fila con producto y precio.
+
+Reglas de extracción:
+
+- Fila de item: texto a la izquierda + número a la derecha; o cantidad inicial sin precio
+  (`1 Water` → `precio: null`).
+- Observación: texto sin precio ni cantidad (`- Tomato`, `Well Done`); se asocia al item
+  anterior. Varias observaciones se unen con espacio + salto de línea (`"Tomate \n+ Onion"`).
+- Una observación antes del primer item o una celda OCR fusionada abortan la extracción
+  determinista: el array queda `pending` y se pide al LLM.
+- Cobertura mínima del 75 %; si no, `pending` con aviso (nunca `[]` silencioso).
+- `verify` comprueba los precios literales; las etiquetas de stop no pueden aparecer como
+  producto; el total no se calcula.
+
+Ejemplo: `examples/contrato-ticket.schema.json`. Homologación: la plantilla guarda los roles,
+la stoplist y el inicio (`ItemMap`); una extracción buena se repite sin LLM y el digest incluye
+la zona de items. `--homologate-report` muestra el mapa `items` aprendido.
+
 ### Plantillas homologadas (variantes)
 
 El contrato identifica la **tipología**; cada disposición estructural distinta de esa tipología es una **variante**. `--homologate` aprende el mapa de una extracción válida (`campo → etiqueta + columna`) y lo guarda en `$XDG_DATA_HOME/vlm-local-ocr/templates/<hash-contrato>/` (por defecto `~/.local/share/vlm-local-ocr/templates/`; `--templates-dir` lo cambia). La huella solo mira las filas que mapean a campos y las cabeceras, con zonas horizontales relativas: membretes, observaciones y tags no cuentan. **No se guardan valores**; los campos no literales se excluyen y quedan `unlocated`.
