@@ -8,7 +8,9 @@ from typing import Any
 from .annotations import (
     SOURCE_ALIASES,
     FieldHint,
+    ItemHint,
     field_map,
+    item_hints,
     leaf_paths,
     normalize_label,
 )
@@ -33,6 +35,161 @@ class Assignment:
     unmatched: list[str] = field(default_factory=list)
     pending: list[str] = field(default_factory=list)
     sources: dict[str, SourceCell] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ItemExtraction:
+    """Resultado de extraer un array de líneas repetidas."""
+
+    items: list[dict] | None
+    candidates: int
+    parsed: int
+
+
+_QUANTITY_RE = re.compile(r"^(\d+)\s+(.+)$")
+_MERGED_ITEM_RE = re.compile(r"^\d+\s+.+\s+\d+[.,]\d{2}$")
+
+
+def _has_prefix(text: str, labels: tuple[str, ...]) -> bool:
+    normalized = normalize_label(text)
+    for label in labels:
+        wanted = normalize_label(label)
+        if wanted and (normalized == wanted or normalized.startswith(f"{wanted} ")):
+            return True
+    return False
+
+
+def _text_cells(row: list[LayoutBlock]) -> list[LayoutBlock]:
+    return [
+        block
+        for block in row
+        if block.text.strip() and parse_number(block.text) is None
+    ]
+
+
+def _right_number(row: list[LayoutBlock], text_cells: list[LayoutBlock]) -> LayoutBlock | None:
+    numbers = [block for block in row if parse_number(block.text) is not None]
+    if not numbers or not text_cells:
+        return None
+    price = max(numbers, key=lambda block: block.box[0])
+    left_edge = max(block.box[2] for block in text_cells)
+    return price if price.box[0] >= left_edge - 2 else None
+
+
+def _item_values(
+    hint: ItemHint, text: str, price: float | None, quantity: int | None
+) -> dict:
+    values: dict[str, Any] = {}
+    for prop, role in hint.columns.items():
+        if role == "text":
+            values[prop] = text
+        elif role == "quantity":
+            values[prop] = quantity
+        elif role == "number_right":
+            values[prop] = price
+        elif role == "observation":
+            values[prop] = None
+    return values
+
+
+def extract_items(blocks: list[LayoutBlock], hint: ItemHint) -> ItemExtraction:
+    """Extrae un array de líneas repetidas: item + observaciones + stop."""
+    rows = group_rows(_expand_piped([block for block in blocks if block.text.strip()]))
+    quantity_declared = "quantity" in hint.columns.values()
+    start = 0
+
+    def item_like(row: list[LayoutBlock]) -> bool:
+        text_cells = _text_cells(row)
+        if not text_cells:
+            return False
+        if any(_has_prefix(block.text, hint.stop_labels) for block in text_cells):
+            return False
+        if _right_number(row, text_cells) is not None:
+            return True
+        if quantity_declared:
+            text = " ".join(block.text.strip() for block in text_cells)
+            return bool(_QUANTITY_RE.match(text))
+        return False
+
+    if hint.start_labels:
+        found = None
+        for index, row in enumerate(rows):
+            if any(_has_prefix(block.text, hint.start_labels) for block in _text_cells(row)):
+                found = index
+                break
+        if found is None:
+            return ItemExtraction(None, 0, 0)
+        start = found + 1
+    else:
+        found = next((index for index, row in enumerate(rows) if item_like(row)), None)
+        if found is None:
+            return ItemExtraction(None, 0, 0)
+        start = found
+
+    observation_prop = next(
+        (prop for prop, role in hint.columns.items() if role == "observation"), None
+    )
+    items: list[dict] = []
+    candidates = 0
+    parsed = 0
+
+    for row in rows[start:]:
+        text_cells = _text_cells(row)
+        if not text_cells:
+            continue
+        if any(_has_prefix(block.text, hint.stop_labels) for block in text_cells):
+            break
+
+        price_cell = _right_number(row, text_cells)
+        if price_cell is not None:
+            left = [block for block in text_cells if block.box[2] <= price_cell.box[0] + 2]
+            text = " ".join(block.text.strip() for block in left).strip()
+            if not text:
+                continue
+            quantity = None
+            product = text
+            if quantity_declared:
+                match = _QUANTITY_RE.match(text)
+                if match:
+                    quantity = int(match.group(1))
+                    product = match.group(2).strip()
+            candidates += 1
+            if not product:
+                continue
+            items.append(
+                _item_values(hint, product, parse_number(price_cell.text), quantity)
+            )
+            parsed += 1
+            continue
+
+        text = " ".join(block.text.strip() for block in text_cells).strip()
+        if not text:
+            continue
+        if _MERGED_ITEM_RE.match(text):
+            return ItemExtraction(None, candidates, parsed)
+        quantity = None
+        product = text
+        if quantity_declared:
+            match = _QUANTITY_RE.match(text)
+            if match:
+                quantity = int(match.group(1))
+                product = match.group(2).strip()
+        if quantity_declared and quantity is not None:
+            candidates += 1
+            if not product:
+                continue
+            items.append(_item_values(hint, product, None, quantity))
+            parsed += 1
+            continue
+        if observation_prop is None or not items:
+            return ItemExtraction(None, candidates, parsed)
+        previous = items[-1]
+        current = previous.get(observation_prop)
+        previous[observation_prop] = f"{current} \n{text}" if current else text
+
+    if candidates == 0 or parsed / candidates < 0.75:
+        return ItemExtraction(None, candidates, parsed)
+    return ItemExtraction(items, candidates, parsed)
 
 
 _CURRENCY_RE = re.compile(
@@ -272,6 +429,17 @@ def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
                 ) is not None:
                     continue
                 pending.append((hint, span, index, block.text))
+
+    for hint in item_hints(schema):
+        result = extract_items(blocks, hint)
+        if result.items is not None:
+            _set(data, hint.path, result.items)
+            matched.append(hint.path)
+            unmatched.discard(hint.path)
+            sources[hint.path] = SourceCell(label="items")
+        else:
+            ambiguous.add(hint.path)
+            unmatched.discard(hint.path)
 
     return Assignment(
         data=data,
