@@ -22,7 +22,7 @@ FILE ──► [1] Ingesta ──► [2] OCR ──► [3] Contrato (opcional) �
 
 - **Ingesta**: si el PDF tiene capa de texto, se lee directamente; si no, se rasteriza a PNG a `--dpi`.
 - **OCR**: RapidOCR (det + cls + rec) devuelve bloques, cajas y confianza; orden top-down.
-- **Contrato**: se envía al LLM la forma del contrato + instrucciones + texto OCR; se valida el JSON y se coaccionan números.
+- **Contrato**: se envía al LLM (llama.cpp local u ollama) la forma del contrato + instrucciones + texto OCR; se valida el JSON y se coaccionan números. El **catálogo** (`catalog.json`) resuelve alias y perfiles y la **descarga verificada** (`models fetch`) deja los pesos con sha256.
 - **Salida**: Markdown, JSON de texto o JSON de contrato; opcionalmente con `layout`.
 
 ## 3. Instalación
@@ -266,12 +266,18 @@ factura.prompt.md     # instrucciones específicas (autodetectado)
 vlm_local_ocr/
 ├── pyproject.toml
 ├── models/                  # GGUF (gitignored)
-├── scripts/fetch_models.py
+├── licenses/                # textos de licencia de los modelos empaquetados
+├── scripts/                 # fetch_models.py (wrapper), bench_models.py, build_release.sh
 ├── src/vlm_ocr/
 │   ├── types.py
 │   ├── ingest.py
 │   ├── ocr.py
-│   ├── contract.py
+│   ├── catalog.py           # catálogo, resolución alias/perfil, descarga y sha256
+│   ├── catalog.json         # datos de los modelos (package data)
+│   ├── llmrun.py            # runners: llama.cpp local y ollama (API nativa)
+│   ├── promptstyles.py      # prompt chat / nuextract y reparación
+│   ├── bench.py             # banco reutilizable (models bench)
+│   ├── contract.py          # presupuesto, parseo, validación y reparación
 │   ├── output.py
 │   └── cli.py
 └── tests/

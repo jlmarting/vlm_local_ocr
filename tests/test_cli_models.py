@@ -170,10 +170,10 @@ def test_models_list_prints_a_row_per_alias(capsys, install) -> None:
 
     assert cli.main(["models", "list"]) == 0
 
-    out = capsys.readouterr().out
-    assert "ALIAS" in out
-    assert "\na " in out or out.splitlines()[1].split()[0] == "a"
-    assert "b" in out
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].split()[0] == "ALIAS"
+    aliases = {line.split()[0] for line in lines[1:]}
+    assert {"a", "b"} <= aliases
 
 
 def test_models_list_json_has_six_real_entries(capsys) -> None:
@@ -306,3 +306,25 @@ def test_remote_alias_reports_provider_and_warns(
     assert report["llm"]["model"] == "remoto"
     assert report["llm"]["load_time_ms"] is None
     assert "supersecreta" not in json.dumps(report)
+
+
+def test_nuextract_warns_when_instructions_are_ignored(
+    tmp_path: Path, monkeypatch, capsys, install
+) -> None:
+    models = install(
+        {"nuextract": gguf(file="n.gguf", prompt_style="nuextract", profile="extract")}
+    )
+    (models / "n.gguf").write_bytes(b"")
+    _mock_pipeline(monkeypatch)
+    monkeypatch.setattr(cli, "infer_contract", lambda *a, **k: EXAMPLE)
+    sidecar = tmp_path / "ajuste.md"
+    sidecar.write_text("copia literalmente", encoding="utf-8")
+
+    code = cli.main(
+        [str(_contract(tmp_path).parent / "doc.pdf"), "--format", "json",
+         "--contract", str(_contract(tmp_path)), "--model", "nuextract",
+         "--instructions", str(sidecar)]
+    )
+
+    assert code == 0
+    assert "se omiten" in capsys.readouterr().err

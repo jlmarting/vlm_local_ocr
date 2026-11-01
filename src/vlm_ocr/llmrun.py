@@ -97,7 +97,7 @@ class OllamaRunner:
     def __init__(self, entry: ModelEntry, n_ctx: int = 4096) -> None:
         self.entry = entry
         self.n_ctx = n_ctx
-        self.timeout = float(os.environ.get("VLM_OCR_TIMEOUT", "300"))
+        self.timeout = _timeout_seconds()
 
     def estimate_tokens(self, prompt: BuiltPrompt) -> int:
         text = prompt.text_for_tokens
@@ -171,6 +171,14 @@ class OllamaRunner:
         if code == 404:
             return f"modelo no disponible en {self.entry.base_url}: {self.entry.model}"
         return f"error HTTP {code} al llamar a {url}"
+
+
+def _timeout_seconds() -> float:
+    """Timeout HTTP configurable por entorno; si el valor no es un número, 300 s."""
+    try:
+        return float(os.environ.get("VLM_OCR_TIMEOUT", "300"))
+    except ValueError:
+        return 300.0
 
 
 def runner_for(ref: ModelRef, n_ctx: int = 4096) -> Runner:

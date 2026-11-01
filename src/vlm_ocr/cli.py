@@ -290,6 +290,12 @@ def _models_main(argv: list[str]) -> int:
     except catalog.CatalogError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    except ContractError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     parser.print_help(sys.stderr)
     return 2
 
@@ -370,10 +376,14 @@ def main(argv: list[str] | None = None) -> int:
             missing_key = _missing_key(model_ref)
             if missing_key is not None and not args.no_llm:
                 return fail("usage", missing_key, 2)
-            if model_ref is not None and model_ref.is_remote and not args.no_llm:
+            if (
+                model_ref is not None
+                and model_ref.entry.prompt_style != "chat"
+                and not args.no_llm
+                and (instructions or model_ref.entry.prompt_hints)
+            ):
                 print(
-                    "aviso: el texto del documento se enviará a "
-                    f"{model_ref.entry.base_url}",
+                    "aviso: el estilo del modelo no usa instrucciones ni notas; se omiten",
                     file=sys.stderr,
                 )
             if not args.no_llm and not use_rows and not templates_enabled:
@@ -543,6 +553,12 @@ def main(argv: list[str] | None = None) -> int:
                     problem = _model_problem(model_ref)
                     if problem is not None:
                         return fail("usage", problem, 2)
+                    if model_ref.is_remote:
+                        print(
+                            "aviso: el texto del documento se enviará a "
+                            f"{model_ref.entry.base_url}",
+                            file=sys.stderr,
+                        )
                     if report is not None:
                         report["llm"]["enabled"] = True
                     llm_start = time.perf_counter()

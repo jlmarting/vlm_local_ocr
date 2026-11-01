@@ -28,6 +28,9 @@ def main() -> int:
     except catalog.CatalogError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    except OSError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 

@@ -179,7 +179,9 @@ def _read_json(path: Path, label: str) -> Any:
     except UnicodeDecodeError as exc:
         raise CatalogError(f"el {label} no es UTF-8 válido: {path}") from exc
     except json.JSONDecodeError as exc:
-        raise CatalogError(f"{label} JSON inválido en {path} (línea {exc.lineno}): {exc.msg}") from exc
+        raise CatalogError(
+            f"{label} JSON inválido en {path} (línea {exc.lineno}): {exc.msg}"
+        ) from exc
     except OSError as exc:
         raise CatalogError(f"no se pudo leer el {label} {path}: {exc}") from exc
 
@@ -288,10 +290,18 @@ def resolve(value: str) -> ModelRef:
 def by_profile(profile: str) -> ModelRef:
     """Modelo local con ese perfil; nunca resuelve a un proveedor remoto."""
     entries = load_catalog()
-    candidates = [entry for entry in entries.values() if entry.kind == "gguf" and entry.profile == profile]
+    candidates = [
+        entry
+        for entry in entries.values()
+        if entry.kind == "gguf" and entry.profile == profile
+    ]
     if not candidates:
         available = sorted(
-            {entry.profile for entry in entries.values() if entry.kind == "gguf" and entry.profile}
+            {
+                entry.profile
+                for entry in entries.values()
+                if entry.kind == "gguf" and entry.profile
+            }
         )
         raise CatalogError(
             f"perfil desconocido: {profile!r}. Perfiles disponibles: {', '.join(available) or '—'}"
@@ -397,7 +407,9 @@ def fetch(
                     percent = done * 100 // total
                     if percent // 5 != printed // 5:
                         printed = percent
-                        say(f"{percent}% ({done // (1024 * 1024)} MB de {total // (1024 * 1024)} MB)")
+                        megabytes = done // (1024 * 1024)
+                        total_mb = total // (1024 * 1024)
+                        say(f"{percent}% ({megabytes} MB de {total_mb} MB)")
     except urllib.error.HTTPError as exc:
         temporary.unlink(missing_ok=True)
         if exc.code == 401:

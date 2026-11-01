@@ -41,7 +41,8 @@ def test_estimate_tokens_falls_back_to_chars(monkeypatch, tmp_path: Path) -> Non
     monkeypatch.setattr(llmrun, "Llama", FakeLlama)
     runner = LocalRunner(_model(tmp_path))
 
-    assert runner.estimate_tokens(BuiltPrompt(messages=[{"role": "user", "content": "12345678"}])) == 2
+    prompt = BuiltPrompt(messages=[{"role": "user", "content": "12345678"}])
+    assert runner.estimate_tokens(prompt) == 2
 
 
 def test_complete_uses_chat_completion_for_messages(monkeypatch, tmp_path: Path) -> None:
@@ -62,7 +63,10 @@ def test_complete_uses_chat_completion_for_messages(monkeypatch, tmp_path: Path)
     runner = LocalRunner(_model(tmp_path))
 
     content, usage, finish = runner.complete(
-        BuiltPrompt(messages=[{"role": "user", "content": "hola"}], response_format={"type": "json_object"}),
+        BuiltPrompt(
+            messages=[{"role": "user", "content": "hola"}],
+            response_format={"type": "json_object"},
+        ),
         64,
     )
 

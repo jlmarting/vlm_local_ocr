@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from vlm_ocr import catalog
 from vlm_ocr.bench import run_bench
+from vlm_ocr.errors import ContractError
 
 
 def main() -> int:
@@ -35,7 +36,7 @@ def main() -> int:
             max_tokens=args.max_tokens,
             grammar=not args.no_grammar,
         )
-    except catalog.CatalogError as exc:
+    except (catalog.CatalogError, ContractError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

@@ -53,10 +53,11 @@ def run_bench(
         valid = False
 
     completion = (usage or {}).get("completion_tokens") or 0
+    uses_grammar = grammar and ref.entry.prompt_style == "chat"
     return {
         "model": ref.label,
         "doc": Path(doc).name if doc is not None else None,
-        "mode": "grammar" if grammar else "json",
+        "mode": "grammar" if uses_grammar else "json",
         "valid_json": valid,
         "finish_reason": finish,
         "load_ms": runner.load_time_ms,

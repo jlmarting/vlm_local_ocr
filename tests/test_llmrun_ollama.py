@@ -168,3 +168,9 @@ def test_runner_for_dispatches_ollama() -> None:
 
     assert isinstance(runner, OllamaRunner)
     assert runner.load_time_ms is None
+
+
+def test_invalid_timeout_falls_back(monkeypatch) -> None:
+    monkeypatch.setenv("VLM_OCR_TIMEOUT", "no-es-un-numero")
+
+    assert OllamaRunner(entry()).timeout == 300.0
