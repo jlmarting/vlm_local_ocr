@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
+import os
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Protocol
 
-from .catalog import CatalogError, ModelRef
+from .catalog import CatalogError, ModelEntry, ModelRef
 from .errors import ContractError
 
 try:
@@ -83,10 +87,96 @@ class LocalRunner:
         return content, usage if isinstance(usage, dict) else None, choice.get("finish_reason")
 
 
+class OllamaRunner:
+    """Ejecuta el modelo en un servidor ollama (nube o daemon) por su API nativa."""
+
+    load_time_ms: float | None = None
+
+    def __init__(self, entry: ModelEntry, n_ctx: int = 4096) -> None:
+        self.entry = entry
+        self.n_ctx = n_ctx
+        self.timeout = float(os.environ.get("VLM_OCR_TIMEOUT", "300"))
+
+    def estimate_tokens(self, prompt: BuiltPrompt) -> int:
+        text = prompt.text_for_tokens
+        if not text and prompt.messages:
+            text = "\n".join(str(message.get("content", "")) for message in prompt.messages)
+        return max(1, len(text or prompt.raw or "") // 4)
+
+    def complete(
+        self, prompt: BuiltPrompt, max_tokens: int
+    ) -> tuple[str, dict[str, Any] | None, str | None]:
+        if prompt.messages is None:
+            raise CatalogError("prompt_style nuextract solo con modelos locales")
+        key = self._api_key()
+        schema = (prompt.response_format or {}).get("schema")
+        body = {
+            "model": self.entry.model,
+            "messages": prompt.messages,
+            "stream": False,
+            "format": schema if schema is not None else "json",
+            "options": {
+                "temperature": 0,
+                "num_ctx": self.n_ctx,
+                "num_predict": max_tokens,
+            },
+        }
+        headers = {"Content-Type": "application/json"}
+        if key:
+            headers["Authorization"] = f"Bearer {key}"
+        url = f"{str(self.entry.base_url).rstrip('/')}/api/chat"
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            raise CatalogError(self._http_error(exc.code, url)) from exc
+        except TimeoutError as exc:
+            raise CatalogError(f"no se pudo contactar {self.entry.base_url}: timeout") from exc
+        except urllib.error.URLError as exc:
+            raise CatalogError(f"no se pudo contactar {self.entry.base_url}: {exc.reason}") from exc
+
+        message = data.get("message") or {}
+        prompt_tokens = data.get("prompt_eval_count")
+        completion_tokens = data.get("eval_count")
+        usage: dict[str, Any] | None = None
+        if prompt_tokens is not None or completion_tokens is not None:
+            usage = {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": (prompt_tokens or 0) + (completion_tokens or 0),
+            }
+        return message.get("content", ""), usage, data.get("done_reason")
+
+    def _api_key(self) -> str | None:
+        if not self.entry.requires_key:
+            return None
+        env = self.entry.api_key_env or "OLLAMA_API_KEY"
+        key = os.environ.get(env)
+        if not key:
+            raise CatalogError(f"falta la API key del proveedor remoto: export {env}=...")
+        return key
+
+    def _http_error(self, code: int, url: str) -> str:
+        if code == 401:
+            env = self.entry.api_key_env or "OLLAMA_API_KEY"
+            return f"API key ausente o inválida ({env}): {url}"
+        if code == 404:
+            return f"modelo no disponible en {self.entry.base_url}: {self.entry.model}"
+        return f"error HTTP {code} al llamar a {url}"
+
+
 def runner_for(ref: ModelRef, n_ctx: int = 4096) -> Runner:
     """Runner adecuado al tipo de modelo resuelto."""
     if ref.entry.kind == "gguf":
         if ref.path is None:
             raise CatalogError(f"el modelo {ref.label} no está descargado")
         return LocalRunner(ref.path, n_ctx)
-    raise CatalogError(f"proveedor no soportado todavía: {ref.entry.kind}")
+    if ref.entry.kind == "ollama":
+        return OllamaRunner(ref.entry, n_ctx)
+    raise CatalogError(f"proveedor desconocido: {ref.entry.kind}")
