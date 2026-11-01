@@ -99,6 +99,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=4096,
         help="contexto del modelo en tokens (por defecto 4096); súbelo si el prompt no cabe",
     )
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        help="techo de tokens de salida; por defecto, el del catálogo o la fórmula",
+    )
     parser.add_argument("--lang", default="default", help="idioma del OCR")
     parser.add_argument(
         "--with-layout",
@@ -305,6 +310,10 @@ def main(argv: list[str] | None = None) -> int:
     if argv and argv[0] == "models":
         return _models_main(argv[1:])
     args = _build_parser().parse_args(argv)
+
+    if args.max_tokens is not None and args.max_tokens <= 0:
+        print("error: --max-tokens debe ser un entero positivo", file=sys.stderr)
+        return 2
 
     if args.instructions is not None and args.contract is None:
         print("error: --instructions requiere --contract", file=sys.stderr)
@@ -572,6 +581,7 @@ def main(argv: list[str] | None = None) -> int:
                         model_ref,
                         n_ctx=args.n_ctx,
                         instructions=instructions,
+                        max_output_tokens=args.max_tokens,
                         usage_out=usage_out,
                     )
                     if report is not None:

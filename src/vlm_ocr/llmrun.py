@@ -112,6 +112,9 @@ class OllamaRunner:
             raise CatalogError("prompt_style nuextract solo con modelos locales")
         key = self._api_key()
         schema = (prompt.response_format or {}).get("schema")
+        prompt_tokens = self.estimate_tokens(prompt)
+        context = int(self.entry.context or 8192)
+        num_ctx = min(context, max(8192, prompt_tokens + max_tokens + 256))
         body = {
             "model": self.entry.model,
             "messages": prompt.messages,
@@ -119,10 +122,12 @@ class OllamaRunner:
             "format": schema if schema is not None else "json",
             "options": {
                 "temperature": 0,
-                "num_ctx": self.n_ctx,
+                "num_ctx": num_ctx,
                 "num_predict": max_tokens,
             },
         }
+        if self.entry.think is not None:
+            body["think"] = self.entry.think
         headers = {"Content-Type": "application/json"}
         if key:
             headers["Authorization"] = f"Bearer {key}"

@@ -47,12 +47,16 @@ contexto y perfil. El CLI busca cada GGUF en `models/` del repo, `./models/` o
 | `qwen05b` | Qwen2.5-0.5B-Instruct | Apache-2.0 | `fast` | sí |
 | `nuextract-tiny` | NuExtract-1.5-tiny | MIT | `extract` | sí |
 | `qwen25-3b` | Qwen2.5-3B-Instruct | qwen-research | — | no |
-| `llama32-3b-cloud` | Llama 3.2 3B (ollama) | Llama 3.2 Community | — | no (API) |
+| `cloud-deepseek` | DeepSeek V4.1 Flash (ollama) | ollama-cloud | — | no (API) |
 
 - `models fetch ALIAS…` descarga con sha256 y deja `<fichero>.part` solo durante la descarga.
   `--accept-license` es obligatorio cuando la licencia lo exige; los repos *gated* requieren
   `HF_TOKEN` en el entorno.
 - Alias propios: `~/.config/vlm-local-ocr/catalog.json` se fusiona sobre el del paquete.
+- Cloud (`kind: "ollama"`): la entrada declara `context`, `max_tokens` y `think`. El techo de
+  salida no es un gasto; `think: false` desactiva el razonamiento donde el proveedor lo respeta
+  (`deepseek-v4.1-flash` sí; `gpt-oss:120b` no). El `num_ctx` se calcula solo (prompt + techo,
+  mínimo 8.192, capado por `context`). `--max-tokens N` sobrescribe el techo.
 - `models list [--json] [--verify]`: el sha256 solo se comprueba con `--verify`.
 - Para distribución, `scripts/build_release.sh` incluye únicamente los modelos redistribuibles y
   sus textos de `licenses/`. Qwen2.5-3B no se empaqueta.
@@ -102,7 +106,8 @@ uv run vlm-ocr documento.pdf --out salida.md
 | `--contract-kind example\|schema` | autodetecta | Fuerza la interpretación |
 | `--model PATH\|ALIAS` | modelo por defecto | GGUF (ruta) o alias del catálogo para inferir el contrato |
 | `--profile fast\|balanced\|quality\|extract` | — | Elige un modelo local del catálogo; `--model` gana |
-| `--n-ctx N` | 4096 | Contexto del modelo en tokens; súbelo si el prompt no cabe |
+| `--n-ctx N` | 4096 | Contexto del modelo local en tokens; súbelo si el prompt no cabe |
+| `--max-tokens N` | catálogo/fórmula | Techo de tokens de salida; `--max-tokens` gana y en local se capa por `--n-ctx` |
 | `--instructions PATH` | sidecar | Instrucciones de ajuste |
 | `--dpi N` | 200 | DPI al rasterizar PDFs |
 | `--text-format md\|rows` | md (rows con contrato anotado) | Representación del texto para el contrato |

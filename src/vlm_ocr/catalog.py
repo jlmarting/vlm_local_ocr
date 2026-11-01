@@ -44,6 +44,8 @@ class ModelEntry:
     prompt_hints: str | None = None
     model: str | None = None
     base_url: str | None = None
+    max_tokens: int | None = None
+    think: bool | None = None
     api_key_env: str | None = None
     requires_key: bool = False
     default: bool = False
@@ -116,6 +118,15 @@ def build_entry(alias: str, data: Any) -> ModelEntry:
         if bool(data.get("requires_key")) and not _text(data.get("api_key_env")):
             raise CatalogError(f"{alias}: requires_key exige 'api_key_env'")
 
+    max_tokens = data.get("max_tokens")
+    if max_tokens is not None and (
+        not isinstance(max_tokens, int) or isinstance(max_tokens, bool) or max_tokens <= 0
+    ):
+        raise CatalogError(f"{alias}: max_tokens debe ser un entero positivo")
+    think = data.get("think")
+    if think is not None and not isinstance(think, bool):
+        raise CatalogError(f"{alias}: think debe ser booleano")
+
     values: dict[str, Any] = {"alias": alias}
     for field in fields(ModelEntry):
         if field.name == "alias" or field.name in values:
@@ -151,6 +162,8 @@ def _coerce(values: dict[str, Any]) -> dict[str, Any]:
         "base_url",
         "api_key_env",
         "size_bytes",
+        "max_tokens",
+        "think",
     ):
         if key in out and out[key] is None:
             out.pop(key)

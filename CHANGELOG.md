@@ -9,6 +9,8 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- Techo de salida y contexto por entrada del catálogo: `max_tokens` y `think` (tri-estado), `--max-tokens N` como override y `num_ctx` calculado en el proveedor remoto (prompt + techo, mínimo 8.192, capado por `context`). `llm.max_tokens` en el informe de métricas.
+- Alias cloud `cloud-deepseek` (`deepseek-v4.1-flash:1017`), que sustituye al placeholder `llama3.2` (id inexistente en `/api/tags`); desactiva el razonamiento con `think: false`.
 - Catálogo de modelos (`src/vlm_ocr/catalog.json`, dentro del wheel): alias, tamaño, sha256, licencia, contexto y perfil; overlay de usuario en `~/.config/vlm-local-ocr/catalog.json`.
 - `--model` acepta alias del catálogo o ruta `.gguf`; `--profile fast|balanced|quality|extract` elige un modelo local. Precedencia `--model` > `--profile` > defecto (`llama32-3b`), sin caída silenciosa a otro modelo.
 - Subcomandos `models list [--json] [--verify]` y `models fetch ALIAS… [--accept-license]`: descarga con `.part`, verificación sha256 y consentimiento de licencia; repos *gated* con `HF_TOKEN`.
