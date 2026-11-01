@@ -12,9 +12,11 @@ from .annotations import field_map, has_annotations
 from .bench import run_bench
 from .contract import (
     ContractError,
+    infer_answer,
     infer_contract,
     load_contract,
     load_instructions,
+    load_prompt,
     subschema,
     validate_payload,
 )
@@ -22,7 +24,7 @@ from .errors import InputError
 from .ingest import ingest
 from .layout import native_blocks, rows_text
 from .ocr import ocr_pages
-from .output import to_json_payload, to_markdown, to_text_json
+from .output import to_answer_json, to_json_payload, to_markdown, to_text_json
 
 TEMPLATE_MIN_COVERAGE = 0.75
 
@@ -61,6 +63,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--instructions",
         type=Path,
         help="instrucciones de ajuste para el contrato (por defecto <contrato>.prompt.md)",
+    )
+    parser.add_argument(
+        "--prompt",
+        help="tarea libre para el LLM sin contrato (texto inline o '-' para stdin)",
     )
     parser.add_argument(
         "--input-format",
@@ -453,6 +459,7 @@ def main(argv: list[str] | None = None) -> int:
             ("documento", args.file),
             ("--contract", args.contract),
             ("--instructions", args.instructions),
+            ("--prompt", args.prompt),
         )
         if value is not None and inputs.is_stdin(value)
     ]
@@ -469,11 +476,28 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    if args.prompt is not None and (
+        args.contract is not None or args.instructions is not None
+    ):
+        print(
+            "error: --prompt no se combina con --contract ni --instructions",
+            file=sys.stderr,
+        )
+        return 2
+    if args.prompt is not None and args.model is None:
+        print("error: --prompt requiere --model", file=sys.stderr)
+        return 2
+    if args.prompt is not None and args.no_llm:
+        print("error: --prompt requiere el LLM; quita --no-llm", file=sys.stderr)
+        return 2
+
     if args.instructions is not None and args.contract is None:
         print("error: --instructions requiere --contract", file=sys.stderr)
         return 2
     if args.format == "md" and (
-        args.contract or args.instructions or args.model or args.profile
+        args.contract
+        or args.instructions
+        or (args.prompt is None and (args.model or args.profile))
     ):
         print(
             "error: --contract, --instructions, --model y --profile requieren --format json",
@@ -521,6 +545,27 @@ def main(argv: list[str] | None = None) -> int:
         templates_enabled = False
         template_contract_hash: str | None = None
         variants: list[templates.Template] = []
+        prompt_text = None
+        prompt_model_ref: catalog.ModelRef | None = None
+        if args.prompt is not None:
+            prompt_data = (
+                inputs.read_stdin_bytes() if inputs.is_stdin(args.prompt) else None
+            )
+            prompt_text = load_prompt(args.prompt, data=prompt_data)
+            prompt_model_ref = _resolve_model(args)
+            problem = _model_problem(prompt_model_ref)
+            if problem is not None:
+                return fail("usage", problem, 2)
+            if prompt_model_ref is not None and prompt_model_ref.is_remote:
+                print(
+                    "aviso: el prompt y el texto del documento se enviarán a "
+                    f"{prompt_model_ref.entry.base_url}",
+                    file=sys.stderr,
+                )
+            usage_out = {} if report is not None else None
+            if report is not None and prompt_model_ref is not None:
+                report["llm"]["model"] = prompt_model_ref.label
+                report["llm"]["provider"] = prompt_model_ref.entry.kind
         if args.format == "json" and args.contract is not None:
             contract_data = (
                 inputs.read_stdin_bytes() if inputs.is_stdin(args.contract) else None
@@ -624,7 +669,27 @@ def main(argv: list[str] | None = None) -> int:
             report["ocr"]["blocks"] = len(blocks)
             report["ocr"]["mean_confidence"] = metrics.mean_confidence(blocks, raster_pages)
 
-        if args.format == "md":
+        if args.prompt is not None:
+            document_text = to_markdown(blocks)
+            if report is not None:
+                report["llm"]["enabled"] = True
+            llm_start = time.perf_counter()
+            answer = infer_answer(
+                document_text,
+                prompt_text,
+                prompt_model_ref,
+                n_ctx=args.n_ctx,
+                max_output_tokens=args.max_tokens,
+                usage_out=usage_out,
+            )
+            if report is not None:
+                report["llm"].update(usage_out or {})
+            output = (
+                to_answer_json(document_text, answer)
+                if args.format == "json"
+                else answer
+            )
+        elif args.format == "md":
             output = to_markdown(blocks)
         elif contract is None:
             output = to_text_json(

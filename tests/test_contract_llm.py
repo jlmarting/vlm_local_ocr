@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from vlm_ocr.contract import ContractError, infer_contract
+from vlm_ocr.catalog import resolve
+from vlm_ocr.contract import ContractError, infer_answer, infer_contract
 
 
 def _model(tmp_path: Path) -> Path:
@@ -463,3 +464,40 @@ def test_metrics_expose_the_budget() -> None:
     from vlm_ocr.metrics import empty_report
 
     assert empty_report()["llm"]["max_tokens"] is None
+
+
+def test_infer_answer_returns_free_text(monkeypatch, tmp_path: Path) -> None:
+    calls = _fake_llama(monkeypatch, ["RESPUESTA"])
+
+    answer = infer_answer("texto del ticket", "resume", _model(tmp_path))
+
+    assert answer == "RESPUESTA"
+    assert "resume" in calls[0]["messages"][1]["content"]
+
+
+def test_infer_answer_truncates_long_text(monkeypatch, tmp_path: Path) -> None:
+    calls = _fake_llama(monkeypatch, ["ok"])
+    text = "relleno " * 2000 + "FINAL-UNICO"
+
+    infer_answer(text, "resume", _model(tmp_path), max_ocr_tokens=20)
+
+    assert "FINAL-UNICO" not in calls[0]["messages"][1]["content"]
+
+
+def test_infer_answer_length_is_error(monkeypatch, tmp_path: Path) -> None:
+    _fake_llama(monkeypatch, ["corta"], finish_reasons=["length"])
+
+    with pytest.raises(ContractError, match="truncada"):
+        infer_answer("texto", "resume", _model(tmp_path))
+
+
+def test_infer_answer_empty_is_error(monkeypatch, tmp_path: Path) -> None:
+    _fake_llama(monkeypatch, ["   "])
+
+    with pytest.raises(ContractError, match="vacía"):
+        infer_answer("texto", "resume", _model(tmp_path))
+
+
+def test_infer_answer_rejects_nuextract(tmp_path: Path) -> None:
+    with pytest.raises(ContractError, match="--prompt"):
+        infer_answer("texto", "resume", resolve("nuextract-tiny"))

@@ -3,8 +3,10 @@ from __future__ import annotations
 import pytest
 
 from vlm_ocr.catalog import ModelEntry, ModelRef
+from vlm_ocr.errors import ContractError
 from vlm_ocr.promptstyles import (
     build_chat_messages,
+    build_free_prompt,
     build_prompt,
     build_repair_prompt,
     schema_from,
@@ -142,3 +144,19 @@ def test_nuextract_repair_is_rejected() -> None:
 
     with pytest.raises(NotImplementedError):
         build_repair_prompt(ref(prompt_style="nuextract"), prompt, "{}", ["x"])
+
+
+def test_free_prompt_declares_data_not_instructions() -> None:
+    built = build_free_prompt(ref(), "TOTAL 29.35", "resume el ticket")
+
+    assert built.response_format is None
+    system, user = built.messages
+    assert "data" in system["content"].lower()
+    assert "not instructions" in system["content"].lower()
+    assert "resume el ticket" in user["content"]
+    assert "TOTAL 29.35" in user["content"]
+
+
+def test_free_prompt_rejects_nuextract() -> None:
+    with pytest.raises(ContractError):
+        build_free_prompt(ref(prompt_style="nuextract"), "x", "y")

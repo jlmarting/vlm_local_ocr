@@ -142,6 +142,29 @@ uv run vlm-ocr nota.txt
   `type doc.pdf | vlm-ocr -`; PowerShell puede alterar binarios, así que para PDF/imágenes
   prefiere CMD o redirección.
 
+### Prompt libre (sin contrato)
+
+`--prompt TEXTO` aplica una tarea libre al texto del documento con el LLM, sin contrato ni
+verificación literal. Requiere `--model` explícito y es excluyente con `--contract`.
+
+```bash
+# Transformar texto ya extraído
+printf 'cafe 1,20€ coockie 2,2€ total 3,40€' | uv run vlm-ocr - \
+  --input-format txt --prompt "extrae productos y total" --model qwen05b
+
+# Resumen de un PDF, con sobre JSON (texto + respuesta)
+uv run vlm-ocr factura.pdf --prompt "resume en 3 líneas" --model qwen05b --format json
+
+# Prompt largo desde fichero
+uv run vlm-ocr factura.pdf --prompt - --model qwen05b < tarea.md
+```
+
+- `--format md` (defecto) imprime la respuesta; `--format json` devuelve
+  `{"text": ..., "answer": ...}`.
+- No hay forma ni `verify`: si necesitas JSON fiable, usa `--contract`.
+- El texto del documento se trata como **dato**, no como instrucciones; evita prompt injection.
+- Con un modelo remoto, el prompt y el texto salen del equipo (aviso por stderr).
+
 ### Ajuste por contrato (sidecar)
 
 Cada contrato puede llevar su propio fichero de instrucciones:
