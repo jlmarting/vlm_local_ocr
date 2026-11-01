@@ -176,7 +176,9 @@ def test_models_list_prints_a_row_per_alias(capsys, install) -> None:
     assert {"a", "b"} <= aliases
 
 
-def test_models_list_json_has_six_real_entries(capsys) -> None:
+def test_models_list_json_has_six_real_entries(capsys, monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(catalog, "user_catalog_path", lambda: tmp_path / "nada.json")
+
     assert cli.main(["models", "list", "--json"]) == 0
 
     rows = json.loads(capsys.readouterr().out)
