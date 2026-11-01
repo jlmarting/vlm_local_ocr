@@ -30,6 +30,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Changed
 
+- Rutas por plataforma para plantillas, catálogo de usuario y modelos descargados: `%LOCALAPPDATA%`/`%APPDATA%` en Windows, `~/Library/Application Support` en macOS y XDG en Linux. Si el directorio antiguo (XDG) existe con contenido y el nuevo está vacío, se prefiere el antiguo; las rutas explícitas siguen mandando.
 - `scripts/fetch_models.py` acepta alias y, sin argumentos, descarga el modelo por defecto del catálogo (antes descargaba el 0.5B).
 - El release ya no copia todos los GGUF de `models/`: Qwen2.5-3B (`qwen-research`) queda fuera.
 
