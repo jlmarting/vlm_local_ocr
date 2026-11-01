@@ -651,3 +651,26 @@ def test_homologate_report_with_save(monkeypatch, tmp_path: Path, capsys) -> Non
     payload = json.loads(report_path.read_text(encoding="utf-8"))
     assert payload["saved"] is True
     assert len(_variant_files(templates_dir)) == 1
+
+
+def test_report_includes_contract_coverage(monkeypatch, tmp_path: Path, capsys) -> None:
+    _mock(monkeypatch, _blocks())
+    monkeypatch.setattr(
+        cli, "infer_contract", lambda *args, **kwargs: {"cliente": "ACME", "total": 9.99}
+    )
+
+    code = cli.main(
+        [
+            str(_source(tmp_path)),
+            "--format", "json",
+            "--contract", str(_contract(tmp_path)),
+            "--model", str(_model(tmp_path)),
+            "--metrics",
+        ]
+    )
+
+    assert code == 0
+    report = _last_report(capsys.readouterr())
+    assert report["extract"]["fields_total"] == 2
+    assert report["extract"]["fields_filled"] == 2
+    assert report["extract"]["coverage_contract"] == 1.0

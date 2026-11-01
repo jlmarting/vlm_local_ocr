@@ -46,6 +46,9 @@ def test_empty_report_has_stable_shape() -> None:
         "unmatched": None,
         "pending": None,
         "coverage": None,
+        "coverage_contract": None,
+        "fields_total": None,
+        "fields_filled": None,
     }
     assert report["verify"] == {"errors": []}
     assert set(report) == {

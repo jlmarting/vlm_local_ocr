@@ -4,6 +4,7 @@ import re
 import unicodedata
 from typing import Any
 
+from .annotations import field_map
 from .extract import parse_number
 
 MAX_MESSAGE_VALUE = 60
@@ -154,3 +155,24 @@ def literal_errors(data: Any, text: str) -> list[dict]:
                 }
             )
     return errors
+
+
+def field_coverage(data: Any, contract: dict, kind: str) -> tuple[int, int]:
+    """(resueltos, total) sobre los campos de primer nivel del contrato."""
+    if kind == "schema":
+        paths = [hint.path for hint in field_map(contract)]
+    elif kind == "example":
+        paths = list(contract)
+    else:
+        return (0, 0)
+    filled = sum(1 for path in paths if _get(data, path) is not None)
+    return (filled, len(paths))
+
+
+def _get(data: Any, dotted: str) -> Any:
+    current = data
+    for key in dotted.split("."):
+        if not isinstance(current, dict) or key not in current:
+            return None
+        current = current[key]
+    return current

@@ -744,6 +744,14 @@ def main(argv: list[str] | None = None) -> int:
                     file=sys.stderr,
                 )
 
+            if report is not None and contract is not None:
+                filled, total = verify.field_coverage(data, contract, kind)
+                report["extract"]["fields_total"] = total
+                report["extract"]["fields_filled"] = filled
+                report["extract"]["coverage_contract"] = (
+                    round(filled / total, 2) if total else None
+                )
+
             output = to_json_payload(data, blocks if args.with_layout else None)
 
         if report is not None:

@@ -40,6 +40,9 @@ def empty_report() -> dict[str, Any]:
             "unmatched": None,
             "pending": None,
             "coverage": None,
+            "coverage_contract": None,
+            "fields_total": None,
+            "fields_filled": None,
         },
         "template": {
             "found": False,
