@@ -378,6 +378,11 @@ def score_template(blocks: list[LayoutBlock], template: Template) -> float:
             normalized = normalize_label(label)
             if normalized and normalized not in labels:
                 labels.append(normalized)
+    for item in template.items.values():
+        for label in (*item.start_labels, *item.stop_labels):
+            normalized = normalize_label(label)
+            if normalized and normalized not in labels:
+                labels.append(normalized)
     if not labels:
         return 0.0
 

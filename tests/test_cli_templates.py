@@ -821,3 +821,112 @@ def test_ticket_regression_does_not_homologate_a_doubtful_map(
     assert report["template"]["blocked"] is True
     assert report["template"]["homologated"] is False
     assert _variant_files(templates_dir) == []
+
+
+ITEM_CONTRACT = {
+    "type": "object",
+    "properties": {
+        "pedido": {
+            "type": ["array", "null"],
+            "items": {
+                "type": "object",
+                "properties": {
+                    "producto": {"type": "string"},
+                    "cantidad": {"type": ["integer", "null"]},
+                    "precio": {"type": ["number", "null"]},
+                    "observaciones": {"type": ["string", "null"]},
+                },
+            },
+        },
+        "total": {"type": ["number", "null"]},
+    },
+}
+
+
+def _item_block(text: str, x: float, y: float) -> LayoutBlock:
+    return LayoutBlock(0, text, 1.0, (x, y, x + 90.0, y + 10.0))
+
+
+def _item_blocks() -> list[LayoutBlock]:
+    return [
+        _item_block("1 Burger", 10, 0),
+        _item_block("5.00", 200, 0),
+        _item_block("- Pickle", 20, 12),
+        _item_block("2 Fries", 10, 24),
+        _item_block("4.00", 200, 24),
+        _item_block("COUNTER", 10, 36),
+        _item_block("9.00", 200, 36),
+    ]
+
+
+def _item_data() -> dict:
+    return {
+        "pedido": [
+            {
+                "producto": "Burger",
+                "cantidad": 1,
+                "precio": 5.0,
+                "observaciones": "- Pickle",
+            },
+            {
+                "producto": "Fries",
+                "cantidad": 2,
+                "precio": 4.0,
+                "observaciones": None,
+            },
+        ],
+        "total": 9.0,
+    }
+
+
+def test_homologate_items_then_zero_token_run(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    blocks = _item_blocks()
+    _mock(monkeypatch, blocks)
+    contract = tmp_path / "ticket.json"
+    contract.write_text(json.dumps(ITEM_CONTRACT), encoding="utf-8")
+    templates_dir = tmp_path / "templates"
+    monkeypatch.setattr(cli, "infer_contract", lambda *a, **k: _item_data())
+    source = _source(tmp_path)
+    model = _model(tmp_path)
+
+    code = cli.main(
+        [
+            str(source),
+            "--format", "json",
+            "--contract", str(contract),
+            "--contract-kind", "schema",
+            "--model", str(model),
+            "--templates-dir", str(templates_dir),
+            "--homologate",
+            "--metrics",
+        ]
+    )
+
+    assert code == 0
+    report = _last_report(capsys.readouterr())
+    assert report["template"]["homologated"] is True
+    assert report["template"]["items_mapped"] == 1
+
+    code = cli.main(
+        [
+            str(source),
+            "--format", "json",
+            "--contract", str(contract),
+            "--contract-kind", "schema",
+            "--templates-dir", str(templates_dir),
+            "--no-llm",
+            "--metrics",
+        ]
+    )
+
+    assert code == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["pedido"][0]["producto"] == "Burger"
+    assert payload["pedido"][1]["cantidad"] == 2
+    assert payload["total"] == 9.0
+    report = _last_report(captured)
+    assert report["template"]["found"] is True
+    assert report["extract"]["llm"] is False
