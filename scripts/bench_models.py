@@ -11,44 +11,12 @@ from llama_cpp import Llama
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from vlm_ocr.contract import (
-    _build_messages,
-    _truncate_text,
-    load_contract,
-    load_instructions,
-)
+from vlm_ocr.catalog import ref_for_path
+from vlm_ocr.contract import _truncate_text, load_contract, load_instructions
 from vlm_ocr.ingest import ingest
 from vlm_ocr.ocr import ocr_pages
 from vlm_ocr.output import to_markdown
-
-
-def _scalar(value: Any) -> dict:
-    if isinstance(value, bool):
-        return {"type": "boolean"}
-    if isinstance(value, int | float):
-        return {"type": "number"}
-    return {"type": "string"}
-
-
-def schema_from(example: Any) -> dict:
-    """Esquema del ejemplo con ``anyOf`` para anulables.
-
-    La forma ``"type": ["number", "null"]`` degrada en silencio a la gramática JSON
-    genérica de llama.cpp (comprobado), así que los nulos van por ``anyOf``.
-    """
-    if isinstance(example, dict):
-        return {
-            "type": "object",
-            "properties": {key: schema_from(sub) for key, sub in example.items()},
-            "required": list(example),
-            "additionalProperties": False,
-        }
-    if isinstance(example, list):
-        return {
-            "type": "array",
-            "items": schema_from(example[0]) if example else {},
-        }
-    return {"anyOf": [_scalar(example), {"type": "null"}]}
+from vlm_ocr.promptstyles import build_chat_messages, schema_from
 
 
 def main() -> int:
@@ -71,7 +39,10 @@ def main() -> int:
     else:
         pages = ingest(args.doc)
         text = to_markdown(ocr_pages(pages))
-    messages = _build_messages(_truncate_text(text, 1500), contract, kind, instructions)
+    ref = ref_for_path(args.model)
+    messages = build_chat_messages(
+        _truncate_text(text, 1500), contract, kind, instructions, hints=ref.entry.prompt_hints
+    )
 
     response_format: dict[str, Any] = {"type": "json_object"}
     if not args.no_grammar:
