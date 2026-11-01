@@ -61,8 +61,8 @@ De `src/vlm_ocr/extract.py`, el corazón del determinista:
 ```python
 def assign(blocks: list[LayoutBlock], schema: dict) -> Assignment:
     """Mapa etiqueta→valor desde filas reagrupadas. Devuelve también los campos pendientes."""
-    hints = leaf_hints(schema)               # campos anotados con x-labels/x-source
-    rows = group_rows(blocks)                # de píxeles a filas legibles
+    hints = field_map(schema)                # campos anotados con x-labels/x-source (annotations.py)
+    rows = group_rows(blocks)                # de píxeles a filas legibles (layout.py)
     for row in rows:
         label = _closest_label(row.text, known_labels)   # tolera la errata del OCR
         if label:
