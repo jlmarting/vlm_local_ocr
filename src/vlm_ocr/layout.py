@@ -152,10 +152,10 @@ def _merge_punctuation(cells: list[LayoutBlock]) -> list[LayoutBlock]:
     return merged
 
 
-def native_blocks(path: Path | str) -> list[LayoutBlock]:
+def native_blocks(path: Path | str, *, data: bytes | None = None) -> list[LayoutBlock]:
     """Celdas con caja real extraídas del texto nativo de un PDF (PDFium, por carácter)."""
     blocks: list[LayoutBlock] = []
-    pdf = pdfium.PdfDocument(str(path))
+    pdf = pdfium.PdfDocument(data if data is not None else str(path))
     try:
         for index in range(len(pdf)):
             page = pdf[index]

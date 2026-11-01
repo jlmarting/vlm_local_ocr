@@ -97,3 +97,10 @@ def test_native_blocks_return_empty_for_a_pdf_without_text(tmp_path: Path) -> No
     _write_mini_pdf(pdf, stream=b"")
 
     assert native_blocks(pdf) == []
+
+
+def test_native_blocks_from_bytes_matches_file(tmp_path: Path) -> None:
+    pdf = tmp_path / "mini.pdf"
+    _write_mini_pdf(pdf)
+
+    assert native_blocks("-", data=pdf.read_bytes()) == native_blocks(pdf)

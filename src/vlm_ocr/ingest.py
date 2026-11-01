@@ -12,8 +12,17 @@ TEXT_MIN_CHARS = 20
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
 
 
-def ingest(path: Path | str, dpi: int = 200) -> list[PageInput]:
-    """Convierte un fichero en páginas listas para OCR o texto nativo."""
+def ingest(
+    path: Path | str,
+    dpi: int = 200,
+    *,
+    data: bytes | None = None,
+    kind: str | None = None,
+) -> list[PageInput]:
+    """Convierte un fichero (o bytes de stdin) en páginas para OCR o texto nativo."""
+    if data is not None:
+        return _ingest_data(data, kind, dpi)
+
     path = Path(path)
     if not path.exists():
         raise InputError(f"no existe el fichero: {path}")
@@ -37,13 +46,35 @@ def ingest(path: Path | str, dpi: int = 200) -> list[PageInput]:
     raise InputError(f"formato no soportado: {suffix or '(sin extensión)'}")
 
 
-def _ingest_pdf(path: Path, dpi: int) -> list[PageInput]:
+def _ingest_data(data: bytes, kind: str | None, dpi: int) -> list[PageInput]:
+    """Ingiere bytes ya leídos de stdin usando el tipo detectado o forzado."""
+    normalized = (kind or "").lower()
+    if normalized == "jpeg":
+        normalized = "jpg"
+    if normalized == "pdf":
+        try:
+            return _ingest_pdf(data, dpi, label="stdin")
+        except InputError:
+            raise
+        except Exception as exc:
+            raise InputError(f"no se pudo leer el PDF por stdin: {exc}") from exc
+    if normalized in {"png", "jpg", "tiff", "bmp", "webp"}:
+        if not data:
+            raise InputError("la imagen está vacía: stdin")
+        return [PageInput(index=0, text=None, image_png=data)]
+    raise InputError(f"formato no soportado por stdin: {kind or '(sin tipo)'}")
+
+
+def _ingest_pdf(
+    source: Path | bytes, dpi: int, *, label: str | None = None
+) -> list[PageInput]:
+    where = label or str(source)
     pages: list[PageInput] = []
-    pdf = pdfium.PdfDocument(str(path))
+    pdf = pdfium.PdfDocument(source if isinstance(source, bytes) else str(source))
     try:
         count = len(pdf)
         if count == 0:
-            raise InputError(f"el PDF no tiene páginas: {path}")
+            raise InputError(f"el PDF no tiene páginas: {where}")
         for index in range(count):
             page = pdf[index]
             try:

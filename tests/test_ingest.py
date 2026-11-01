@@ -100,3 +100,27 @@ def test_unsupported_extension_raises(tmp_path: Path) -> None:
 def test_missing_file_raises(tmp_path: Path) -> None:
     with pytest.raises(InputError, match="no existe"):
         ingest(tmp_path / "no-existe.pdf")
+
+
+def test_ingest_pdf_from_bytes_matches_file(tmp_path: Path) -> None:
+    path = _make_text_pdf(tmp_path / "texto.pdf", pages=2)
+
+    pages = ingest("-", data=path.read_bytes(), kind="pdf")
+
+    assert [p.text for p in pages] == [p.text for p in ingest(path)]
+
+
+def test_ingest_image_from_bytes(tmp_path: Path) -> None:
+    path = _make_image(tmp_path / "captura.png")
+    raw = path.read_bytes()
+
+    pages = ingest("-", data=raw, kind="png")
+
+    assert len(pages) == 1
+    assert pages[0].image_png == raw
+    assert pages[0].text is None
+
+
+def test_ingest_pdf_from_bytes_reports_stdin() -> None:
+    with pytest.raises(InputError, match="stdin"):
+        ingest("-", data=b"no es un pdf", kind="pdf")
