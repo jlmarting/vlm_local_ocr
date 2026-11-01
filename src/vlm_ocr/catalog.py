@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import urllib.error
+import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, fields
 from importlib import resources
 from pathlib import Path
@@ -324,3 +328,91 @@ def _default_entry() -> ModelEntry | None:
         if entry.default:
             return entry
     return None
+
+
+def default_dest() -> Path:
+    """Destino por defecto: ``models/`` del repo si es un checkout; si no, datos de usuario."""
+    repo_root = Path(__file__).resolve().parents[2]
+    if (repo_root / "pyproject.toml").is_file():
+        return repo_root / "models"
+    return Path.home() / ".local" / "share" / "vlm-local-ocr" / "models"
+
+
+def fetch(
+    alias: str,
+    *,
+    dest: Path | str | None = None,
+    accept_license: bool = False,
+    token: str | None = None,
+    progress: Callable[[str], None] | None = None,
+) -> Path:
+    """Descarga el GGUF del alias, verifica su sha256 y lo deja en ``dest``."""
+    entries = load_catalog()
+    if alias not in entries:
+        disponibles = ", ".join(sorted(entries))
+        raise CatalogError(f"alias desconocido: {alias}. Alias disponibles: {disponibles}")
+    entry = entries[alias]
+    if entry.kind != "gguf":
+        raise CatalogError(f"{alias} es un modelo remoto: no hay nada que descargar")
+    if entry.acceptance_required and not accept_license:
+        raise CatalogError(
+            f"la licencia de {alias} requiere aceptación explícita ({entry.license_url}); "
+            "repite con --accept-license"
+        )
+    token = token or os.environ.get("HF_TOKEN")
+    if entry.gated and not token:
+        raise CatalogError(
+            f"{alias} es un repositorio gated: acepta la licencia en Hugging Face y "
+            "exporta HF_TOKEN"
+        )
+
+    directory = Path(dest) if dest is not None else default_dest()
+    directory.mkdir(parents=True, exist_ok=True)
+    target = directory / str(entry.file)
+    say = progress or (lambda message: print(message))
+
+    if target.is_file():
+        if verify_file(entry, target):
+            say(f"modelo ya presente y verificado: {target}")
+            return target
+        say(f"hash incorrecto en {target}; se vuelve a descargar")
+        target.unlink()
+
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    request = urllib.request.Request(str(entry.url), headers=headers)
+    temporary = target.with_suffix(target.suffix + ".part")
+    say(f"descargando {entry.url}")
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response, temporary.open("wb") as out:
+            total = int(response.headers.get("Content-Length") or 0) or entry.size_bytes or 0
+            done = 0
+            printed = -1
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                out.write(chunk)
+                done += len(chunk)
+                if total:
+                    percent = done * 100 // total
+                    if percent // 5 != printed // 5:
+                        printed = percent
+                        say(f"{percent}% ({done // (1024 * 1024)} MB de {total // (1024 * 1024)} MB)")
+    except urllib.error.HTTPError as exc:
+        temporary.unlink(missing_ok=True)
+        if exc.code == 401:
+            raise CatalogError(
+                f"401 al descargar {entry.url}: acepta la licencia en Hugging Face y "
+                "exporta HF_TOKEN"
+            ) from exc
+        raise CatalogError(f"error HTTP {exc.code} al descargar {entry.url}") from exc
+    except urllib.error.URLError as exc:
+        temporary.unlink(missing_ok=True)
+        raise CatalogError(f"no se pudo descargar {entry.url}: {exc.reason}") from exc
+
+    if not verify_file(entry, temporary):
+        temporary.unlink(missing_ok=True)
+        raise CatalogError(f"sha256 no coincide para {alias}: descarga corrupta")
+    temporary.rename(target)
+    say(f"modelo listo: {target}")
+    return target

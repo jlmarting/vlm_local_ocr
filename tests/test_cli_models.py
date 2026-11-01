@@ -207,3 +207,43 @@ def test_models_list_verify_detects_bad_hash(capsys, install) -> None:
 def test_models_without_command_shows_help(capsys) -> None:
     assert cli.main(["models"]) == 2
     assert "list" in capsys.readouterr().err
+
+
+def test_models_fetch_cli(tmp_path: Path, monkeypatch, install) -> None:
+    import hashlib
+
+    payload = b"pesos"
+    entry = gguf(sha256=hashlib.sha256(payload).hexdigest(), size_bytes=len(payload))
+    install({"a": entry})
+
+    class FakeResponse:
+        def __init__(self) -> None:
+            self.headers = {"Content-Length": str(len(payload))}
+
+        def read(self, size):
+            nonlocal payload_state
+            chunk, payload_state = payload_state[:size], payload_state[size:]
+            return chunk
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    payload_state = payload
+    monkeypatch.setattr(
+        catalog.urllib.request, "urlopen", lambda request, timeout=60: FakeResponse()
+    )
+
+    assert cli.main(["models", "fetch", "a", "--dest", str(tmp_path / "dest")]) == 0
+    assert (tmp_path / "dest" / "m.gguf").read_bytes() == payload
+
+
+def test_models_fetch_cli_reports_license(tmp_path: Path, capsys, install) -> None:
+    install({"a": gguf(acceptance_required=True, license_url="https://example.com/lic")})
+
+    assert cli.main(["models", "fetch", "a", "--dest", str(tmp_path / "dest")]) == 2
+    err = capsys.readouterr().err
+    assert "--accept-license" in err
+    assert "https://example.com/lic" in err

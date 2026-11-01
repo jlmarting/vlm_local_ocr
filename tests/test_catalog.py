@@ -301,3 +301,113 @@ def test_ref_for_path_falls_back_to_ad_hoc(install, tmp_path: Path) -> None:
     path.write_bytes(b"")
 
     assert catalog.ref_for_path(path).label == "otro.gguf"
+
+
+class FakeResponse:
+    def __init__(self, payload: bytes) -> None:
+        self.payload = payload
+        self.headers = {"Content-Length": str(len(payload))}
+
+    def read(self, size: int) -> bytes:
+        chunk, self.payload = self.payload[:size], self.payload[size:]
+        return chunk
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args) -> bool:
+        return False
+
+
+def _entry_for(payload: bytes, **overrides) -> dict:
+    import hashlib
+
+    entry = gguf(sha256=hashlib.sha256(payload).hexdigest(), size_bytes=len(payload))
+    entry.update(overrides)
+    return entry
+
+
+def test_fetch_downloads_and_verifies(install, tmp_path: Path, monkeypatch) -> None:
+    payload = b"pesos"
+    install({"a": _entry_for(payload)})
+    calls = []
+
+    def fake_urlopen(request, timeout=60):
+        calls.append(request)
+        return FakeResponse(payload)
+
+    monkeypatch.setattr(catalog.urllib.request, "urlopen", fake_urlopen)
+    messages: list[str] = []
+
+    target = catalog.fetch("a", dest=tmp_path / "dest", progress=messages.append)
+
+    assert target.read_bytes() == payload
+    assert not (tmp_path / "dest" / "m.gguf.part").exists()
+    assert calls and "descargando" in " ".join(messages)
+
+
+def test_fetch_corrupt_removes_files(install, tmp_path: Path, monkeypatch) -> None:
+    install({"a": _entry_for(b"pesos")})
+    monkeypatch.setattr(
+        catalog.urllib.request, "urlopen", lambda request, timeout=60: FakeResponse(b"otros")
+    )
+    dest = tmp_path / "dest"
+
+    with pytest.raises(catalog.CatalogError, match="sha256"):
+        catalog.fetch("a", dest=dest, progress=lambda message: None)
+
+    assert not (dest / "m.gguf").exists()
+    assert not (dest / "m.gguf.part").exists()
+
+
+def test_fetch_requires_license_acceptance_before_network(
+    install, tmp_path: Path, monkeypatch
+) -> None:
+    install({"a": gguf(acceptance_required=True, license_url="https://example.com/lic")})
+
+    def boom(*args, **kwargs):
+        raise AssertionError("no debe tocar la red")
+
+    monkeypatch.setattr(catalog.urllib.request, "urlopen", boom)
+
+    with pytest.raises(catalog.CatalogError, match="--accept-license"):
+        catalog.fetch("a", dest=tmp_path / "dest", progress=lambda message: None)
+
+
+def test_fetch_gated_requires_hf_token(install, tmp_path: Path, monkeypatch) -> None:
+    install({"a": gguf(gated=True)})
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+
+    with pytest.raises(catalog.CatalogError, match="HF_TOKEN"):
+        catalog.fetch("a", dest=tmp_path / "dest", progress=lambda message: None)
+
+
+def test_fetch_sends_token_header(install, tmp_path: Path, monkeypatch) -> None:
+    payload = b"pesos"
+    install({"a": _entry_for(payload, gated=True)})
+    seen: list[dict] = []
+
+    def fake_urlopen(request, timeout=60):
+        seen.append(request.headers)
+        return FakeResponse(payload)
+
+    monkeypatch.setattr(catalog.urllib.request, "urlopen", fake_urlopen)
+
+    catalog.fetch("a", dest=tmp_path / "dest", token="secreto", progress=lambda m: None)
+
+    assert seen[0].get("Authorization") == "Bearer secreto"
+
+
+def test_fetch_skips_download_when_valid(install, tmp_path: Path, monkeypatch) -> None:
+    payload = b"pesos"
+    install({"a": _entry_for(payload)})
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    (dest / "m.gguf").write_bytes(payload)
+
+    def boom(*args, **kwargs):
+        raise AssertionError("no debe descargar de nuevo")
+
+    monkeypatch.setattr(catalog.urllib.request, "urlopen", boom)
+
+    assert catalog.fetch("a", dest=dest, progress=lambda m: None) == dest / "m.gguf"

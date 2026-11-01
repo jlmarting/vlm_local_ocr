@@ -233,6 +233,14 @@ def _models_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="verifica el sha256 (lento con modelos grandes)",
     )
+    fetching = commands.add_parser("fetch", help="descarga y verifica uno o más modelos")
+    fetching.add_argument("alias", nargs="+", help="alias del catálogo")
+    fetching.add_argument("--dest", type=Path, help="directorio de destino")
+    fetching.add_argument(
+        "--accept-license",
+        action="store_true",
+        help="acepta la licencia del modelo (obligatorio si lo exige)",
+    )
     return parser
 
 
@@ -242,6 +250,10 @@ def _models_main(argv: list[str]) -> int:
     try:
         if args.command == "list":
             return _models_list(args)
+        if args.command == "fetch":
+            for alias in args.alias:
+                catalog.fetch(alias, dest=args.dest, accept_license=args.accept_license)
+            return 0
     except catalog.CatalogError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
