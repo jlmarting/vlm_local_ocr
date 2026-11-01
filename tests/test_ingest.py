@@ -90,7 +90,7 @@ def test_image_input_is_a_single_page(tmp_path: Path) -> None:
 
 
 def test_unsupported_extension_raises(tmp_path: Path) -> None:
-    path = tmp_path / "nota.txt"
+    path = tmp_path / "nota.xyz"
     path.write_text("hola")
 
     with pytest.raises(InputError, match="no soportado"):
@@ -124,3 +124,41 @@ def test_ingest_image_from_bytes(tmp_path: Path) -> None:
 def test_ingest_pdf_from_bytes_reports_stdin() -> None:
     with pytest.raises(InputError, match="stdin"):
         ingest("-", data=b"no es un pdf", kind="pdf")
+
+
+def test_text_file_is_a_single_native_page(tmp_path: Path) -> None:
+    path = tmp_path / "nota.txt"
+    path.write_text("cafe 1,20€ coockie 2,2€ total 3,40€\n", encoding="utf-8")
+
+    pages = ingest(path)
+
+    assert len(pages) == 1
+    assert pages[0].text == "cafe 1,20€ coockie 2,2€ total 3,40€\n"
+    assert pages[0].image_png is None
+
+
+def test_text_from_bytes_matches_file() -> None:
+    raw = b"TOTAL | 29.35\n"
+
+    pages = ingest("-", data=raw, kind="txt")
+
+    assert pages[0].text == "TOTAL | 29.35\n"
+
+
+def test_text_kind_alias() -> None:
+    assert ingest("-", data=b"hola\n", kind="text")[0].text == "hola\n"
+
+
+def test_text_bom_is_removed() -> None:
+    assert ingest("-", data=b"\xef\xbb\xbfhola\n", kind="txt")[0].text == "hola\n"
+
+
+@pytest.mark.parametrize("raw", [b"", b"   \n\t"])
+def test_text_empty_is_error(raw: bytes) -> None:
+    with pytest.raises(InputError, match="vacío"):
+        ingest("-", data=raw, kind="txt")
+
+
+def test_text_non_utf8_is_error() -> None:
+    with pytest.raises(InputError, match="UTF-8"):
+        ingest("-", data=b"\xff", kind="txt")

@@ -9,6 +9,7 @@ from .errors import InputError
 from .types import PageInput
 
 TEXT_MIN_CHARS = 20
+TEXT_EXTENSIONS = {".txt"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
 
 
@@ -35,6 +36,12 @@ def ingest(
             raise
         except Exception as exc:
             raise InputError(f"no se pudo leer el PDF {path}: {exc}") from exc
+    if suffix in TEXT_EXTENSIONS:
+        try:
+            raw = path.read_bytes()
+        except OSError as exc:
+            raise InputError(f"no se pudo leer el texto {path}: {exc}") from exc
+        return _ingest_text(raw, str(path))
     if suffix in IMAGE_EXTENSIONS:
         try:
             data = path.read_bytes()
@@ -46,11 +53,26 @@ def ingest(
     raise InputError(f"formato no soportado: {suffix or '(sin extensión)'}")
 
 
+def _ingest_text(raw: bytes, label: str) -> list[PageInput]:
+    """Decodifica texto plano como una página nativa, sin OCR."""
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise InputError(f"el texto no es UTF-8 válido: {label}") from exc
+    if not text.strip():
+        raise InputError(f"el texto está vacío: {label}")
+    return [PageInput(index=0, text=text, image_png=None)]
+
+
 def _ingest_data(data: bytes, kind: str | None, dpi: int) -> list[PageInput]:
     """Ingiere bytes ya leídos de stdin usando el tipo detectado o forzado."""
     normalized = (kind or "").lower()
     if normalized == "jpeg":
         normalized = "jpg"
+    if normalized == "text":
+        normalized = "txt"
+    if normalized == "txt":
+        return _ingest_text(data, "stdin")
     if normalized == "pdf":
         try:
             return _ingest_pdf(data, dpi, label="stdin")
