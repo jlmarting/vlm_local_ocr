@@ -204,3 +204,49 @@ def test_ocr_typos_in_labels_still_match() -> None:
         == "KILOMETRAJE SUJETO A COTIZACION"
     )
     assert _closest_label("TEXTO SIN PARECIDO", known) == "TEXTO SIN PARECIDO"
+
+
+def test_parse_number_accepts_currency_symbols() -> None:
+    from vlm_ocr.extract import parse_number
+
+    assert parse_number("$29.35") == 29.35
+    assert parse_number("1.234,56 €") == 1234.56
+    assert parse_number("$0.00") == 0.0
+    assert parse_number("£12.5") == 12.5
+
+
+def test_parse_number_accepts_currency_codes() -> None:
+    from vlm_ocr.extract import parse_number
+
+    assert parse_number("EUR 12,50") == 12.5
+    assert parse_number("USD 1.000,00") == 1000.0
+    assert parse_number("-MXN 5.00") == -5.0
+
+
+def test_parse_number_without_currency_is_unchanged() -> None:
+    from vlm_ocr.extract import parse_number
+
+    assert parse_number("29,35") == 29.35
+    assert parse_number("1.234,56") == 1234.56
+
+
+def test_unreadable_value_with_label_goes_to_pending() -> None:
+    from vlm_ocr.extract import assign
+
+    blocks = [
+        LayoutBlock(0, "IMPORTE", 1.0, (10.0, 0.0, 90.0, 10.0)),
+        LayoutBlock(0, "N/D", 1.0, (200.0, 0.0, 260.0, 10.0)),
+    ]
+    schema = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+            "importe": {"type": ["number", "null"], "x-labels": ["IMPORTE"]},
+        },
+    }
+
+    assignment = assign(blocks, schema)
+
+    assert "importe" in assignment.pending
+    assert "importe" not in assignment.unmatched
+    assert assignment.data["importe"] is None
