@@ -131,7 +131,7 @@ def test_rasterized_pages_report_confidence(monkeypatch, tmp_path: Path, capsys)
 
     cli.main([str(_source(tmp_path)), "--metrics"])
 
-    report = json.loads(capsys.readouterr().err)
+    report = json.loads(capsys.readouterr().err.strip().splitlines()[-1])
     assert report["ingest"]["native_pages"] == 0
     assert report["ingest"]["rasterized_pages"] == 1
     assert report["ocr"]["mean_confidence"] == pytest.approx(0.9)
@@ -177,7 +177,7 @@ def test_contract_mode_reports_model_and_tokens(monkeypatch, tmp_path: Path, cap
     )
 
     assert code == 0
-    report = json.loads(capsys.readouterr().err)
+    report = json.loads(capsys.readouterr().err.strip().splitlines()[-1])
     assert report["llm"]["enabled"] is True
     assert report["llm"]["model"] == "m.gguf"
     assert report["llm"]["attempts"] == 2

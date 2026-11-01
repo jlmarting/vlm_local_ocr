@@ -31,3 +31,61 @@ def test_integer_values_compare_by_value_not_notation() -> None:
 
 def test_nulls_are_ignored() -> None:
     assert literal_errors({"a": None, "b": 2406.89}, TEXT) == []
+
+
+def test_invented_string_is_reported() -> None:
+    errors = literal_errors({"cliente": "ACME"}, "sin datos")
+
+    assert [error["field"] for error in errors] == ["cliente"]
+    assert errors[0]["kind"] == "literal"
+    assert "ACME" in errors[0]["message"]
+
+
+def test_string_with_punctuation_and_case_passes() -> None:
+    assert literal_errors({"cliente": "ACME, S.L."}, "Cliente: ACME, S.L.") == []
+
+
+def test_accents_are_ignored() -> None:
+    assert literal_errors({"nombre": "José Pérez"}, "JOSE PEREZ") == []
+
+
+def test_string_across_lines_passes() -> None:
+    assert literal_errors({"obs": "sin cebolla"}, "sin\ncebolla") == []
+
+
+def test_reformatted_date_passes() -> None:
+    assert literal_errors({"fecha": "2026-02-02"}, "Fecha: 02/02/2026") == []
+
+
+def test_invented_date_is_reported() -> None:
+    errors = literal_errors({"fecha": "02/14/2022"}, "064 2 1404 2022")
+
+    assert [error["field"] for error in errors] == ["fecha"]
+    assert "fecha" in errors[0]["message"]
+
+
+def test_compact_time_passes() -> None:
+    assert literal_errors({"hora": "14:04"}, "064 2 1404 2022") == []
+
+
+def test_invented_time_is_reported() -> None:
+    errors = literal_errors({"hora": "02:04"}, "064 2 1404 2022")
+
+    assert [error["field"] for error in errors] == ["hora"]
+    assert "hora" in errors[0]["message"]
+
+
+def test_list_items_are_checked() -> None:
+    errors = literal_errors({"pedido": [{"producto": "Inventado"}]}, "Hamburger")
+
+    assert [error["field"] for error in errors] == ["pedido[0].producto"]
+
+
+def test_single_character_strings_are_ignored() -> None:
+    assert literal_errors({"sexo": "S"}, "") == []
+
+
+def test_long_strings_are_truncated_in_the_message() -> None:
+    errors = literal_errors({"nota": "x" * 200}, "")
+
+    assert len(errors[0]["message"]) < 120
