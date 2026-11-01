@@ -231,3 +231,55 @@ def test_default_alias_ignores_download_state(install) -> None:
     install({"d": gguf(default=True)})
 
     assert catalog.default_alias() == "d"
+
+
+PACKAGED = [
+    "llama32-3b",
+    "llama32-3b-cloud",
+    "nuextract-tiny",
+    "phi4mini",
+    "qwen05b",
+    "qwen25-3b",
+]
+
+
+def packaged_entries():
+    return catalog.load_catalog(catalog.packaged_catalog_path())
+
+
+def test_packaged_catalog_ships_in_the_package() -> None:
+    from importlib import resources
+
+    assert resources.files("vlm_ocr").joinpath("catalog.json").is_file()
+
+
+def test_packaged_catalog_has_the_six_models() -> None:
+    assert sorted(packaged_entries()) == PACKAGED
+
+
+def test_packaged_sha256_are_well_formed() -> None:
+    for entry in packaged_entries().values():
+        if entry.kind == "gguf":
+            assert entry.sha256 is not None
+            assert len(entry.sha256) == 64
+            int(entry.sha256, 16)
+
+
+def test_packaged_files_and_profiles_are_unique() -> None:
+    entries = packaged_entries().values()
+    files = [entry.file for entry in entries if entry.file]
+    assert len(files) == len(set(files))
+    profiles = [entry.profile for entry in entries if entry.kind == "gguf" and entry.profile]
+    assert len(profiles) == len(set(profiles))
+    assert sum(1 for entry in entries if entry.default) == 1
+
+
+def test_redistributable_models_have_a_license_text() -> None:
+    root = Path(__file__).resolve().parents[1]
+    for entry in packaged_entries().values():
+        if not entry.redistributable:
+            continue
+        assert entry.license_file is not None
+        license_path = root / entry.license_file
+        assert license_path.is_file(), license_path
+        assert license_path.stat().st_size > 0
