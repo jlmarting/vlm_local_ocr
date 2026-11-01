@@ -9,6 +9,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- Entrada por stdin (`-`) para el documento, `--contract` y `--instructions`, con detección del tipo de documento por firma y `--input-format` de rescate. Sin APIs POSIX: la misma ruta sirve en Linux, macOS y Windows. Como máximo una entrada puede ser `-` por invocación.
 - `parse_number` acepta moneda (`$`, `€`, `£`, `¥` y códigos ISO): los importes con símbolo se leen, se asignan y se homologan (`$29.35` → `29.35`).
 - Un valor con etiqueta encontrada pero no legible pasa a `pending` y se pide al LLM; los campos sin etiqueta siguen considerándose ausentes y no disparan el modelo.
 
