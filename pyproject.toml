@@ -5,6 +5,21 @@ description = "OCR local de PDFs e imágenes y mapeo a un contrato JSON con llam
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+keywords = ["ocr", "llama.cpp", "llm-local", "json-schema", "cli", "pdf"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Text Processing",
+    "Topic :: Utilities",
+]
 dependencies = [
     "pypdfium2>=4.30",
     "rapidocr>=3.0",
