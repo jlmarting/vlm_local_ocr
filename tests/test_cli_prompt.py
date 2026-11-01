@@ -29,7 +29,16 @@ def _pipe(monkeypatch, raw: bytes) -> None:
 def _fake_answer(monkeypatch, answer: str = "RESPUESTA") -> dict[str, object]:
     seen: dict[str, object] = {}
 
-    def fake_infer(text, task, model, *, usage_out=None, **kwargs):
+    def fake_infer(
+        text,
+        task,
+        model,
+        *,
+        n_ctx=4096,
+        max_ocr_tokens=1500,
+        max_output_tokens=None,
+        usage_out=None,
+    ):
         seen["text"] = text
         seen["task"] = task
         seen["model"] = model

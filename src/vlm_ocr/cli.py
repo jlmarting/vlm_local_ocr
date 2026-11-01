@@ -679,7 +679,7 @@ def main(argv: list[str] | None = None) -> int:
                 prompt_text,
                 prompt_model_ref,
                 n_ctx=args.n_ctx,
-                max_tokens=args.max_tokens,
+                max_output_tokens=args.max_tokens,
                 usage_out=usage_out,
             )
             if report is not None:
