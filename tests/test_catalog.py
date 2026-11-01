@@ -467,3 +467,33 @@ def test_bad_think_raises(tmp_path: Path, value) -> None:
 
     with pytest.raises(catalog.CatalogError, match="think"):
         catalog.load_catalog(path)
+
+
+def test_user_catalog_path_usa_config_dir(monkeypatch, tmp_path):
+    from vlm_ocr import paths
+
+    monkeypatch.setattr(paths, "config_dir", lambda: tmp_path / "cfg")
+    assert catalog.user_catalog_path() == tmp_path / "cfg" / "catalog.json"
+
+
+def test_search_dirs_incluye_modelos_de_usuario(monkeypatch, tmp_path):
+    from vlm_ocr import paths
+
+    monkeypatch.setattr(paths, "data_dir", lambda: tmp_path / "datos")
+    assert tmp_path / "datos" / "models" in catalog.search_dirs()
+
+
+def test_search_dirs_sin_duplicados(monkeypatch, tmp_path):
+    from vlm_ocr import paths
+
+    monkeypatch.setattr(paths, "data_dir", lambda: tmp_path / "datos")
+    dirs = catalog.search_dirs()
+    assert len(dirs) == len(set(dirs))
+
+
+def test_default_dest_sin_repo_usa_paths(monkeypatch, tmp_path):
+    from vlm_ocr import paths
+
+    monkeypatch.setattr(paths, "data_dir", lambda: tmp_path / "datos")
+    monkeypatch.setattr(catalog, "_repo_models", lambda: None)
+    assert catalog.default_dest() == tmp_path / "datos" / "models"
