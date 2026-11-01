@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass, fields
@@ -203,6 +204,22 @@ def search_dirs() -> list[Path]:
         Path.cwd() / "models",
         Path.home() / ".local" / "share" / "vlm-local-ocr" / "models",
     ]
+
+
+def sha256_file(path: Path | str) -> str:
+    """sha256 de un fichero, por bloques de 1 MiB."""
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_file(entry: ModelEntry, path: Path | str) -> bool:
+    """¿El fichero coincide con el sha256 del catálogo?"""
+    if not entry.sha256:
+        return False
+    return sha256_file(path) == entry.sha256
 
 
 def find_downloaded(entry: ModelEntry) -> Path | None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -169,7 +170,89 @@ def _model_problem(model_ref: catalog.ModelRef | None) -> str | None:
     return None
 
 
+def _human_size(size: int | None) -> str:
+    return f"{size / (1024 ** 3):.2f} GB" if size else "—"
+
+
+def _models_list(args: argparse.Namespace) -> int:
+    entries = catalog.load_catalog()
+    rows: list[dict[str, object]] = []
+    for alias in sorted(entries):
+        entry = entries[alias]
+        path = catalog.find_downloaded(entry)
+        if entry.kind != "gguf":
+            status = "remoto"
+        elif path is None:
+            status = "—"
+        elif args.verify:
+            status = "verificado" if catalog.verify_file(entry, path) else "hash incorrecto"
+        else:
+            status = "presente"
+        rows.append(
+            {
+                "alias": alias,
+                "name": entry.name,
+                "kind": entry.kind,
+                "size_bytes": entry.size_bytes,
+                "license": entry.license,
+                "profile": entry.profile or "—",
+                "status": status,
+                "path": str(path) if path is not None else None,
+            }
+        )
+    if args.json:
+        print(json.dumps(rows, ensure_ascii=False))
+        return 0
+    header = ("ALIAS", "NOMBRE", "TAMAÑO", "LICENCIA", "PERFIL", "ESTADO")
+    cells = [
+        (
+            str(row["alias"]),
+            str(row["name"]),
+            _human_size(row["size_bytes"]),
+            str(row["license"]),
+            str(row["profile"]),
+            str(row["status"]),
+        )
+        for row in rows
+    ]
+    widths = [len(value) for value in header]
+    for row in cells:
+        widths = [max(width, len(value)) for width, value in zip(widths, row)]
+    for row in [header, *cells]:
+        print("  ".join(value.ljust(width) for value, width in zip(row, widths)).rstrip())
+    return 0
+
+
+def _models_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="vlm-ocr models", description="Catálogo de modelos.")
+    commands = parser.add_subparsers(dest="command")
+    listing = commands.add_parser("list", help="lista el catálogo y su estado")
+    listing.add_argument("--json", action="store_true", help="salida JSON")
+    listing.add_argument(
+        "--verify",
+        action="store_true",
+        help="verifica el sha256 (lento con modelos grandes)",
+    )
+    return parser
+
+
+def _models_main(argv: list[str]) -> int:
+    parser = _models_parser()
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "list":
+            return _models_list(args)
+    except catalog.CatalogError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    parser.print_help(sys.stderr)
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "models":
+        return _models_main(argv[1:])
     args = _build_parser().parse_args(argv)
 
     if args.instructions is not None and args.contract is None:

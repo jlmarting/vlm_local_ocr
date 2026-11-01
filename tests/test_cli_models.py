@@ -163,3 +163,47 @@ def test_profile_requires_json_format(tmp_path: Path, monkeypatch, capsys) -> No
 
     assert cli.main([str(source), "--profile", "fast"]) == 2
     assert "--format json" in capsys.readouterr().err
+
+
+def test_models_list_prints_a_row_per_alias(capsys, install) -> None:
+    install({"a": gguf(), "b": gguf(file="b.gguf")})
+
+    assert cli.main(["models", "list"]) == 0
+
+    out = capsys.readouterr().out
+    assert "ALIAS" in out
+    assert "\na " in out or out.splitlines()[1].split()[0] == "a"
+    assert "b" in out
+
+
+def test_models_list_json_has_six_real_entries(capsys) -> None:
+    assert cli.main(["models", "list", "--json"]) == 0
+
+    rows = json.loads(capsys.readouterr().out)
+    assert len(rows) == 6
+    assert {row["alias"] for row in rows} >= {"llama32-3b", "nuextract-tiny"}
+
+
+def test_models_list_marks_downloaded(capsys, install) -> None:
+    models = install({"a": gguf()})
+    (models / "m.gguf").write_bytes(b"")
+
+    cli.main(["models", "list", "--json"])
+
+    rows = {row["alias"]: row for row in json.loads(capsys.readouterr().out)}
+    assert rows["a"]["status"] == "presente"
+
+
+def test_models_list_verify_detects_bad_hash(capsys, install) -> None:
+    models = install({"a": gguf()})
+    (models / "m.gguf").write_bytes(b"contenido que no casa")
+
+    cli.main(["models", "list", "--json", "--verify"])
+
+    rows = {row["alias"]: row for row in json.loads(capsys.readouterr().out)}
+    assert rows["a"]["status"] == "hash incorrecto"
+
+
+def test_models_without_command_shows_help(capsys) -> None:
+    assert cli.main(["models"]) == 2
+    assert "list" in capsys.readouterr().err
