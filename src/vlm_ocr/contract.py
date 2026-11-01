@@ -8,11 +8,6 @@ from typing import Any
 
 import jsonschema
 
-try:
-    from llama_cpp import Llama
-except ImportError:  # permite usar el modo Markdown sin el motor LLM
-    Llama = None  # type: ignore[assignment]
-
 _NUMBER_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
 _EN_NUMBER_RE = re.compile(r"^-?\d{1,3}(?:,\d{3})+(?:\.\d+)?$")
 _CURRENCY_RE = re.compile(
@@ -26,6 +21,7 @@ MIN_OUTPUT_TOKENS = 256
 from .annotations import field_map, has_annotations
 from .catalog import ModelRef, ad_hoc
 from .errors import ContractError
+from .llmrun import BuiltPrompt, Runner, runner_for
 
 
 def load_contract(path: Path | str) -> tuple[dict, str]:
@@ -246,23 +242,10 @@ def infer_contract(
     ``usage_out``, si se pasa, se rellena con carga, intentos y tokens; sin él
     (uso normal) no se mide nada.
     """
-    if Llama is None:
-        raise ContractError(
-            "llama-cpp-python no está instalado; instálalo para usar --format json"
-        )
     ref = model if isinstance(model, ModelRef) else ad_hoc(model)
-    model_path = ref.path
-    if model_path is None:
-        raise ContractError(f"el modelo {ref.label} no es local")
-    if not model_path.is_file():
-        raise ContractError(f"no existe el modelo: {model_path}")
-    load_start = perf_counter()
-    try:
-        llm = Llama(model_path=str(model_path), n_ctx=n_ctx, verbose=False)
-    except Exception as exc:
-        raise ContractError(f"no se pudo cargar el modelo {model_path}: {exc}") from exc
+    runner: Runner = runner_for(n_ctx=n_ctx, ref=ref)
     if usage_out is not None:
-        usage_out["load_time_ms"] = round((perf_counter() - load_start) * 1000, 1)
+        usage_out["load_time_ms"] = runner.load_time_ms
     generation_start = perf_counter()
     attempts = 0
     totals: dict[str, int] = {}
@@ -270,10 +253,11 @@ def infer_contract(
 
     ocr_text = _truncate_text(text, max_ocr_tokens)
     messages = _build_messages(ocr_text, contract, kind, instructions)
+    prompt = BuiltPrompt(messages=messages, response_format=_response_format(contract, kind))
     base_max_tokens = max(256, len(json.dumps(contract, ensure_ascii=False)) * 2)
 
     raw, usage, finish_reason, budget = _chat_with_budget(
-        llm, messages, contract, kind, base_max_tokens, n_ctx
+        runner, prompt, base_max_tokens, n_ctx
     )
     attempts += 1
     seen_usage = _accumulate_usage(totals, usage) or seen_usage
@@ -296,8 +280,11 @@ def infer_contract(
             ),
         },
     ]
+    repair_prompt = BuiltPrompt(
+        messages=repair_messages, response_format=prompt.response_format
+    )
     raw_retry, usage, finish_reason, budget = _chat_with_budget(
-        llm, repair_messages, contract, kind, base_max_tokens, n_ctx
+        runner, repair_prompt, base_max_tokens, n_ctx
     )
     attempts += 1
     seen_usage = _accumulate_usage(totals, usage) or seen_usage
@@ -310,17 +297,12 @@ def infer_contract(
     return _validated_final(data, contract, kind, text)
 
 
-def _estimate_prompt_tokens(llm: Llama, messages: list[dict]) -> int:
-    """Estima los tokens del chat con el tokenizador del modelo; sin él, ~4 chars/token."""
-    text = "\n".join(str(message.get("content", "")) for message in messages)
-    tokenize = getattr(llm, "tokenize", None)
-    if callable(tokenize):
-        try:
-            tokens = tokenize(text.encode("utf-8"))
-        except (AttributeError, TypeError, ValueError, RuntimeError):
-            return max(1, len(text) // 4)
-        return max(1, len(tokens))
-    return max(1, len(text) // 4)
+def _response_format(contract: dict, kind: str) -> dict:
+    """Formato pedido al backend: JSON y, con schema, la gramática del contrato."""
+    response_format: dict = {"type": "json_object"}
+    if kind == "schema":
+        response_format["schema"] = contract
+    return response_format
 
 
 def _token_budget(
@@ -339,22 +321,20 @@ def _token_budget(
 
 
 def _chat_with_budget(
-    llm: Llama,
-    messages: list[dict],
-    contract: dict,
-    kind: str,
+    runner: Runner,
+    prompt: BuiltPrompt,
     requested: int,
     n_ctx: int,
 ) -> tuple[str, dict[str, Any] | None, str | None, int]:
     """Llama al modelo con ``max_tokens`` ajustado al contexto disponible."""
-    prompt_tokens = _estimate_prompt_tokens(llm, messages)
+    prompt_tokens = runner.estimate_tokens(prompt)
     budget = _token_budget(prompt_tokens, n_ctx, requested)
     if budget is None:
         raise ContractError(
             f"el prompt ocupa ~{prompt_tokens} tokens y no deja hueco en n_ctx={n_ctx}: "
             "reduce el contrato o el texto, o sube --n-ctx"
         )
-    content, usage, finish_reason = _chat(llm, messages, contract, kind, budget)
+    content, usage, finish_reason = runner.complete(prompt, budget)
     return content, usage, finish_reason, budget
 
 
@@ -491,29 +471,6 @@ def _build_messages(
         f"OCR TEXT:\n<ocr_text>\n{ocr_text}\n</ocr_text>\n"
     )
     return [{"role": "user", "content": prompt}]
-
-
-def _chat(
-    llm: Llama,
-    messages: list[dict],
-    contract: dict,
-    kind: str,
-    max_tokens: int,
-) -> tuple[str, dict[str, Any] | None, str | None]:
-    response_format: dict[str, Any] = {"type": "json_object"}
-    if kind == "schema":
-        response_format["schema"] = contract
-    response = llm.create_chat_completion(
-        messages=messages,
-        temperature=0,
-        max_tokens=max_tokens,
-        response_format=response_format,
-    )
-    choice = response["choices"][0]
-    content = choice["message"]["content"]
-    usage = response.get("usage")
-    finish_reason = choice.get("finish_reason")
-    return content, usage if isinstance(usage, dict) else None, finish_reason
 
 
 def _parse_and_validate(raw: str, contract: dict, kind: str) -> tuple[Any, list[str]]:

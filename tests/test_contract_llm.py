@@ -39,7 +39,7 @@ def _fake_llama(
                 choice["finish_reason"] = finish_reasons.pop(0)
             return {"choices": [choice]}
 
-    monkeypatch.setattr("vlm_ocr.contract.Llama", FakeLlama)
+    monkeypatch.setattr("vlm_ocr.llmrun.Llama", FakeLlama)
     return calls
 
 
@@ -245,7 +245,7 @@ def _fake_llama_with_usage(monkeypatch, replies: list[tuple[str, dict | None]]) 
                 response["usage"] = usage
             return response
 
-    monkeypatch.setattr("vlm_ocr.contract.Llama", FakeLlama)
+    monkeypatch.setattr("vlm_ocr.llmrun.Llama", FakeLlama)
 
 
 def test_usage_out_accumulates_tokens_across_attempts(monkeypatch, tmp_path: Path) -> None:
