@@ -84,19 +84,19 @@
       "gated": true,
       "prompt_style": "chat"
     },
-    "llama32-3b-cloud": {
-      "name": "Llama 3.2 3B (ollama cloud)",
+    "cloud-deepseek": {
+      "name": "DeepSeek V4.1 Flash (ollama cloud)",
       "kind": "ollama",
-      "params": "3B",
-      "context": 131072,
-      "license": "llama-3.2-community",
-      "license_url": "https://www.llama.com/llama3_2/license/",
+      "params": "763B",
+      "context": 1048576,
+      "license": "ollama-cloud",
       "redistributable": false,
-      "model": "llama3.2",
+      "model": "deepseek-v4.1-flash:1017",
       "base_url": "https://ollama.com",
       "api_key_env": "OLLAMA_API_KEY",
       "requires_key": true,
-      "prompt_style": "chat"
-    }
-  }
+      "prompt_style": "chat",
+      "max_tokens": 2048,
+      "think": false
+    }  }
 }

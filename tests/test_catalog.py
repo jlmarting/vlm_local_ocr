@@ -234,8 +234,8 @@ def test_default_alias_ignores_download_state(install) -> None:
 
 
 PACKAGED = [
+    "cloud-deepseek",
     "llama32-3b",
-    "llama32-3b-cloud",
     "nuextract-tiny",
     "phi4mini",
     "qwen05b",
@@ -433,3 +433,37 @@ def test_release_license_files_exist() -> None:
     assert licenses
     for relative in licenses:
         assert (root / relative).is_file(), relative
+
+
+def test_max_tokens_and_think_are_parsed(tmp_path: Path) -> None:
+    path = write_catalog(
+        tmp_path / "catalog.json",
+        {"a": ollama(max_tokens=2048, think=False)},
+    )
+
+    entry = catalog.load_catalog(path)["a"]
+
+    assert entry.max_tokens == 2048
+    assert entry.think is False
+
+
+def test_think_absent_stays_none(tmp_path: Path) -> None:
+    path = write_catalog(tmp_path / "catalog.json", {"a": ollama()})
+
+    assert catalog.load_catalog(path)["a"].think is None
+
+
+@pytest.mark.parametrize("value", [0, -1, "2048", 2.5, True])
+def test_bad_max_tokens_raises(tmp_path: Path, value) -> None:
+    path = write_catalog(tmp_path / "catalog.json", {"a": ollama(max_tokens=value)})
+
+    with pytest.raises(catalog.CatalogError, match="max_tokens"):
+        catalog.load_catalog(path)
+
+
+@pytest.mark.parametrize("value", ["false", 0, 1])
+def test_bad_think_raises(tmp_path: Path, value) -> None:
+    path = write_catalog(tmp_path / "catalog.json", {"a": ollama(think=value)})
+
+    with pytest.raises(catalog.CatalogError, match="think"):
+        catalog.load_catalog(path)
