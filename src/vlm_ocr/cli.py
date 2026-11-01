@@ -157,17 +157,23 @@ def _no_model_message() -> str:
     )
 
 
+def _missing_key(model_ref: catalog.ModelRef | None) -> str | None:
+    """Mensaje de error si un modelo remoto exige key y no está en el entorno."""
+    if model_ref is None or not model_ref.is_remote or not model_ref.entry.requires_key:
+        return None
+    env = model_ref.entry.api_key_env or "OLLAMA_API_KEY"
+    if os.environ.get(env):
+        return None
+    return f"falta la API key del proveedor remoto: export {env}=..."
+
+
 def _model_problem(model_ref: catalog.ModelRef | None) -> str | None:
     """Motivo por el que el modelo no se puede usar, o None si está listo."""
     if model_ref is None:
         return _no_model_message()
     if model_ref.path is not None and not model_ref.path.is_file():
         return f"no existe el modelo: {model_ref.path}"
-    if model_ref.is_remote and model_ref.entry.requires_key:
-        env = model_ref.entry.api_key_env or ""
-        if not os.environ.get(env):
-            return f"falta la API key del proveedor remoto: export {env}=..."
-    return None
+    return _missing_key(model_ref)
 
 
 def _human_size(size: int | None) -> str:
@@ -334,6 +340,15 @@ def main(argv: list[str] | None = None) -> int:
                     template_contract_hash, directory=args.templates_dir
                 )
             model_ref = _resolve_model(args)
+            missing_key = _missing_key(model_ref)
+            if missing_key is not None and not args.no_llm:
+                return fail("usage", missing_key, 2)
+            if model_ref is not None and model_ref.is_remote and not args.no_llm:
+                print(
+                    "aviso: el texto del documento se enviará a "
+                    f"{model_ref.entry.base_url}",
+                    file=sys.stderr,
+                )
             if not args.no_llm and not use_rows and not templates_enabled:
                 problem = _model_problem(model_ref)
                 if problem is not None:

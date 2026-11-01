@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from vlm_ocr.catalog import ModelEntry, ModelRef
 from vlm_ocr.promptstyles import (
     build_chat_messages,
@@ -12,15 +14,15 @@ EXAMPLE = {"cliente": "ACME", "total": 1.5}
 
 
 def ref(**overrides) -> ModelRef:
-    entry = ModelEntry(
-        alias="a",
-        name="Modelo",
-        kind="gguf",
-        license="MIT",
-        prompt_style="chat",
-        **overrides,
-    )
-    return ModelRef(entry)
+    fields = {
+        "alias": "a",
+        "name": "Modelo",
+        "kind": "gguf",
+        "license": "MIT",
+        "prompt_style": "chat",
+    }
+    fields.update(overrides)
+    return ModelRef(ModelEntry(**fields))
 
 
 def test_chat_prompt_keeps_invariants_before_task_block() -> None:
@@ -93,3 +95,50 @@ def test_schema_from_uses_any_of_for_nullables() -> None:
     }
     assert schema["required"] == ["a", "b", "c"]
     assert schema["additionalProperties"] is False
+
+
+def test_empty_template_blanks_scalars_and_arrays() -> None:
+    from vlm_ocr.promptstyles import empty_template
+
+    template = empty_template({"a": "", "b": {"c": 1.0}, "d": [0], "e": True})
+
+    assert template == {"a": "", "b": {"c": ""}, "d": [], "e": ""}
+
+
+def test_empty_template_ignores_schema_keywords() -> None:
+    from vlm_ocr.promptstyles import empty_template
+
+    schema = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {"a": {"type": "number", "x-labels": ["A"]}},
+        "required": ["a"],
+    }
+
+    assert empty_template(schema) == {"a": ""}
+
+
+def test_nuextract_prompt_is_a_native_completion() -> None:
+    prompt = build_prompt(ref(prompt_style="nuextract"), "Total: 1.234,56", EXAMPLE, "example")
+
+    assert prompt.messages is None
+    assert prompt.raw.startswith("<|input|>\n### Template:\n")
+    assert prompt.raw.endswith("<|output|>")
+    assert "### Text:\nTotal: 1234.56" in prompt.raw
+    assert '"total": ""' in prompt.raw
+
+
+def test_nuextract_prompt_uses_contract_as_schema() -> None:
+    schema = {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
+              "properties": {"a": {"type": "string"}}}
+
+    prompt = build_prompt(ref(prompt_style="nuextract"), "texto", schema, "schema")
+
+    assert prompt.response_format == {"type": "json_object", "schema": schema}
+
+
+def test_nuextract_repair_is_rejected() -> None:
+    prompt = build_prompt(ref(prompt_style="nuextract"), "texto", EXAMPLE, "example")
+
+    with pytest.raises(NotImplementedError):
+        build_repair_prompt(ref(prompt_style="nuextract"), prompt, "{}", ["x"])

@@ -40,6 +40,17 @@ def build_prompt(
             ),
             response_format=response_format(contract, kind),
         )
+    if style == "nuextract":
+        template = json.dumps(empty_template(contract), indent=4, ensure_ascii=False)
+        raw = (
+            f"<|input|>\n### Template:\n{template}\n### Text:\n"
+            f"{normalize_numbers(text)}\n\n<|output|>"
+        )
+        return BuiltPrompt(
+            raw=raw,
+            response_format=response_format(contract, kind),
+            text_for_tokens=raw,
+        )
     raise NotImplementedError(f"estilo de prompt no soportado: {style}")
 
 
@@ -64,6 +75,31 @@ def build_repair_prompt(
         },
     ]
     return BuiltPrompt(messages=messages, response_format=prompt.response_format)
+
+
+def empty_template(contract: dict) -> Any:
+    """Plantilla de NuExtract: la forma del contrato con todos los valores vacíos.
+
+    Con un JSON Schema se parte de ``properties``; con un ejemplo, de sus claves.
+    """
+    if isinstance(contract, dict):
+        properties = contract.get("properties")
+        if isinstance(properties, dict):
+            return {key: _empty_from_schema(node) for key, node in properties.items()}
+        return {key: empty_template(value) for key, value in contract.items()}
+    if isinstance(contract, list):
+        return []
+    return ""
+
+
+def _empty_from_schema(node: Any) -> Any:
+    if isinstance(node, dict):
+        properties = node.get("properties")
+        if isinstance(properties, dict):
+            return {key: _empty_from_schema(sub) for key, sub in properties.items()}
+        if node.get("type") == "array" or "items" in node:
+            return []
+    return ""
 
 
 def build_chat_messages(

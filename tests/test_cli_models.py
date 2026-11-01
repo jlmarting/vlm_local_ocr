@@ -247,3 +247,62 @@ def test_models_fetch_cli_reports_license(tmp_path: Path, capsys, install) -> No
     err = capsys.readouterr().err
     assert "--accept-license" in err
     assert "https://example.com/lic" in err
+
+
+def ollama_entry(**overrides) -> dict:
+    entry = {
+        "name": "Remoto",
+        "kind": "ollama",
+        "license": "MIT",
+        "model": "m:1b",
+        "base_url": "http://127.0.0.1:9",
+        "api_key_env": "OLLAMA_API_KEY",
+        "requires_key": True,
+    }
+    entry.update(overrides)
+    return entry
+
+
+def test_remote_alias_without_key_fails_before_ingest(
+    tmp_path: Path, monkeypatch, capsys, install
+) -> None:
+    install({"remoto": ollama_entry()})
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+
+    def boom(*args, **kwargs):
+        raise AssertionError("no debe procesar el fichero")
+
+    monkeypatch.setattr(cli, "ingest", boom)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+
+    code = cli.main(
+        [str(source), "--format", "json", "--contract", str(_contract(tmp_path)),
+         "--model", "remoto"]
+    )
+
+    assert code == 2
+    assert "OLLAMA_API_KEY" in capsys.readouterr().err
+
+
+def test_remote_alias_reports_provider_and_warns(
+    tmp_path: Path, monkeypatch, capsys, install
+) -> None:
+    install({"remoto": ollama_entry()})
+    monkeypatch.setenv("OLLAMA_API_KEY", "supersecreta")
+    _mock_pipeline(monkeypatch)
+    monkeypatch.setattr(cli, "infer_contract", lambda *a, **k: EXAMPLE)
+
+    code = cli.main(
+        [str(_contract(tmp_path).parent / "doc.pdf"), "--format", "json",
+         "--contract", str(_contract(tmp_path)), "--model", "remoto", "--metrics"]
+    )
+
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "se enviará a http://127.0.0.1:9" in captured.err
+    report = json.loads(captured.err.strip().splitlines()[-1])
+    assert report["llm"]["provider"] == "ollama"
+    assert report["llm"]["model"] == "remoto"
+    assert report["llm"]["load_time_ms"] is None
+    assert "supersecreta" not in json.dumps(report)
