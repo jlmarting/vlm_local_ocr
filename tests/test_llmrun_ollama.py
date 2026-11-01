@@ -174,3 +174,53 @@ def test_invalid_timeout_falls_back(monkeypatch) -> None:
     monkeypatch.setenv("VLM_OCR_TIMEOUT", "no-es-un-numero")
 
     assert OllamaRunner(entry()).timeout == 300.0
+
+
+def test_think_false_is_sent(monkeypatch) -> None:
+    monkeypatch.setenv("OLLAMA_API_KEY", "clave")
+    with serve(payload={"message": {"content": "{}"}}) as (url, captured):
+        OllamaRunner(entry(base_url=url, think=False)).complete(prompt(), 64)
+
+    assert captured["body"]["think"] is False
+
+
+def test_think_absent_is_not_sent(monkeypatch) -> None:
+    monkeypatch.setenv("OLLAMA_API_KEY", "clave")
+    with serve(payload={"message": {"content": "{}"}}) as (url, captured):
+        OllamaRunner(entry(base_url=url, think=None)).complete(prompt(), 64)
+
+    assert "think" not in captured["body"]
+
+
+def test_think_true_is_sent(monkeypatch) -> None:
+    monkeypatch.setenv("OLLAMA_API_KEY", "clave")
+    with serve(payload={"message": {"content": "{}"}}) as (url, captured):
+        OllamaRunner(entry(base_url=url, think=True)).complete(prompt(), 64)
+
+    assert captured["body"]["think"] is True
+
+
+def test_num_ctx_has_a_floor_of_8192(monkeypatch) -> None:
+    monkeypatch.setenv("OLLAMA_API_KEY", "clave")
+    with serve(payload={"message": {"content": "{}"}}) as (url, captured):
+        OllamaRunner(entry(base_url=url, context=1048576)).complete(prompt(), 2048)
+
+    assert captured["body"]["options"]["num_ctx"] == 8192
+
+
+def test_num_ctx_grows_with_prompt_and_budget(monkeypatch) -> None:
+    monkeypatch.setenv("OLLAMA_API_KEY", "clave")
+    huge = prompt(messages=[{"role": "user", "content": "x" * 60000}])
+    with serve(payload={"message": {"content": "{}"}}) as (url, captured):
+        OllamaRunner(entry(base_url=url, context=1048576)).complete(huge, 2048)
+
+    expected = 60000 // 4 + 2048 + 256
+    assert captured["body"]["options"]["num_ctx"] == expected
+
+
+def test_num_ctx_is_capped_by_entry_context(monkeypatch) -> None:
+    monkeypatch.setenv("OLLAMA_API_KEY", "clave")
+    with serve(payload={"message": {"content": "{}"}}) as (url, captured):
+        OllamaRunner(entry(base_url=url, context=4096)).complete(prompt(), 2048)
+
+    assert captured["body"]["options"]["num_ctx"] == 4096
