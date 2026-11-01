@@ -416,3 +416,23 @@ def fetch(
     temporary.rename(target)
     say(f"modelo listo: {target}")
     return target
+
+
+def redistributable_files() -> list[str]:
+    """GGUF del catálogo que pueden viajar dentro del release."""
+    return sorted(
+        entry.file
+        for entry in load_catalog().values()
+        if entry.redistributable and entry.kind == "gguf" and entry.file
+    )
+
+
+def license_files() -> list[str]:
+    """Textos de licencia que deben acompañar a los modelos redistribuibles."""
+    return sorted(
+        {
+            entry.license_file
+            for entry in load_catalog().values()
+            if entry.redistributable and entry.license_file
+        }
+    )

@@ -16,14 +16,50 @@ CLI local para extraer texto de PDFs e imágenes y mapearlo a un contrato JSON, 
 
 ```bash
 uv sync
-uv run python scripts/fetch_models.py   # descarga y verifica el GGUF (~491 MB)
-# artefacto de distribución con el modelo incluido:
+uv run vlm-ocr models list                                   # catálogo, estado y licencias
+uv run vlm-ocr models fetch llama32-3b --accept-license      # ~1,9 GB (modelo por defecto)
+# artefacto de distribución con los modelos redistribuibles:
 ./scripts/build_release.sh
 ```
 
-El script descarga `Qwen2.5-0.5B-Instruct Q4_K_M` (Apache-2.0). Los modelos OCR por defecto vienen en el wheel de `rapidocr` y funcionan offline.
+Los modelos OCR por defecto vienen en el wheel de `rapidocr` y funcionan offline.
 
-El CLI busca el GGUF por defecto en `models/` del repo, `./models/` o `~/.local/share/vlm-local-ocr/models/`; `--model` lo sobrescribe. `--contract`, `--instructions` y `--model` requieren `--format json`: con Markdown el CLI los rechaza con `2` en vez de ignorarlos. `scripts/build_release.sh` genera un artefacto con el modelo incluido.
+El CLI busca cada GGUF en `models/` del repo, `./models/` o `~/.local/share/vlm-local-ocr/models/`; `--model` acepta un alias del catálogo o una ruta. `--contract`, `--instructions`, `--model` y `--profile` requieren `--format json`: con Markdown el CLI los rechaza con `2` en vez de ignorarlos.
+
+## Modelos: catálogo, alias y perfiles
+
+`src/vlm_ocr/catalog.json` (viaja en el wheel) es la única fuente de verdad: alias, nombre, tamaño, sha256, licencia, contexto y perfil. `vlm-ocr models list` muestra el estado (presente/remoto/—) y con `--verify` comprueba el sha256.
+
+| Alias | Modelo | Tamaño | Licencia | Perfil | En el paquete |
+|---|---|---|---|---|---|
+| `llama32-3b` | Llama 3.2 3B Instruct Q4_K_M | 1,9 GB | Llama 3.2 Community | `balanced` (defecto) | sí, con su licencia |
+| `phi4mini` | Phi-4-mini-instruct Q4_K_M | 2,3 GB | MIT | `quality` | sí |
+| `qwen05b` | Qwen2.5-0.5B-Instruct Q4_K_M | 0,5 GB | Apache-2.0 | `fast` | sí |
+| `nuextract-tiny` | NuExtract-1.5-tiny Q4_K_M | 0,4 GB | MIT | `extract` | sí |
+| `qwen25-3b` | Qwen2.5-3B-Instruct Q4_K_M | 2,0 GB | qwen-research | — | **no** (descarga aparte) |
+| `llama32-3b-cloud` | Llama 3.2 3B en ollama | — | Llama 3.2 Community | — | no (API) |
+
+```bash
+uv run vlm-ocr models fetch qwen05b                      # descarga verificada (sha256)
+uv run vlm-ocr models fetch qwen25-3b --accept-license   # licencia qwen-research: consentimiento
+uv run vlm-ocr doc.pdf --format json --contract c.json --model llama32-3b
+uv run vlm-ocr doc.pdf --format json --contract c.json --profile fast
+```
+
+- Precedencia: `--model` (alias o ruta) > `--profile` > modelo por defecto. Si el defecto no está descargado, **error con hint** (`models fetch llama32-3b`); nunca cae en silencio a otro modelo.
+- `--profile` solo resuelve modelos **locales**; lo remoto exige `--model <alias>` explícito.
+- Sin `--accept-license` no se descarga un modelo cuya licencia exige aceptación; sin `HF_TOKEN` no se descargan repos *gated*.
+- Alias propios: `~/.config/vlm-local-ocr/catalog.json` se fusiona sobre el del paquete (mismo alias → gana el del usuario).
+- El paquete solo incluye modelos **redistribuibles**; Qwen2.5-3B (`qwen-research`) queda fuera y se descarga aparte.
+
+### Proveedor remoto (ollama)
+
+```bash
+export OLLAMA_API_KEY=...        # https://ollama.com/settings/keys
+uv run vlm-ocr doc.pdf --format json --contract c.json --model llama32-3b-cloud
+```
+
+Habla el API nativo de ollama (`POST /api/chat`, structured outputs por `format`). Sirve también para un daemon local: pon `base_url` a `http://localhost:11434` en la entrada del catálogo. **Privacidad**: con un alias remoto el texto del documento sale del equipo y se envía a ese endpoint; el CLI lo avisa por stderr. La API key se lee solo de `OLLAMA_API_KEY` (nunca por argumentos) y no se escribe en métricas ni en errores.
 
 ## Uso
 
@@ -122,7 +158,7 @@ Un contrato puede recibir documentos de clientes distintos: cambia el membrete, 
 ```bash
 # Primera pasada: paga el LLM una vez por variante y la registra
 uv run vlm-ocr pedido-cliente-a.png --format json --contract contrato-pedido.json \
-  --model models/Llama-3.2-3B-Instruct-Q4_K_M.gguf --text-format rows --homologate --metrics
+  --model llama32-3b --text-format rows --homologate --metrics
 
 # Siguientes pasadas: asignación determinista, sin modelo
 uv run vlm-ocr pedido-cliente-a.png --format json --contract contrato-pedido.json --no-llm --metrics
@@ -188,6 +224,9 @@ intento; 24 campos verificados contra el PDF.
 | Llama 3.2 3B Q4 | 1/24 | **22/24** | 96-102 s |
 | Contrato anotado + `--no-llm` | — | **24/24** | 0,1 s |
 
+`--profile balanced` (defecto), `--profile quality`, `--profile fast` y `--profile extract`
+seleccionan los modelos locales equivalentes del catálogo.
+
 Lectura: con el texto tal como lo emite la ruta nativa (todas las etiquetas y después todos los
 valores) ningún modelo pasa de 2/24; serializando la tabla en filas, Llama 3.2 3B llega a 22/24.
 El cuello de botella es la representación del texto, no el tamaño del modelo.
@@ -214,7 +253,7 @@ uv run ruff check .
 Banco de modelos (spike, no forma parte de la suite):
 
 ```bash
-uv run python scripts/bench_models.py --model models/llama.gguf --doc nomina.pdf \
+uv run python scripts/bench_models.py --model llama32-3b --doc nomina.pdf \
   --contract contrato.json --instructions prompt.md --out bench.jsonl
 uv run python scripts/score_bench.py --bench bench.jsonl --truth verdad.json
 ```

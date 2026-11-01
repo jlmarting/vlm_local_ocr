@@ -411,3 +411,25 @@ def test_fetch_skips_download_when_valid(install, tmp_path: Path, monkeypatch) -
     monkeypatch.setattr(catalog.urllib.request, "urlopen", boom)
 
     assert catalog.fetch("a", dest=dest, progress=lambda m: None) == dest / "m.gguf"
+
+
+def test_release_helpers_skip_non_redistributable() -> None:
+    files = catalog.redistributable_files()
+
+    assert "qwen2.5-3b-instruct-q4_k_m.gguf" not in files
+    assert {
+        "NuExtract-1.5-tiny.Q4_K_M.gguf",
+        "Phi-4-mini-instruct-Q4_K_M.gguf",
+        "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+        "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+    } <= set(files)
+
+
+def test_release_license_files_exist() -> None:
+    root = Path(__file__).resolve().parents[1]
+
+    licenses = catalog.license_files()
+
+    assert licenses
+    for relative in licenses:
+        assert (root / relative).is_file(), relative
