@@ -37,3 +37,25 @@ def test_document_from_stdin_pipe() -> None:
     assert process.returncode == 0, stderr.decode("utf-8", "replace")
     payload = json.loads(stdout)
     assert "Factura de prueba" in payload["text"]
+
+
+def test_text_from_stdin_pipe() -> None:
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "vlm_ocr",
+            "-",
+            "--format",
+            "json",
+            "--input-format",
+            "txt",
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    stdout, stderr = process.communicate(b"TOTAL | 29.35\n", timeout=60)
+
+    assert process.returncode == 0, stderr.decode("utf-8", "replace")
+    assert "TOTAL | 29.35" in json.loads(stdout)["text"]

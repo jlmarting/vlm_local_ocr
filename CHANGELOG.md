@@ -9,6 +9,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- Texto plano como documento: ficheros `.txt` y `--input-format txt|text` por stdin. Se decodifica en UTF-8 estricto (BOM tolerado), no pasa por OCR y cada línea no vacía es un bloque; vacío o no UTF-8 es error.
 - Entrada por stdin (`-`) para el documento, `--contract` y `--instructions`, con detección del tipo de documento por firma y `--input-format` de rescate. Sin APIs POSIX: la misma ruta sirve en Linux, macOS y Windows. Como máximo una entrada puede ser `-` por invocación.
 - `parse_number` acepta moneda (`$`, `€`, `£`, `¥` y códigos ISO): los importes con símbolo se leen, se asignan y se homologan (`$29.35` → `29.35`).
 - Un valor con etiqueta encontrada pero no legible pasa a `pending` y se pide al LLM; los campos sin etiqueta siguen considerándose ausentes y no disparan el modelo.

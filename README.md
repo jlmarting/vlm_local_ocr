@@ -122,11 +122,19 @@ uv run vlm-ocr factura.pdf --format json --contract - < contrato.json
 # Instrucciones por tubería
 printf 'usa TOTAL' | uv run vlm-ocr factura.pdf --format json \
   --contract factura.json --instructions -
+
+# Texto plano ya extraído (sin OCR)
+printf 'cafe 1,20€ coockie 2,2€ total 3,40€' | uv run vlm-ocr - \
+  --input-format txt --format json
+uv run vlm-ocr nota.txt
 ```
 
 - El tipo del documento se detecta por firma (PDF, PNG, JPEG, TIFF, BMP, WebP);
-  `--input-format pdf|png|jpg|jpeg|tiff|bmp|webp` lo fuerza. Con un fichero, se ignora con un
-  aviso por stderr.
+  `--input-format pdf|png|jpg|jpeg|tiff|bmp|webp|txt|text` lo fuerza. Con un fichero, se ignora
+  con un aviso por stderr.
+- Texto plano: `.txt` o `--input-format txt|text`; no pasa por OCR. Cada línea no vacía es un
+  bloque. Con contrato anotado, una línea `TOTAL | 29.35` se resuelve de forma determinista;
+  una línea mixta sin separador (`total 3,40€`) puede necesitar el LLM.
 - `vlm-ocr -` en un terminal interactivo falla con exit `2` en vez de quedarse esperando.
 - Con `--contract -` no se autodetecta el sidecar `<contrato>.prompt.md`: pasa
   `--instructions` explícito o no habrá instrucciones.
