@@ -73,13 +73,15 @@ class LocalRunner:
         self, prompt: BuiltPrompt, max_tokens: int
     ) -> tuple[str, dict[str, Any] | None, str | None]:
         kwargs: dict[str, Any] = {"temperature": 0, "max_tokens": max_tokens}
-        if prompt.response_format is not None:
-            kwargs["response_format"] = prompt.response_format
         if prompt.messages is not None:
+            if prompt.response_format is not None:
+                kwargs["response_format"] = prompt.response_format
             response = self._llm.create_chat_completion(messages=prompt.messages, **kwargs)
             choice = response["choices"][0]
             content = choice["message"]["content"]
         else:
+            # create_completion no admite ``response_format`` (llama-cpp-python 0.3.36);
+            # el JSON se garantiza validando y, si procede, con el contrato de chat.
             response = self._llm.create_completion(prompt=prompt.raw or "", **kwargs)
             choice = response["choices"][0]
             content = choice["text"]

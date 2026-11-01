@@ -9,6 +9,7 @@ from pathlib import Path
 
 from . import catalog, extract, homologate, metrics, templates, verify
 from .annotations import field_map, has_annotations
+from .bench import run_bench
 from .contract import (
     ContractError,
     infer_contract,
@@ -247,6 +248,16 @@ def _models_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="acepta la licencia del modelo (obligatorio si lo exige)",
     )
+    benchmarking = commands.add_parser("bench", help="mide un modelo sobre un documento")
+    benchmarking.add_argument("alias", help="alias del catálogo")
+    benchmarking.add_argument("--doc", type=Path, required=True)
+    benchmarking.add_argument("--contract", type=Path, required=True)
+    benchmarking.add_argument("--text", type=Path, help="texto ya serializado")
+    benchmarking.add_argument("--instructions", type=Path)
+    benchmarking.add_argument("--n-ctx", type=int, default=4096)
+    benchmarking.add_argument("--max-tokens", type=int, default=1200)
+    benchmarking.add_argument("--no-grammar", action="store_true")
+    benchmarking.add_argument("--out", type=Path)
     return parser
 
 
@@ -259,6 +270,22 @@ def _models_main(argv: list[str]) -> int:
         if args.command == "fetch":
             for alias in args.alias:
                 catalog.fetch(alias, dest=args.dest, accept_license=args.accept_license)
+            return 0
+        if args.command == "bench":
+            record = run_bench(
+                catalog.resolve(args.alias),
+                doc=args.doc,
+                contract_path=args.contract,
+                text=args.text,
+                instructions=args.instructions,
+                n_ctx=args.n_ctx,
+                max_tokens=args.max_tokens,
+                grammar=not args.no_grammar,
+            )
+            line = json.dumps(record, ensure_ascii=False)
+            print(line)
+            if args.out is not None:
+                args.out.open("a", encoding="utf-8").write(line + "\n")
             return 0
     except catalog.CatalogError as exc:
         print(f"error: {exc}", file=sys.stderr)

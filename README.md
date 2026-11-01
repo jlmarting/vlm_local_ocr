@@ -222,10 +222,17 @@ intento; 24 campos verificados contra el PDF.
 | Phi-4-mini Q4 (MIT) | 1/24 | 18/24 | 111-120 s |
 | Qwen2.5-3B Q4 | 1-2/24 | 19/24 | 109-121 s |
 | Llama 3.2 3B Q4 | 1/24 | **22/24** | 96-102 s |
+| NuExtract-1.5-tiny Q4 (estilo nativo) | — | 16/24\* | 26 s |
 | Contrato anotado + `--no-llm` | — | **24/24** | 0,1 s |
 
 `--profile balanced` (defecto), `--profile quality`, `--profile fast` y `--profile extract`
 seleccionan los modelos locales equivalentes del catálogo.
+
+\* Medido el 2026-11-01 sobre la misma nómina, texto en filas y contrato (`vlm-ocr models bench`):
+NuExtract devuelve los números como cadenas (`"2406.89"`), así que puntúa 0/24 en crudo y 16/24
+tras la coerción numérica del CLI, frente a 23/24 de Llama 3.2 3B. Es **4× más rápido**
+(19 t/s contra 3,4 t/s) pero extrae menos: el perfil `extract` es una opción rápida y *verbatim*,
+no un sustituto del perfil `balanced`.
 
 Lectura: con el texto tal como lo emite la ruta nativa (todas las etiquetas y después todos los
 valores) ningún modelo pasa de 2/24; serializando la tabla en filas, Llama 3.2 3B llega a 22/24.

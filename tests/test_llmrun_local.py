@@ -94,3 +94,4 @@ def test_complete_uses_completion_for_raw(monkeypatch, tmp_path: Path) -> None:
     assert finish == "stop"
     assert calls[0]["prompt"] == "<|input|>"
     assert "messages" not in calls[0]
+    assert "response_format" not in calls[0]

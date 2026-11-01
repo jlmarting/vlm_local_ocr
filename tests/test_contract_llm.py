@@ -367,7 +367,7 @@ def test_nuextract_uses_completion_prompt(monkeypatch, tmp_path: Path) -> None:
     assert result == {"cliente": "ACME", "total": 2}
     assert calls[0]["prompt"].startswith("<|input|>")
     assert "messages" not in calls[0]
-    assert calls[0]["response_format"] == {"type": "json_object"}
+    assert "response_format" not in calls[0]
 
 
 def test_nuextract_does_not_retry_on_invalid_json(monkeypatch, tmp_path: Path) -> None:
