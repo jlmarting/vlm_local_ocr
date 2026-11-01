@@ -145,6 +145,7 @@ def test_unlocated_fields_use_a_subcontract(monkeypatch, tmp_path: Path, capsys)
             "--model",
             str(model),
             "--homologate",
+            "--homologate-partial",
             "--templates-dir",
             str(templates_dir),
         ]
@@ -512,6 +513,7 @@ def test_homologate_excludes_non_literal_fields(
             "--model",
             str(_model(tmp_path)),
             "--homologate",
+            "--homologate-partial",
             "--templates-dir",
             str(templates_dir),
             "--metrics",
@@ -545,3 +547,107 @@ def test_homologate_excludes_non_literal_fields(
     report = _last_report(captured)
     assert report["template"]["found"] is True
     assert report["extract"]["llm"] is False
+
+
+def _homologate_argv(tmp_path: Path, templates_dir: Path, *extra: str) -> list[str]:
+    return [
+        str(_source(tmp_path)),
+        "--format", "json",
+        "--contract", str(_contract(tmp_path)),
+        "--model", str(_model(tmp_path)),
+        "--templates-dir", str(templates_dir),
+        *extra,
+        "--metrics",
+    ]
+
+
+def _variant_files(templates_dir: Path) -> list[Path]:
+    return sorted(templates_dir.glob("*/*.json")) if templates_dir.is_dir() else []
+
+
+def test_homologate_blocked_when_fields_remain_unlocated(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    _mock(monkeypatch, _blocks())
+    templates_dir = tmp_path / "templates"
+    monkeypatch.setattr(
+        cli, "infer_contract", lambda *args, **kwargs: {"cliente": "Inventado", "total": 9.99}
+    )
+
+    code = cli.main(_homologate_argv(tmp_path, templates_dir, "--homologate"))
+
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "--homologate-partial" in captured.err
+    report = _last_report(captured)
+    assert report["template"]["blocked"] is True
+    assert report["template"]["homologated"] is False
+    assert _variant_files(templates_dir) == []
+
+
+def test_homologate_partial_saves_only_located_fields(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    _mock(monkeypatch, _blocks())
+    templates_dir = tmp_path / "templates"
+    monkeypatch.setattr(
+        cli, "infer_contract", lambda *args, **kwargs: {"cliente": "Inventado", "total": 9.99}
+    )
+
+    code = cli.main(
+        _homologate_argv(tmp_path, templates_dir, "--homologate", "--homologate-partial")
+    )
+
+    assert code == 0
+    report = _last_report(capsys.readouterr())
+    assert report["template"]["homologated"] is True
+    assert report["template"]["fields_mapped"] == 1
+    assert report["template"]["fields_unlocated"] >= 1
+    files = _variant_files(templates_dir)
+    assert len(files) == 1
+    saved = json.loads(files[0].read_text(encoding="utf-8"))
+    assert "total" in saved["map"]
+    assert "cliente" not in saved["map"]
+
+
+def test_homologate_report_writes_without_saving(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    _mock(monkeypatch, _blocks())
+    templates_dir = tmp_path / "templates"
+    report_path = tmp_path / "mapa.json"
+    monkeypatch.setattr(
+        cli, "infer_contract", lambda *args, **kwargs: {"cliente": "ACME", "total": 9.99}
+    )
+
+    code = cli.main(
+        _homologate_argv(tmp_path, templates_dir, "--homologate-report", str(report_path))
+    )
+
+    assert code == 0
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert payload["digest"]
+    assert payload["map"]["total"]["labels"] == ["TOTAL"]
+    assert payload["blocked"] is False
+    assert payload["saved"] is False
+    assert _variant_files(templates_dir) == []
+
+
+def test_homologate_report_with_save(monkeypatch, tmp_path: Path, capsys) -> None:
+    _mock(monkeypatch, _blocks())
+    templates_dir = tmp_path / "templates"
+    report_path = tmp_path / "mapa.json"
+    monkeypatch.setattr(
+        cli, "infer_contract", lambda *args, **kwargs: {"cliente": "ACME", "total": 9.99}
+    )
+
+    code = cli.main(
+        _homologate_argv(
+            tmp_path, templates_dir, "--homologate", "--homologate-report", str(report_path)
+        )
+    )
+
+    assert code == 0
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert payload["saved"] is True
+    assert len(_variant_files(templates_dir)) == 1

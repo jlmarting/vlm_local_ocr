@@ -84,6 +84,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="registra la variante del documento tras una extracción buena",
     )
     parser.add_argument(
+        "--homologate-partial",
+        action="store_true",
+        help="permite homologar aunque queden campos sin localizar",
+    )
+    parser.add_argument(
+        "--homologate-report",
+        type=Path,
+        help="escribe el mapa aprendido sin guardarlo (inspección)",
+    )
+    parser.add_argument(
         "--templates-dir",
         type=Path,
         help="directorio de variantes (por defecto, el de datos del usuario)",
@@ -184,6 +194,15 @@ def _model_problem(model_ref: catalog.ModelRef | None) -> str | None:
 
 def _human_size(size: int | None) -> str:
     return f"{size / (1024 ** 3):.2f} GB" if size else "—"
+
+
+def _homologate_report(path: Path, payload: dict) -> None:
+    try:
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+    except OSError as exc:
+        print(f"aviso: no se pudo escribir el informe de homologación: {exc}", file=sys.stderr)
 
 
 def _models_list(args: argparse.Namespace) -> int:
@@ -443,7 +462,8 @@ def main(argv: list[str] | None = None) -> int:
             row_blocks = None
 
             need_rows = use_rows or (
-                templates_enabled and (bool(variants) or args.homologate)
+                templates_enabled
+                and (bool(variants) or args.homologate or args.homologate_report is not None)
             )
             if need_rows:
                 row_blocks = _row_blocks(args.file, pages, blocks, args.lang)
@@ -614,7 +634,7 @@ def main(argv: list[str] | None = None) -> int:
                     "contract", "el contrato inferido no es válido: " + "; ".join(errors), 2
                 )
 
-            if args.homologate:
+            if args.homologate or args.homologate_report is not None:
                 if not templates_enabled or row_blocks is None:
                     print(
                         "aviso: --homologate requiere plantillas habilitadas y filas",
@@ -635,16 +655,28 @@ def main(argv: list[str] | None = None) -> int:
                             "quedarán para el LLM.",
                             file=sys.stderr,
                         )
+                    blockers = sorted(set(unlocated))
                     labels = [
                         label for item in learned.values() for label in item.labels
                     ]
                     fingerprint = templates.signature(row_blocks, labels)
+                    blocked = bool(blockers) and not args.homologate_partial
+                    saved = None
                     if fingerprint is None:
+                        if args.homologate:
+                            print(
+                                "aviso: no se pudo aprender el mapa; no se homologa",
+                                file=sys.stderr,
+                            )
+                    elif blocked:
                         print(
-                            "aviso: no se pudo aprender el mapa; no se homologa",
+                            "aviso: no se homologa: "
+                            f"{len(blockers)} campos sin localizar "
+                            f"({', '.join(blockers)}); usa --homologate-partial "
+                            "para guardar solo los localizados",
                             file=sys.stderr,
                         )
-                    else:
+                    elif args.homologate:
                         saved = templates.save_template(
                             fingerprint,
                             templates.Template(
@@ -657,7 +689,15 @@ def main(argv: list[str] | None = None) -> int:
                             ),
                             directory=args.templates_dir,
                         )
-                        if report is not None:
+                    if report is not None:
+                        report["template"].update(
+                            {
+                                "fields_mapped": len(learned),
+                                "fields_unlocated": len(unlocated),
+                                "blocked": blocked,
+                            }
+                        )
+                        if saved is not None:
                             report["template"].update(
                                 {
                                     "found": True,
@@ -666,10 +706,34 @@ def main(argv: list[str] | None = None) -> int:
                                     "version": saved.version,
                                 }
                             )
+                    if args.homologate_report is not None:
+                        _homologate_report(
+                            args.homologate_report,
+                            {
+                                "contract_hash": template_contract_hash
+                                or templates.contract_hash(contract),
+                                "digest": fingerprint.digest if fingerprint else None,
+                                "labels": labels,
+                                "map": {
+                                    path: {
+                                        "labels": list(item.labels),
+                                        "source": item.source,
+                                        "join_label": item.join_label,
+                                    }
+                                    for path, item in learned.items()
+                                },
+                                "absent": list(absent),
+                                "unlocated": list(unlocated),
+                                "blockers": blockers,
+                                "blocked": blocked,
+                                "saved": saved is not None,
+                            },
+                        )
 
             if (
                 templates_enabled
                 and not args.homologate
+                and args.homologate_report is None
                 and template is None
                 and not literal
                 and sys.stderr.isatty()
