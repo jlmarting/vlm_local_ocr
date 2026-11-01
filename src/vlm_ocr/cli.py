@@ -64,7 +64,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--input-format",
-        choices=["pdf", "png", "jpg", "jpeg", "tiff", "bmp", "webp"],
+        choices=["pdf", "png", "jpg", "jpeg", "tiff", "bmp", "webp", "txt", "text"],
         help="tipo del documento cuando llega por stdin (se detecta solo si se omite)",
     )
     parser.add_argument("--dpi", type=int, default=200, help="DPI al rasterizar PDFs")
@@ -580,9 +580,8 @@ def main(argv: list[str] | None = None) -> int:
             if not document_data:
                 return fail("input", "el documento por stdin está vacío", 1)
             if args.input_format is not None:
-                document_kind = (
-                    "jpg" if args.input_format == "jpeg" else args.input_format
-                )
+                aliases = {"jpeg": "jpg", "text": "txt"}
+                document_kind = aliases.get(args.input_format, args.input_format)
             else:
                 document_kind = inputs.detect_document_kind(document_data)
                 if document_kind is None:
