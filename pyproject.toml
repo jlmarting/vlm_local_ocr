@@ -29,6 +29,11 @@ dependencies = [
     "jsonschema>=4.20",
 ]
 
+[project.urls]
+Repository = "https://github.com/jlmarting/vlm_local_ocr"
+Issues = "https://github.com/jlmarting/vlm_local_ocr/issues"
+Changelog = "https://github.com/jlmarting/vlm_local_ocr/blob/master/CHANGELOG.md"
+
 [project.scripts]
 vlm-ocr = "vlm_ocr.cli:main"
 
