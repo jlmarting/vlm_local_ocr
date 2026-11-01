@@ -113,7 +113,9 @@ uv run vlm-ocr documento.pdf --out salida.md
 | `--text-format md\|rows` | md (rows con contrato anotado) | Representación del texto para el contrato |
 | `--no-llm` | off | Solo asignación determinista; no carga modelo |
 | `--strict` | off | Un valor que no aparece literalmente en el texto es error (`2`) |
-| `--homologate` | off | Registra la variante del documento tras una extracción válida |
+| `--homologate` | off | Registra la variante del documento tras una extracción válida (no guarda si quedan campos sin localizar) |
+| `--homologate-partial` | off | Permite homologar aunque queden campos sin localizar |
+| `--homologate-report PATH` | — | Escribe el mapa aprendido sin guardarlo (inspección) |
 | `--templates-dir PATH` | datos del usuario | Directorio de variantes |
 | `--no-template` | off | Ignora las variantes registradas |
 | `--lang LANG` | `default` | Idioma del OCR |

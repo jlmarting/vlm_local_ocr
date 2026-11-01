@@ -768,3 +768,56 @@ def test_templates_drop_removes_variant_and_keeps_history(capsys, tmp_path: Path
 def test_templates_without_command_shows_help(capsys) -> None:
     assert cli.main(["templates"]) == 2
     assert "list" in capsys.readouterr().err
+
+
+def test_ticket_regression_does_not_homologate_a_doubtful_map(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    blocks = [
+        _block("TRANS #:", 10, 0),
+        _block("064 2 1404 2022", 200, 0),
+        _block("AMOUNT DUE", 10, 12),
+        _block("29,35", 200, 12),
+    ]
+    _mock(monkeypatch, blocks)
+    contract = tmp_path / "ticket.json"
+    contract.write_text(
+        json.dumps(
+            {
+                "fecha": "",
+                "hora": "",
+                "pedido": [{"producto": "", "observaciones": "", "precio": 0.0}],
+                "total": 0.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    templates_dir = tmp_path / "templates"
+    monkeypatch.setattr(
+        cli,
+        "infer_contract",
+        lambda *args, **kwargs: {
+            "fecha": "2022",
+            "hora": None,
+            "pedido": [{"producto": "Hamburger", "observaciones": None, "precio": 3.6}],
+            "total": 29.35,
+        },
+    )
+
+    code = cli.main(
+        [
+            str(_source(tmp_path)),
+            "--format", "json",
+            "--contract", str(contract),
+            "--model", str(_model(tmp_path)),
+            "--homologate",
+            "--templates-dir", str(templates_dir),
+            "--metrics",
+        ]
+    )
+
+    assert code == 0
+    report = _last_report(capsys.readouterr())
+    assert report["template"]["blocked"] is True
+    assert report["template"]["homologated"] is False
+    assert _variant_files(templates_dir) == []

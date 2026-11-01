@@ -158,10 +158,12 @@ El ejemplo completo (29 campos de una nómina) está en [`examples/contrato-nomi
 
 Un contrato puede recibir documentos de clientes distintos: cambia el membrete, la disposición de los datos o las observaciones, pero la información converge en el mismo contrato. La **tipología** es el contrato (su hash) y cada disposición distinta es una **variante** registrada bajo esa tipología.
 
-- `--homologate` registra la variante al terminar una extracción válida. Solo se guardan las etiquetas que mapean a campos, las cabeceras y las zonas relativas: **nunca valores**. Los campos con valores no literales se excluyen y quedan para el LLM.
+- `--homologate` registra la variante al terminar una extracción válida. Solo se guardan las etiquetas que mapean a campos, las cabeceras y las zonas relativas: **nunca valores**.
+- **Guarda**: si quedan campos sin localizar (o valores no literales), **no se guarda** y se avisa; `--homologate-partial` lo permite explícitamente. Antes de guardar, `--homologate-report mapa.json` escribe el mapa aprendido **sin** persistirlo.
 - La huella ignora membretes, observaciones y tags: añadir una observación no rompe el reconocimiento.
 - En la siguiente pasada, si la variante cubre el documento, **no se carga el modelo** (0 tokens). Si falta algún campo, el LLM recibe solo ese subconjunto; si el layout deriva, se avisa y cae al LLM completo.
 - Puede haber **N variantes por contrato** (dos clientes, mismo pedido). Se elige por huella exacta o por similitud estructural (0,85 con margen sobre la segunda).
+- `vlm-ocr templates list|show|drop`: inspecciona y retira variantes (`drop` exige `--yes`; el histórico no se toca). Las métricas separan `template.fields_mapped/unlocated/blocked` de `extract.coverage_contract/fields_total/fields_filled` — `coverage` de la variante no es cobertura del contrato.
 
 ```bash
 # Primera pasada: paga el LLM una vez por variante y la registra
