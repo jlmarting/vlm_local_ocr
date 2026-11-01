@@ -43,3 +43,9 @@ def to_text_json(text: str, blocks: list[LayoutBlock] | None = None) -> str:
         payload["layout"] = _layout(blocks)
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
+
+def to_answer_json(text: str, answer: str) -> str:
+    """Serializa texto y respuesta libre del LLM."""
+    payload = {"text": text, "answer": answer}
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
