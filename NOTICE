@@ -14,8 +14,19 @@ Dependencias y componentes de terceros:
   https://github.com/abetlen/llama-cpp-python · https://github.com/ggml-org/llama.cpp
 - **jsonschema** — MIT.
   https://github.com/python-jsonschema/jsonschema
-- **Qwen2.5-0.5B-Instruct** (pesos GGUF, descargados aparte) — Apache-2.0.
-  https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF
+- **Pesos GGUF de modelos de lenguaje** (se empaquetan solo los redistribuibles; los
+  textos completos están en `licenses/`):
+  - **Qwen2.5-0.5B-Instruct** — Apache-2.0, © Alibaba Cloud.
+    https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF
+  - **Phi-4-mini-instruct** — MIT, © Microsoft.
+    https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF
+  - **Llama 3.2 3B Instruct** — Llama 3.2 Community License, © Meta. «Built with Llama».
+    https://www.llama.com/llama3_2/license/
+  - **NuExtract-1.5-tiny** — MIT, © NuMind.
+    https://huggingface.co/numind/NuExtract-1.5-tiny
+
+  **Qwen2.5-3B-Instruct** (licencia `qwen-research`) **no se empaqueta**: se descarga aparte
+  con `vlm-ocr models fetch qwen25-3b --accept-license` aceptando su licencia.
 
 Los modelos OCR de RapidOCR/PaddleOCR incluidos en el wheel se distribuyen bajo
 Apache-2.0. Consulte los ficheros de licencia de cada paquete instalado para el

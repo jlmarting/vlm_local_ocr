@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sys
 import time
 from pathlib import Path
 
-from . import extract, homologate, metrics, templates, verify
+from . import catalog, extract, homologate, metrics, templates, verify
 from .annotations import field_map, has_annotations
+from .bench import run_bench
 from .contract import (
     ContractError,
-    default_model_path,
     infer_contract,
     load_contract,
     load_instructions,
@@ -49,8 +51,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--model",
-        type=Path,
-        help="modelo GGUF; si se omite, se usa el modelo por defecto si está descargado",
+        help="alias del catálogo o ruta a un .gguf; si se omite, el modelo por defecto",
+    )
+    parser.add_argument(
+        "--profile",
+        help="perfil local del catálogo (fast, balanced, quality, extract)",
     )
     parser.add_argument(
         "--instructions",
@@ -126,15 +131,189 @@ def _elapsed_ms(start: float) -> float:
     return round((time.perf_counter() - start) * 1000, 1)
 
 
+def default_model_path() -> Path | None:
+    """Anclaje del modelo por defecto (los tests lo parchean)."""
+    ref = catalog.default_ref()
+    return ref.path if ref is not None else None
+
+
+def _resolve_model(args: argparse.Namespace) -> catalog.ModelRef | None:
+    """Precedencia: --model > --profile > --no-llm > modelo por defecto."""
+    if args.model is not None:
+        return catalog.resolve(args.model)
+    if args.profile is not None:
+        return catalog.by_profile(args.profile)
+    if args.no_llm:
+        return None
+    path = default_model_path()
+    return catalog.ref_for_path(path) if path is not None else None
+
+
+def _no_model_message() -> str:
+    alias = catalog.default_alias()
+    hint = f"vlm-ocr models fetch {alias}" if alias else "vlm-ocr models list"
+    return (
+        "no hay modelo: usa --model <alias|ruta>, --profile <perfil> "
+        f"o descárgalo con `{hint}`"
+    )
+
+
+def _missing_key(model_ref: catalog.ModelRef | None) -> str | None:
+    """Mensaje de error si un modelo remoto exige key y no está en el entorno."""
+    if model_ref is None or not model_ref.is_remote or not model_ref.entry.requires_key:
+        return None
+    env = model_ref.entry.api_key_env or "OLLAMA_API_KEY"
+    if os.environ.get(env):
+        return None
+    return f"falta la API key del proveedor remoto: export {env}=..."
+
+
+def _model_problem(model_ref: catalog.ModelRef | None) -> str | None:
+    """Motivo por el que el modelo no se puede usar, o None si está listo."""
+    if model_ref is None:
+        return _no_model_message()
+    if model_ref.path is not None and not model_ref.path.is_file():
+        return f"no existe el modelo: {model_ref.path}"
+    return _missing_key(model_ref)
+
+
+def _human_size(size: int | None) -> str:
+    return f"{size / (1024 ** 3):.2f} GB" if size else "—"
+
+
+def _models_list(args: argparse.Namespace) -> int:
+    entries = catalog.load_catalog()
+    rows: list[dict[str, object]] = []
+    for alias in sorted(entries):
+        entry = entries[alias]
+        path = catalog.find_downloaded(entry)
+        if entry.kind != "gguf":
+            status = "remoto"
+        elif path is None:
+            status = "—"
+        elif args.verify:
+            status = "verificado" if catalog.verify_file(entry, path) else "hash incorrecto"
+        else:
+            status = "presente"
+        rows.append(
+            {
+                "alias": alias,
+                "name": entry.name,
+                "kind": entry.kind,
+                "size_bytes": entry.size_bytes,
+                "license": entry.license,
+                "profile": entry.profile or "—",
+                "status": status,
+                "path": str(path) if path is not None else None,
+            }
+        )
+    if args.json:
+        print(json.dumps(rows, ensure_ascii=False))
+        return 0
+    header = ("ALIAS", "NOMBRE", "TAMAÑO", "LICENCIA", "PERFIL", "ESTADO")
+    cells = [
+        (
+            str(row["alias"]),
+            str(row["name"]),
+            _human_size(row["size_bytes"]),
+            str(row["license"]),
+            str(row["profile"]),
+            str(row["status"]),
+        )
+        for row in rows
+    ]
+    widths = [len(value) for value in header]
+    for row in cells:
+        widths = [max(width, len(value)) for width, value in zip(widths, row)]
+    for row in [header, *cells]:
+        print("  ".join(value.ljust(width) for value, width in zip(row, widths)).rstrip())
+    return 0
+
+
+def _models_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="vlm-ocr models", description="Catálogo de modelos.")
+    commands = parser.add_subparsers(dest="command")
+    listing = commands.add_parser("list", help="lista el catálogo y su estado")
+    listing.add_argument("--json", action="store_true", help="salida JSON")
+    listing.add_argument(
+        "--verify",
+        action="store_true",
+        help="verifica el sha256 (lento con modelos grandes)",
+    )
+    fetching = commands.add_parser("fetch", help="descarga y verifica uno o más modelos")
+    fetching.add_argument("alias", nargs="+", help="alias del catálogo")
+    fetching.add_argument("--dest", type=Path, help="directorio de destino")
+    fetching.add_argument(
+        "--accept-license",
+        action="store_true",
+        help="acepta la licencia del modelo (obligatorio si lo exige)",
+    )
+    benchmarking = commands.add_parser("bench", help="mide un modelo sobre un documento")
+    benchmarking.add_argument("alias", help="alias del catálogo")
+    benchmarking.add_argument("--doc", type=Path, required=True)
+    benchmarking.add_argument("--contract", type=Path, required=True)
+    benchmarking.add_argument("--text", type=Path, help="texto ya serializado")
+    benchmarking.add_argument("--instructions", type=Path)
+    benchmarking.add_argument("--n-ctx", type=int, default=4096)
+    benchmarking.add_argument("--max-tokens", type=int, default=1200)
+    benchmarking.add_argument("--no-grammar", action="store_true")
+    benchmarking.add_argument("--out", type=Path)
+    return parser
+
+
+def _models_main(argv: list[str]) -> int:
+    parser = _models_parser()
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "list":
+            return _models_list(args)
+        if args.command == "fetch":
+            for alias in args.alias:
+                catalog.fetch(alias, dest=args.dest, accept_license=args.accept_license)
+            return 0
+        if args.command == "bench":
+            record = run_bench(
+                catalog.resolve(args.alias),
+                doc=args.doc,
+                contract_path=args.contract,
+                text=args.text,
+                instructions=args.instructions,
+                n_ctx=args.n_ctx,
+                max_tokens=args.max_tokens,
+                grammar=not args.no_grammar,
+            )
+            line = json.dumps(record, ensure_ascii=False)
+            print(line)
+            if args.out is not None:
+                args.out.open("a", encoding="utf-8").write(line + "\n")
+            return 0
+    except catalog.CatalogError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except ContractError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    parser.print_help(sys.stderr)
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "models":
+        return _models_main(argv[1:])
     args = _build_parser().parse_args(argv)
 
     if args.instructions is not None and args.contract is None:
         print("error: --instructions requiere --contract", file=sys.stderr)
         return 2
-    if args.format == "md" and (args.contract or args.instructions or args.model):
+    if args.format == "md" and (
+        args.contract or args.instructions or args.model or args.profile
+    ):
         print(
-            "error: --contract, --instructions y --model requieren --format json",
+            "error: --contract, --instructions, --model y --profile requieren --format json",
             file=sys.stderr,
         )
         return 2
@@ -172,7 +351,7 @@ def main(argv: list[str] | None = None) -> int:
         contract = None
         kind = None
         instructions = None
-        model_path = None
+        model_ref: catalog.ModelRef | None = None
 
         annotated = False
         use_rows = False
@@ -193,25 +372,28 @@ def main(argv: list[str] | None = None) -> int:
                 variants = templates.list_templates(
                     template_contract_hash, directory=args.templates_dir
                 )
-            if args.model is not None:
-                model_path = args.model
-            elif args.no_llm:
-                model_path = None
-            else:
-                model_path = default_model_path()
+            model_ref = _resolve_model(args)
+            missing_key = _missing_key(model_ref)
+            if missing_key is not None and not args.no_llm:
+                return fail("usage", missing_key, 2)
+            if (
+                model_ref is not None
+                and model_ref.entry.prompt_style != "chat"
+                and not args.no_llm
+                and (instructions or model_ref.entry.prompt_hints)
+            ):
+                print(
+                    "aviso: el estilo del modelo no usa instrucciones ni notas; se omiten",
+                    file=sys.stderr,
+                )
             if not args.no_llm and not use_rows and not templates_enabled:
-                if model_path is None:
-                    return fail(
-                        "usage",
-                        "no hay modelo: pasa --model o descárgalo con "
-                        "`uv run python scripts/fetch_models.py`",
-                        2,
-                    )
-                if not Path(model_path).is_file():
-                    return fail("usage", f"no existe el modelo: {model_path}", 2)
+                problem = _model_problem(model_ref)
+                if problem is not None:
+                    return fail("usage", problem, 2)
             usage_out = {} if report is not None else None
-            if report is not None and model_path is not None:
-                report["llm"]["model"] = Path(model_path).name
+            if report is not None and model_ref is not None:
+                report["llm"]["model"] = model_ref.label
+                report["llm"]["provider"] = model_ref.entry.kind
 
         ingest_start = time.perf_counter()
         pages = ingest(args.file, dpi=args.dpi)
@@ -368,15 +550,15 @@ def main(argv: list[str] | None = None) -> int:
                             2,
                         )
                 else:
-                    if model_path is None:
-                        return fail(
-                            "usage",
-                            "no hay modelo: pasa --model o descárgalo con "
-                            "`uv run python scripts/fetch_models.py`",
-                            2,
+                    problem = _model_problem(model_ref)
+                    if problem is not None:
+                        return fail("usage", problem, 2)
+                    if model_ref.is_remote:
+                        print(
+                            "aviso: el texto del documento se enviará a "
+                            f"{model_ref.entry.base_url}",
+                            file=sys.stderr,
                         )
-                    if not Path(model_path).is_file():
-                        return fail("usage", f"no existe el modelo: {model_path}", 2)
                     if report is not None:
                         report["llm"]["enabled"] = True
                     llm_start = time.perf_counter()
@@ -387,7 +569,7 @@ def main(argv: list[str] | None = None) -> int:
                         input_text,
                         prompt_contract,
                         kind,
-                        model_path,
+                        model_ref,
                         n_ctx=args.n_ctx,
                         instructions=instructions,
                         usage_out=usage_out,
@@ -515,6 +697,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except InputError as exc:
         return fail("input", str(exc), 1)
+    except catalog.CatalogError as exc:
+        return fail("usage", str(exc), 2)
     except ContractError as exc:
         return fail("contract", str(exc), 2)
     except OSError as exc:

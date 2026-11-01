@@ -91,7 +91,7 @@ def _fake_llama(monkeypatch, replies: list[str]) -> list[dict]:
             calls.append({"messages": [dict(m) for m in messages], **kwargs})
             return {"choices": [{"message": {"content": replies.pop(0)}}]}
 
-    monkeypatch.setattr("vlm_ocr.contract.Llama", FakeLlama)
+    monkeypatch.setattr("vlm_ocr.llmrun.Llama", FakeLlama)
     return calls
 
 

@@ -9,6 +9,18 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- Catálogo de modelos (`src/vlm_ocr/catalog.json`, dentro del wheel): alias, tamaño, sha256, licencia, contexto y perfil; overlay de usuario en `~/.config/vlm-local-ocr/catalog.json`.
+- `--model` acepta alias del catálogo o ruta `.gguf`; `--profile fast|balanced|quality|extract` elige un modelo local. Precedencia `--model` > `--profile` > defecto (`llama32-3b`), sin caída silenciosa a otro modelo.
+- Subcomandos `models list [--json] [--verify]` y `models fetch ALIAS… [--accept-license]`: descarga con `.part`, verificación sha256 y consentimiento de licencia; repos *gated* con `HF_TOKEN`.
+- Proveedor remoto ollama (`kind: "ollama"`): API nativa `/api/chat` con structured outputs, `OLLAMA_API_KEY` solo desde el entorno, aviso de privacidad por stderr y `llm.provider` en el informe de métricas.
+- Estilo de prompt nativo de NuExtract-1.5-tiny (`prompt_style: "nuextract"`, perfil `extract`).
+- `scripts/build_release.sh` empaqueta solo los modelos redistribuibles y sus textos de `licenses/`.
+
+### Changed
+
+- `scripts/fetch_models.py` acepta alias y, sin argumentos, descarga el modelo por defecto del catálogo (antes descargaba el 0.5B).
+- El release ya no copia todos los GGUF de `models/`: Qwen2.5-3B (`qwen-research`) queda fuera.
+
 - Plantillas homologadas (variantes): huella estructural sin valores (solo etiquetas de campo + cabeceras + zonas horizontales relativas), N variantes por contrato, búsqueda por digest exacto o similitud, y `--homologate` para registrar el mapa de una extracción válida. `--templates-dir` y `--no-template`.
 - Enrutado determinista con variante: segunda pasada sin LLM (0 tokens); los campos `unlocated` usan un subcontrato y los `absent` quedan `null`; deriva con aviso y caída al LLM.
 - `join_label` aprendido por campo (reproduce `GRUPO 3` sin pegar `PEDIDO: 123`) y equivalencia de fechas (`2026-02-02` ≡ `02/02/2026`) al aprender el mapa.
