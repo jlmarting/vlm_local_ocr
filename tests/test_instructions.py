@@ -95,11 +95,8 @@ def test_instructions_from_stdin_without_data_is_error() -> None:
         load_instructions("c.json", "-")
 
 
-def test_load_prompt_from_file(tmp_path: Path) -> None:
-    path = tmp_path / "tarea.md"
-    path.write_text("  resume el ticket  ", encoding="utf-8")
-
-    assert load_prompt(path) == "resume el ticket"
+def test_load_prompt_inline() -> None:
+    assert load_prompt("  resume el ticket  ") == "resume el ticket"
 
 
 def test_load_prompt_from_stdin_with_bom() -> None:

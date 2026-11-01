@@ -136,9 +136,9 @@ def _instructions_from_bytes(data: bytes) -> str | None:
     return text
 
 
-def load_prompt(path: Path | str, *, data: bytes | None = None) -> str:
-    """Lee el prompt de una tarea libre desde fichero o stdin."""
-    where = "stdin" if data is not None else str(path)
+def load_prompt(task: str, *, data: bytes | None = None) -> str:
+    """Normaliza el prompt de una tarea libre (texto inline o stdin)."""
+    where = "stdin" if data is not None else "prompt"
     if data is not None:
         if len(data) > MAX_PROMPT_CHARS * 4:
             raise ContractError(
@@ -149,19 +149,7 @@ def load_prompt(path: Path | str, *, data: bytes | None = None) -> str:
         except UnicodeDecodeError as exc:
             raise ContractError(f"el prompt no es UTF-8 válido: {where}") from exc
     else:
-        prompt_path = Path(path)
-        if not prompt_path.exists():
-            raise ContractError(f"no existe el prompt: {prompt_path}")
-        if prompt_path.stat().st_size > MAX_PROMPT_CHARS * 4:
-            raise ContractError(
-                f"el prompt supera {MAX_PROMPT_CHARS} caracteres ({prompt_path})"
-            )
-        try:
-            text = prompt_path.read_text(encoding="utf-8-sig")
-        except UnicodeDecodeError as exc:
-            raise ContractError(f"el prompt no es UTF-8 válido: {prompt_path}") from exc
-        except OSError as exc:
-            raise ContractError(f"no se pudo leer el prompt {prompt_path}: {exc}") from exc
+        text = task
 
     text = text.strip()
     if not text:
