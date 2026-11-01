@@ -20,25 +20,49 @@ MIN_OUTPUT_TOKENS = 256
 
 from .catalog import ModelRef, ad_hoc
 from .errors import ContractError
+from .inputs import is_stdin
 from .llmrun import BuiltPrompt, Runner, runner_for
 from .promptstyles import build_prompt, build_repair_prompt, normalize_numbers
 
 
-def load_contract(path: Path | str) -> tuple[dict, str]:
-    """Carga un contrato y decide si es JSON Schema o ejemplo de datos."""
+def load_contract(
+    path: Path | str, *, data: bytes | None = None
+) -> tuple[dict, str]:
+    """Carga un contrato desde fichero o bytes de stdin y detecta su tipo."""
     contract_path = Path(path)
-    if not contract_path.exists():
-        raise ContractError(f"no existe el contrato: {contract_path}")
+    where = "stdin" if data is not None else str(contract_path)
+    if data is not None:
+        text = _decode(data, f"el contrato no es UTF-8 válido: {where}")
+    else:
+        if not contract_path.exists():
+            raise ContractError(f"no existe el contrato: {contract_path}")
+        try:
+            text = contract_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise ContractError(
+                f"el contrato no es UTF-8 válido: {contract_path}"
+            ) from exc
+        except OSError as exc:
+            raise ContractError(
+                f"no se pudo leer el contrato {contract_path}: {exc}"
+            ) from exc
+    return _parse_contract(text, where)
+
+
+def _decode(data: bytes, message: str) -> str:
     try:
-        data = json.loads(contract_path.read_text(encoding="utf-8"))
+        return data.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise ContractError(f"el contrato no es UTF-8 válido: {contract_path}") from exc
+        raise ContractError(message) from exc
+
+
+def _parse_contract(text: str, where: str) -> tuple[dict, str]:
+    try:
+        data = json.loads(text)
     except json.JSONDecodeError as exc:
         raise ContractError(
-            f"contrato JSON inválido en {contract_path} (línea {exc.lineno}): {exc.msg}"
+            f"contrato JSON inválido en {where} (línea {exc.lineno}): {exc.msg}"
         ) from exc
-    except OSError as exc:
-        raise ContractError(f"no se pudo leer el contrato {contract_path}: {exc}") from exc
     if not isinstance(data, dict):
         raise ContractError("el contrato debe ser un objeto JSON")
     kind = "schema" if ("$schema" in data or "$defs" in data) else "example"
@@ -51,14 +75,23 @@ def sidecar_path(contract_path: Path | str) -> Path:
 
 
 def load_instructions(
-    contract_path: Path | str, explicit: Path | str | None = None
+    contract_path: Path | str,
+    explicit: Path | str | None = None,
+    *,
+    data: bytes | None = None,
 ) -> str | None:
-    """Lee las instrucciones de ajuste (explícitas o sidecar). None si no hay."""
+    """Lee las instrucciones de ajuste (explícitas, sidecar o stdin). None si no hay."""
+    if data is not None:
+        return _instructions_from_bytes(data)
     if explicit is not None:
         path = Path(explicit)
+        if is_stdin(path):
+            raise ContractError("las instrucciones por stdin no se han leído")
         if not path.exists():
             raise ContractError(f"no existe el fichero de instrucciones: {path}")
     else:
+        if is_stdin(contract_path):
+            return None
         path = sidecar_path(contract_path)
         if not path.exists():
             return None
@@ -73,6 +106,21 @@ def load_instructions(
         raise ContractError(f"las instrucciones no son UTF-8 válido: {path}") from exc
     except OSError as exc:
         raise ContractError(f"no se pudieron leer las instrucciones {path}: {exc}") from exc
+    if not text:
+        return None
+    if len(text) > MAX_INSTRUCTIONS_CHARS:
+        raise ContractError(
+            f"las instrucciones superan {MAX_INSTRUCTIONS_CHARS} caracteres ({len(text)})"
+        )
+    return text
+
+
+def _instructions_from_bytes(data: bytes) -> str | None:
+    if len(data) > MAX_INSTRUCTIONS_CHARS * 4:
+        raise ContractError(
+            f"las instrucciones superan {MAX_INSTRUCTIONS_CHARS} caracteres (stdin)"
+        )
+    text = _decode(data, "las instrucciones no son UTF-8 válido: stdin").strip()
     if not text:
         return None
     if len(text) > MAX_INSTRUCTIONS_CHARS:

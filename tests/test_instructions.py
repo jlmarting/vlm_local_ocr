@@ -68,3 +68,26 @@ def test_too_long_sidecar_raises(tmp_path: Path) -> None:
 
     with pytest.raises(ContractError, match="4000"):
         load_instructions(contract)
+
+
+def test_stdin_contract_does_not_autodetect_sidecar(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "-.prompt.md").write_text("no usar", encoding="utf-8")
+
+    assert load_instructions("-") is None
+
+
+def test_instructions_from_stdin_data_are_stripped() -> None:
+    assert load_instructions("c.json", "-", data=b"  ajuste  ") == "ajuste"
+
+
+def test_instructions_from_stdin_respect_the_limit() -> None:
+    with pytest.raises(ContractError, match="4000"):
+        load_instructions("c.json", "-", data=b"x" * (MAX_INSTRUCTIONS_CHARS + 1))
+
+
+def test_instructions_from_stdin_without_data_is_error() -> None:
+    with pytest.raises(ContractError, match="stdin"):
+        load_instructions("c.json", "-")
