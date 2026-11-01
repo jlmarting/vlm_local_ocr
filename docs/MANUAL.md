@@ -37,8 +37,8 @@ uv run vlm-ocr models fetch llama32-3b --accept-license    # modelo por defecto 
 ```
 
 El catálogo (`src/vlm_ocr/catalog.json`, dentro del wheel) define alias, tamaño, sha256, licencia,
-contexto y perfil. El CLI busca cada GGUF en `models/` del repo, `./models/` o
-`~/.local/share/vlm-local-ocr/models/`. Alias disponibles:
+contexto y perfil. El CLI busca cada GGUF en `models/` del repo, `./models/` o el directorio de datos del
+usuario (ver rutas por plataforma). Alias disponibles:
 
 | Alias | Modelo | Licencia | Perfil | Empaquetado |
 |---|---|---|---|---|
@@ -52,7 +52,7 @@ contexto y perfil. El CLI busca cada GGUF en `models/` del repo, `./models/` o
 - `models fetch ALIAS…` descarga con sha256 y deja `<fichero>.part` solo durante la descarga.
   `--accept-license` es obligatorio cuando la licencia lo exige; los repos *gated* requieren
   `HF_TOKEN` en el entorno.
-- Alias propios: `~/.config/vlm-local-ocr/catalog.json` se fusiona sobre el del paquete.
+- Alias propios: `<config>/vlm-local-ocr/catalog.json` se fusiona sobre el del paquete (ver rutas por plataforma).
 - Cloud (`kind: "ollama"`): la entrada declara `context`, `max_tokens` y `think`. El techo de
   salida no es un gasto; `think: false` desactiva el razonamiento donde el proveedor lo respeta
   (`deepseek-v4.1-flash` sí; `gpt-oss:120b` no). El `num_ctx` se calcula solo (prompt + techo,
@@ -60,6 +60,17 @@ contexto y perfil. El CLI busca cada GGUF en `models/` del repo, `./models/` o
 - `models list [--json] [--verify]`: el sha256 solo se comprueba con `--verify`.
 - Para distribución, `scripts/build_release.sh` incluye únicamente los modelos redistribuibles y
   sus textos de `licenses/`. Qwen2.5-3B no se empaqueta.
+
+### Rutas por plataforma
+
+| Uso | Linux | Windows | macOS |
+|---|---|---|---|
+| Datos: plantillas y modelos | `$XDG_DATA_HOME/vlm-local-ocr/` o `~/.local/share/vlm-local-ocr/` | `%LOCALAPPDATA%\vlm-local-ocr\` | `~/Library/Application Support/vlm-local-ocr/` |
+| Config: overlay del catálogo | `~/.config/vlm-local-ocr/` | `%APPDATA%\vlm-local-ocr\` | `~/Library/Application Support/vlm-local-ocr/` |
+
+Si el directorio antiguo (XDG) existe con contenido y el nuevo está vacío, se prefiere el
+antiguo: nadie pierde plantillas o modelos al cambiar de versión. `--templates-dir` y las rutas
+explícitas mandan siempre.
 
 ## 4. Uso
 
@@ -216,7 +227,7 @@ la zona de items. `--homologate-report` muestra el mapa `items` aprendido.
 
 ### Plantillas homologadas (variantes)
 
-El contrato identifica la **tipología**; cada disposición estructural distinta de esa tipología es una **variante**. `--homologate` aprende el mapa de una extracción válida (`campo → etiqueta + columna`) y lo guarda en `$XDG_DATA_HOME/vlm-local-ocr/templates/<hash-contrato>/` (por defecto `~/.local/share/vlm-local-ocr/templates/`; `--templates-dir` lo cambia). La huella solo mira las filas que mapean a campos y las cabeceras, con zonas horizontales relativas: membretes, observaciones y tags no cuentan. **No se guardan valores**; los campos no literales se excluyen y quedan `unlocated`.
+El contrato identifica la **tipología**; cada disposición estructural distinta de esa tipología es una **variante**. `--homologate` aprende el mapa de una extracción válida (`campo → etiqueta + columna`) y lo guarda en `<datos>/vlm-local-ocr/templates/<hash-contrato>/` (`--templates-dir` lo cambia). La huella solo mira las filas que mapean a campos y las cabeceras, con zonas horizontales relativas: membretes, observaciones y tags no cuentan. **No se guardan valores**; los campos no literales se excluyen y quedan `unlocated`.
 
 En la siguiente pasada, si hay variante válida, la asignación es determinista y no se carga el modelo (0 tokens); los campos `unlocated` piden LLM solo por ellos y los `absent` quedan `null`. Si el layout deriva (cobertura del mapa por debajo del 75 %), se avisa y se usa el LLM completo. Con un contrato anotado, sus anotaciones rellenan lo que la variante no cubra. Puede haber N variantes por contrato: se busca la huella exacta y, si no, una similitud estructural (0,85 con margen 0,05 sobre la segunda). `--no-template` desactiva la búsqueda. El informe de métricas añade `template.found/digest/score/version/coverage/homologated/drift`.
 
@@ -385,7 +396,7 @@ La revisión fresca previa al cierre encontró:
 **Alta — resueltas (2026-10-31)**
 1. Exit codes: contrato/instrucciones/modelo → `2`; entrada/OCR → `1`; sin traceback.
 2. Validación `int`: rechaza `1.5` y `"1.5"`; acepta enteros e integrales (`2.0`).
-3. Modelo por defecto resuelto (`models/`, `./models/`, `~/.local/share/...`) y release con GGUF (`scripts/build_release.sh`).
+3. Modelo por defecto resuelto (`models/`, `./models/`, datos del usuario por SO) y release con GGUF (`scripts/build_release.sh`).
 4. Golden test: umbral ≥80 % (3/3 en los documentos actuales).
 5. Prompt injection: OCR y sidecar delimitados (`<ocr_text>`, `<task_instructions>`) con instrucción de no seguirlos.
 

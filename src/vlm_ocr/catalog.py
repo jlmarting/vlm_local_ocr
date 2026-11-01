@@ -12,6 +12,8 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+from . import paths
+
 CATALOG_VERSION = 1
 PROMPT_STYLES = ("chat", "nuextract")
 KINDS = ("gguf", "ollama")
@@ -58,7 +60,7 @@ def packaged_catalog_path() -> Path:
 
 def user_catalog_path() -> Path:
     """Catálogo de usuario: añade o pisa alias sin tocar el paquete."""
-    return Path.home() / ".config" / "vlm-local-ocr" / "catalog.json"
+    return paths.config_dir() / "catalog.json"
 
 
 def load_catalog(path: Path | str | None = None) -> dict[str, ModelEntry]:
@@ -217,12 +219,12 @@ class ModelRef:
 
 def search_dirs() -> list[Path]:
     """Dónde se buscan los GGUF: repo, directorio actual y datos del usuario."""
-    repo_models = Path(__file__).resolve().parents[2] / "models"
-    return [
-        repo_models,
+    dirs = [
+        Path(__file__).resolve().parents[2] / "models",
         Path.cwd() / "models",
-        Path.home() / ".local" / "share" / "vlm-local-ocr" / "models",
+        paths.data_dir() / "models",
     ]
+    return list(dict.fromkeys(dirs))
 
 
 def sha256_file(path: Path | str) -> str:
@@ -353,12 +355,20 @@ def _default_entry() -> ModelEntry | None:
     return None
 
 
-def default_dest() -> Path:
-    """Destino por defecto: ``models/`` del repo si es un checkout; si no, datos de usuario."""
+def _repo_models() -> Path | None:
+    """``models/`` del repo cuando el paquete corre desde un checkout."""
     repo_root = Path(__file__).resolve().parents[2]
     if (repo_root / "pyproject.toml").is_file():
         return repo_root / "models"
-    return Path.home() / ".local" / "share" / "vlm-local-ocr" / "models"
+    return None
+
+
+def default_dest() -> Path:
+    """Destino por defecto: ``models/`` del repo si es un checkout; si no, datos de usuario."""
+    repo_models = _repo_models()
+    if repo_models is not None:
+        return repo_models
+    return paths.data_dir() / "models"
 
 
 def fetch(

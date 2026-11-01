@@ -24,7 +24,9 @@ uv run vlm-ocr models fetch llama32-3b --accept-license      # ~1,9 GB (modelo p
 
 Los modelos OCR por defecto vienen en el wheel de `rapidocr` y funcionan offline.
 
-El CLI busca cada GGUF en `models/` del repo, `./models/` o `~/.local/share/vlm-local-ocr/models/`; `--model` acepta un alias del catálogo o una ruta. `--contract`, `--instructions`, `--model` y `--profile` requieren `--format json`: con Markdown el CLI los rechaza con `2` en vez de ignorarlos.
+El CLI busca cada GGUF en `models/` del repo, `./models/` o el directorio de datos del usuario (ver rutas por plataforma más abajo); `--model` acepta un alias del catálogo o una ruta. `--contract`, `--instructions`, `--model` y `--profile` requieren `--format json`: con Markdown el CLI los rechaza con `2` en vez de ignorarlos.
+
+**Rutas por plataforma.** Datos (plantillas y modelos): `$XDG_DATA_HOME/vlm-local-ocr/` o `~/.local/share/vlm-local-ocr/` en Linux; `%LOCALAPPDATA%\vlm-local-ocr\` en Windows; `~/Library/Application Support/vlm-local-ocr/` en macOS. Configuración (overlay del catálogo): `~/.config/vlm-local-ocr/` en Linux; `%APPDATA%\vlm-local-ocr\` en Windows; `~/Library/Application Support/vlm-local-ocr/` en macOS. Si el directorio antiguo tiene contenido y el nuevo está vacío, se prefiere el antiguo; `--templates-dir` y las rutas explícitas mandan siempre.
 
 ## Modelos: catálogo, alias y perfiles
 
@@ -49,7 +51,7 @@ uv run vlm-ocr doc.pdf --format json --contract c.json --profile fast
 - Precedencia: `--model` (alias o ruta) > `--profile` > modelo por defecto. Si el defecto no está descargado, **error con hint** (`models fetch llama32-3b`); nunca cae en silencio a otro modelo.
 - `--profile` solo resuelve modelos **locales**; lo remoto exige `--model <alias>` explícito.
 - Sin `--accept-license` no se descarga un modelo cuya licencia exige aceptación; sin `HF_TOKEN` no se descargan repos *gated*.
-- Alias propios: `~/.config/vlm-local-ocr/catalog.json` se fusiona sobre el del paquete (mismo alias → gana el del usuario).
+- Alias propios: `<config>/vlm-local-ocr/catalog.json` se fusiona sobre el del paquete (mismo alias → gana el del usuario); `<config>` depende del SO (ver rutas por plataforma).
 - El paquete solo incluye modelos **redistribuibles**; Qwen2.5-3B (`qwen-research`) queda fuera y se descarga aparte.
 
 ### Proveedor remoto (ollama)
@@ -260,7 +262,7 @@ uv run vlm-ocr pedido-cliente-a.png --format json --contract contrato-pedido.jso
 uv run vlm-ocr pedido-cliente-a.png --format json --contract contrato-pedido.json --no-llm --metrics
 ```
 
-Las variantes viven en `$XDG_DATA_HOME/vlm-local-ocr/templates/<hash-contrato>/` (por defecto `~/.local/share/vlm-local-ocr/templates/`); `--templates-dir` lo cambia y `--no-template` las ignora. El informe de métricas añade `template.found/digest/score/version/coverage/homologated/drift`. Si el contrato cambia, su hash cambia y las variantes caducan solas.
+Las variantes viven en `<datos>/vlm-local-ocr/templates/<hash-contrato>/`, con `<datos>` según el SO (ver rutas por plataforma); `--templates-dir` lo cambia y `--no-template` las ignora. El informe de métricas añade `template.found/digest/score/version/coverage/homologated/drift`. Si el contrato cambia, su hash cambia y las variantes caducan solas.
 
 ## Métricas (opt-in)
 

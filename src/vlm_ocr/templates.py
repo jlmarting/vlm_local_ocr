@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -11,6 +10,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
+from . import paths
 from .annotations import (
     SOURCE_ALIASES,
     leaf_paths_for,
@@ -168,12 +168,10 @@ def signature(blocks: list[LayoutBlock], labels: Iterable[str]) -> Fingerprint |
 
 
 def template_dir(explicit: Path | str | None = None) -> Path:
-    """Directorio de plantillas: explícito, XDG o el defecto del usuario."""
+    """Directorio de plantillas: explícito o el de datos de la plataforma."""
     if explicit is not None:
         return Path(explicit)
-    base = os.environ.get("XDG_DATA_HOME")
-    root = Path(base) if base else Path.home() / ".local" / "share"
-    return root / "vlm-local-ocr" / "templates"
+    return paths.data_dir() / "templates"
 
 
 def _contract_dir(contract: str, directory: Path | str | None) -> Path:

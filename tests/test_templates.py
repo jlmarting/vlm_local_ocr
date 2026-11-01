@@ -358,3 +358,16 @@ def test_hint_from_template_reinjects_item_annotations() -> None:
     assert pedido["x-stop-labels"] == ["TAX"]
     assert pedido["x-item-labels"] == ["CHECK"]
     assert pedido["items"] == ITEM_CONTRACT["properties"]["pedido"]["items"]
+
+
+def test_template_dir_usa_paths(monkeypatch, tmp_path):
+    from vlm_ocr import paths, templates
+
+    monkeypatch.setattr(paths, "data_dir", lambda: tmp_path / "datos")
+    assert templates.template_dir() == tmp_path / "datos" / "templates"
+
+
+def test_template_dir_explicito_manda(tmp_path):
+    from vlm_ocr import templates
+
+    assert templates.template_dir(tmp_path / "x") == tmp_path / "x"
