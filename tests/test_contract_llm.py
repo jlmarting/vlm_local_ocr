@@ -39,6 +39,13 @@ def _fake_llama(
                 choice["finish_reason"] = finish_reasons.pop(0)
             return {"choices": [choice]}
 
+        def create_completion(self, prompt, **kwargs):
+            calls.append({"prompt": prompt, **kwargs})
+            choice = {"text": replies.pop(0)}
+            if finish_reasons:
+                choice["finish_reason"] = finish_reasons.pop(0)
+            return {"choices": [choice]}
+
     monkeypatch.setattr("vlm_ocr.llmrun.Llama", FakeLlama)
     return calls
 
@@ -337,3 +344,38 @@ def test_finish_reason_is_reported(monkeypatch, tmp_path: Path) -> None:
     infer_contract("texto", EXAMPLE, "example", _model(tmp_path), usage_out=usage)
 
     assert usage["finish_reason"] == "stop"
+
+
+def _nuextract_ref(tmp_path: Path):
+    from vlm_ocr.catalog import ModelEntry, ModelRef
+
+    entry = ModelEntry(
+        alias="nuextract-tiny",
+        name="NuExtract",
+        kind="gguf",
+        license="MIT",
+        prompt_style="nuextract",
+    )
+    return ModelRef(entry, _model(tmp_path))
+
+
+def test_nuextract_uses_completion_prompt(monkeypatch, tmp_path: Path) -> None:
+    calls = _fake_llama(monkeypatch, [json.dumps({"cliente": "ACME", "total": 2})])
+
+    result = infer_contract("Cliente: ACME", EXAMPLE, "example", _nuextract_ref(tmp_path))
+
+    assert result == {"cliente": "ACME", "total": 2}
+    assert calls[0]["prompt"].startswith("<|input|>")
+    assert "messages" not in calls[0]
+    assert calls[0]["response_format"] == {"type": "json_object"}
+
+
+def test_nuextract_does_not_retry_on_invalid_json(monkeypatch, tmp_path: Path) -> None:
+    calls = _fake_llama(monkeypatch, ["{no es json"])
+    usage: dict = {}
+
+    with pytest.raises(ContractError):
+        infer_contract("texto", EXAMPLE, "example", _nuextract_ref(tmp_path), usage_out=usage)
+
+    assert len(calls) == 1
+    assert usage["attempts"] == 1

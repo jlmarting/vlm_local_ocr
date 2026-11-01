@@ -266,6 +266,8 @@ def infer_contract(
     data, errors = _parse_and_validate(raw, contract, kind)
     if not errors:
         return _validated_final(data, contract, kind, text)
+    if ref.entry.prompt_style != "chat":
+        raise ContractError("el modelo no produjo un contrato válido: " + "; ".join(errors))
 
     repair_prompt = build_repair_prompt(ref, prompt, raw, errors)
     raw_retry, usage, finish_reason, budget = _chat_with_budget(
