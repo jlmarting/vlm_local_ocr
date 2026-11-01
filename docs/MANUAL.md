@@ -1,8 +1,8 @@
 # Manual de vlm_local_ocr
 
-Manual de uso y mantenimiento de la v1. Documento de proyecto; el diseño y el historial viven en el vault (`rondas/20261030a-definicion/`).
+Manual de uso y mantenimiento de la v1. Para el interior del paquete y el flujo de desarrollo, [DESARROLLO.md](DESARROLLO.md).
 
-> **Estado de cierre**: v1 funcional y probada (126 tests, `ruff` limpio). Los bloqueantes de la revisión fresca (exit codes, validación `int`, modelo por defecto, golden ≥80 %, prompt injection) están corregidos. La licencia se resolvió sustituyendo PyMuPDF por `pypdfium2` y manteniendo MIT. Ver §10.
+> **Estado**: v1 funcional y probada — 419 tests (411 unitarios + 8 de integración) y `ruff` limpio. Ver §10.
 
 ## 1. Qué es
 
@@ -360,27 +360,38 @@ factura.prompt.md     # instrucciones específicas (autodetectado)
 
 ## 9. Desarrollo
 
+Estructura y mapa de responsabilidades completo en [DESARROLLO.md](DESARROLLO.md). Resumen:
+
 ```
 vlm_local_ocr/
 ├── pyproject.toml
 ├── models/                  # GGUF (gitignored)
 ├── licenses/                # textos de licencia de los modelos empaquetados
-├── scripts/                 # fetch_models.py (wrapper), bench_models.py, build_release.sh
+├── scripts/                 # fetch/bench/build_release, draft_contract
 ├── src/vlm_ocr/
-│   ├── types.py
-│   ├── ingest.py
-│   ├── ocr.py
-│   ├── catalog.py           # catálogo, resolución alias/perfil, descarga y sha256
-│   ├── catalog.json         # datos de los modelos (package data)
-│   ├── llmrun.py            # runners: llama.cpp local y ollama (API nativa)
-│   ├── promptstyles.py      # prompt chat / nuextract y reparación
-│   ├── bench.py             # banco reutilizable (models bench)
-│   ├── contract.py          # presupuesto, parseo, validación y reparación
+│   ├── cli.py               # entrada, etapas y subcomandos
+│   ├── inputs.py            # stdin, firma y texto plano
+│   ├── ingest.py            # PDF: capa de texto o rasterizado
+│   ├── ocr.py               # RapidOCR/ONNX + enderezado
+│   ├── layout.py            # filas por coordenada
+│   ├── annotations.py       # x-labels / x-source / x-item-columns
+│   ├── extract.py           # extractor determinista
+│   ├── homologate.py        # --homologate y sus guardas
+│   ├── templates.py         # variantes por contrato (huella)
+│   ├── contract.py          # carga, validación, coerción
+│   ├── promptstyles.py      # prompt por proveedor y gramática
+│   ├── llmrun.py            # runners llama.cpp / ollama
+│   ├── catalog.py           # catálogo, alias, descarga y sha256
+│   ├── paths.py             # rutas por plataforma
+│   ├── verify.py            # literalidad
+│   ├── metrics.py           # informe opt-in
 │   ├── output.py
-│   └── cli.py
+│   ├── bench.py
+│   ├── types.py
+│   └── errors.py
 └── tests/
     ├── test_*.py            # unitarios
-    └── integration/         # golden con el modelo real
+    └── integration/         # golden y OCR sintético
 ```
 
 ```bash
@@ -389,28 +400,26 @@ uv run pytest -m integration -v         # golden (requiere el GGUF)
 uv run ruff check .
 ```
 
-## 10. Estado de cierre y pendientes
+## 10. Estado y pendientes
 
-La revisión fresca previa al cierre encontró:
+**Cerrado y verde (2026-11-01)**: 419 tests (411 unitarios + 8 de integración) y `ruff` limpio.
+v1 con OCR local, contrato por ejemplo o schema, contrato anotado y extractor determinista,
+plantillas homologadas con guardas, tickets con listas, catálogo de modelos con descarga
+verificada, proveedor ollama, stdin/texto plano/prompt libre, métricas opt-in y rutas por
+plataforma.
 
-**Alta — resueltas (2026-10-31)**
-1. Exit codes: contrato/instrucciones/modelo → `2`; entrada/OCR → `1`; sin traceback.
-2. Validación `int`: rechaza `1.5` y `"1.5"`; acepta enteros e integrales (`2.0`).
-3. Modelo por defecto resuelto (`models/`, `./models/`, datos del usuario por SO) y release con GGUF (`scripts/build_release.sh`).
-4. Golden test: umbral ≥80 % (3/3 en los documentos actuales).
-5. Prompt injection: OCR y sidecar delimitados (`<ocr_text>`, `<task_instructions>`) con instrucción de no seguirlos.
+**Límites que siguen abiertos** (detalle en §6): orientación 90°/270°, multicolumna, manuscrito
+y tablas complejas, idiomas fuera del set latino, y la distinción `literalidad ≠ corrección`.
 
-6. Licencia resuelta: MIT + `LICENSE`/`NOTICE`, con PyMuPDF sustituido por `pypdfium2`.
-
-**Media**: `--lang` no cambia de modelo; presupuesto de tokens no acotado del todo; normalización numérica puede tocar identificadores; sidecar se lee entero antes del límite; arrays vacíos sin aviso; layout nativo con cajas `(0,0,0,0)`; imports eager; documentación desactualizada; tests de formatos/rotación/errores incompletos.
-
-**Propuestas abiertas**: literalidad de strings/fechas y `--max-tokens`; tickets con listas repetidas. Catálogo, alias, perfiles, `models fetch` y proveedor ollama implementados en la ronda `20261101a`.
+**Deuda menor**: `--lang` no cambia de modelo; normalización numérica puede tocar identificadores;
+sidecar se lee entero antes del límite; arrays vacíos sin aviso; layout nativo con cajas
+`(0,0,0,0)`; imports eager.
 
 ## 11. Enlaces
 
 - [README](../README.md)
+- [Guía de uso](GUIA-USO.md)
+- [Manual del desarrollador](DESARROLLO.md)
+- [Decisiones de diseño](DECISIONES.md)
+- [Píldoras LEARN](learn/README.md)
 - [CHANGELOG](../CHANGELOG.md)
-- Spec v1: `~/Aureus/DEVCONTEXT/10_proyectos/vlm_local_ocr/rondas/20261030a-definicion/shared/spec-01-definicion-vlm-local-ocr.md`
-- Sidecar (spec-06): `.../shared/spec-06-sidecar-prompt-contrato.md`
-- Ronda: `.../shared/status.md`
-- Propuestas: `.../propuestas/`

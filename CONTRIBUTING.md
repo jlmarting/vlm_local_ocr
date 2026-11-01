@@ -5,8 +5,8 @@ valiosa no muera por formato.
 
 ## Antes de empezar
 
-- **Cambios con impacto de usuario o arquitectura** van con propuesta previa (issue o ronda en
-  el vault del proyecto): discutir antes de construir evita PRs que nadie quiere.
+- **Cambios con impacto de usuario o arquitectura** van con propuesta previa (issue o propuesta
+  del proyecto): discutir antes de construir evita PRs que nadie quiere.
 - **Bugs claros, mejoras de documentación y tests** entran directo con su test y su entrada de
   CHANGELOG.
 
