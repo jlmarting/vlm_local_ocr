@@ -254,6 +254,102 @@ def _models_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _templates_rows(entries: list[templates.Template]) -> list[dict[str, object]]:
+    return [
+        {
+            "contract_hash": entry.contract_hash,
+            "digest": entry.digest,
+            "version": entry.version,
+            "fields_mapped": len(entry.map),
+            "fields_unlocated": len(entry.unlocated),
+            "updated_at": entry.updated_at,
+        }
+        for entry in entries
+    ]
+
+
+def _templates_list(args: argparse.Namespace) -> int:
+    rows = _templates_rows(templates.all_templates(directory=args.templates_dir))
+    if args.json:
+        print(json.dumps(rows, ensure_ascii=False))
+        return 0
+    header = ("CONTRATO", "DIGEST", "VER", "MAPA", "SIN_LOC", "ACTUALIZADO")
+    cells = [
+        (
+            str(row["contract_hash"])[:12],
+            str(row["digest"])[:12],
+            str(row["version"]),
+            str(row["fields_mapped"]),
+            str(row["fields_unlocated"]),
+            str(row["updated_at"]),
+        )
+        for row in rows
+    ]
+    widths = [len(value) for value in header]
+    for row in cells:
+        widths = [max(width, len(value)) for width, value in zip(widths, row)]
+    for row in [header, *cells]:
+        print("  ".join(value.ljust(width) for value, width in zip(row, widths)).rstrip())
+    return 0
+
+
+def _templates_find(digest: str, directory: Path | str | None) -> templates.Template:
+    matches = templates.find_templates(digest, directory=directory)
+    if not matches:
+        raise catalog.CatalogError(f"no hay variante que empiece por «{digest}»")
+    if len(matches) > 1:
+        options = ", ".join(match.digest[:12] for match in matches)
+        raise catalog.CatalogError(f"prefijo ambiguo «{digest}»: {options}")
+    return matches[0]
+
+
+def _templates_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="vlm-ocr templates", description="Variantes homologadas.")
+    commands = parser.add_subparsers(dest="command")
+    listing = commands.add_parser("list", help="lista las variantes registradas")
+    listing.add_argument("--json", action="store_true", help="salida JSON")
+    listing.add_argument("--templates-dir", type=Path, help="directorio de variantes")
+    showing = commands.add_parser("show", help="muestra una variante (por prefijo de digest)")
+    showing.add_argument("digest")
+    showing.add_argument("--templates-dir", type=Path, help="directorio de variantes")
+    dropping = commands.add_parser("drop", help="elimina una variante (por prefijo de digest)")
+    dropping.add_argument("digest")
+    dropping.add_argument("--yes", action="store_true", help="confirma el borrado")
+    dropping.add_argument("--templates-dir", type=Path, help="directorio de variantes")
+    return parser
+
+
+def _templates_main(argv: list[str]) -> int:
+    parser = _templates_parser()
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "list":
+            return _templates_list(args)
+        if args.command == "show":
+            entry = _templates_find(args.digest, args.templates_dir)
+            print(json.dumps(templates.template_to_dict(entry), ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "drop":
+            entry = _templates_find(args.digest, args.templates_dir)
+            if not args.yes:
+                print(
+                    f"error: borrar {entry.digest[:12]} es destructivo; repite con --yes",
+                    file=sys.stderr,
+                )
+                return 2
+            path = templates.drop_template(entry, directory=args.templates_dir)
+            print(f"variante eliminada: {path}")
+            return 0
+    except catalog.CatalogError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    parser.print_help(sys.stderr)
+    return 2
+
+
 def _models_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vlm-ocr models", description="Catálogo de modelos.")
     commands = parser.add_subparsers(dest="command")
@@ -328,6 +424,8 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "models":
         return _models_main(argv[1:])
+    if argv and argv[0] == "templates":
+        return _templates_main(argv[1:])
     args = _build_parser().parse_args(argv)
 
     if args.max_tokens is not None and args.max_tokens <= 0:

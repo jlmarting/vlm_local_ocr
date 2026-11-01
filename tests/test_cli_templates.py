@@ -674,3 +674,97 @@ def test_report_includes_contract_coverage(monkeypatch, tmp_path: Path, capsys) 
     assert report["extract"]["fields_total"] == 2
     assert report["extract"]["fields_filled"] == 2
     assert report["extract"]["coverage_contract"] == 1.0
+
+
+def _saved_variant(templates_dir: Path, contract_hash: str = "c" * 64):
+    from vlm_ocr import templates
+
+    fingerprint = templates.signature(_blocks(), ["CLIENTE", "TOTAL"])
+    assert fingerprint is not None
+    template = templates.Template(
+        contract_hash=contract_hash,
+        fingerprint=fingerprint,
+        map={
+            "cliente": templates.FieldMap(labels=("CLIENTE",)),
+            "total": templates.FieldMap(labels=("TOTAL",), source="devengado"),
+        },
+        unlocated=("hora",),
+    )
+    return templates.save_template(fingerprint, template, directory=templates_dir)
+
+
+def test_templates_list_prints_the_variant(capsys, tmp_path: Path) -> None:
+    saved = _saved_variant(tmp_path / "t")
+
+    assert cli.main(["templates", "list", "--templates-dir", str(tmp_path / "t")]) == 0
+
+    out = capsys.readouterr().out
+    assert saved.digest[:12] in out
+    assert "CONTRATO" in out
+
+
+def test_templates_list_json(capsys, tmp_path: Path) -> None:
+    saved = _saved_variant(tmp_path / "t")
+
+    assert cli.main(
+        ["templates", "list", "--json", "--templates-dir", str(tmp_path / "t")]
+    ) == 0
+
+    rows = json.loads(capsys.readouterr().out)
+    assert len(rows) == 1
+    assert rows[0]["digest"] == saved.digest
+    assert rows[0]["fields_mapped"] == 2
+    assert rows[0]["fields_unlocated"] == 1
+
+
+def test_templates_show_by_prefix(capsys, tmp_path: Path) -> None:
+    saved = _saved_variant(tmp_path / "t")
+
+    assert cli.main(
+        ["templates", "show", saved.digest[:8], "--templates-dir", str(tmp_path / "t")]
+    ) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["digest"] == saved.digest
+    assert "total" in payload["map"]
+
+
+def test_templates_show_unknown_prefix(capsys, tmp_path: Path) -> None:
+    _saved_variant(tmp_path / "t")
+
+    assert cli.main(["templates", "show", "zzzz", "--templates-dir", str(tmp_path / "t")]) == 2
+    assert "no hay variante" in capsys.readouterr().err
+
+
+def test_templates_drop_requires_yes(capsys, tmp_path: Path) -> None:
+    saved = _saved_variant(tmp_path / "t")
+    path = tmp_path / "t" / saved.contract_hash / f"{saved.digest}.json"
+
+    assert cli.main(
+        ["templates", "drop", saved.digest[:8], "--templates-dir", str(tmp_path / "t")]
+    ) == 2
+    assert path.is_file()
+    assert "--yes" in capsys.readouterr().err
+
+
+def test_templates_drop_removes_variant_and_keeps_history(capsys, tmp_path: Path) -> None:
+    first = _saved_variant(tmp_path / "t")
+    _saved_variant(tmp_path / "t")
+    folder = tmp_path / "t" / first.contract_hash
+    history = folder / "history" / f"{first.digest}.v1.json"
+
+    assert cli.main(
+        [
+            "templates", "drop", first.digest[:8], "--yes",
+            "--templates-dir", str(tmp_path / "t"),
+        ]
+    ) == 0
+
+    assert not (folder / f"{first.digest}.json").exists()
+    assert history.is_file()
+    assert "variante eliminada" in capsys.readouterr().out
+
+
+def test_templates_without_command_shows_help(capsys) -> None:
+    assert cli.main(["templates"]) == 2
+    assert "list" in capsys.readouterr().err

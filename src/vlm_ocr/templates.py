@@ -261,6 +261,30 @@ def list_templates(
     return templates
 
 
+def all_templates(*, directory: Path | str | None = None) -> list[Template]:
+    """Todas las variantes de todas las tipologías del directorio."""
+    root = template_dir(directory)
+    if not root.is_dir():
+        return []
+    templates: list[Template] = []
+    for folder in sorted(root.iterdir()):
+        if folder.is_dir():
+            templates.extend(list_templates(folder.name, directory=directory))
+    return templates
+
+
+def find_templates(prefix: str, *, directory: Path | str | None = None) -> list[Template]:
+    """Variantes cuyo digest empieza por ``prefix``."""
+    return [template for template in all_templates(directory=directory) if template.digest.startswith(prefix)]
+
+
+def drop_template(template: Template, *, directory: Path | str | None = None) -> Path:
+    """Elimina el fichero de la variante (el histórico no se toca)."""
+    path = _template_path(template.contract_hash, template.digest, directory)
+    path.unlink()
+    return path
+
+
 def save_template(
     fingerprint: Fingerprint, template: Template, *, directory: Path | str | None = None
 ) -> Template:
