@@ -44,6 +44,36 @@ uv run vlm-ocr models fetch llama32-3b --accept-license      # ~1,9 GB (modelo p
 
 Los modelos OCR por defecto vienen en el wheel de `rapidocr` y funcionan offline.
 
+### Los pesos de los LLM no viajan en el repo
+
+Este repositorio **no incluye ningún `.gguf`** (ni debe): pesan entre 0,4 y 2,3 GB y sus
+licencias son heterogéneas. El catálogo sí viaja, con URL, `sha256`, tamaño y licencia de cada
+modelo, y el CLI los descarga y verifica por ti:
+
+```bash
+uv run vlm-ocr models list                                    # alias, tamaño, licencia y si está descargado
+uv run vlm-ocr models fetch qwen05b                           # el más pequeño (~0,5 GB), sin aceptación
+uv run vlm-ocr models fetch llama32-3b --accept-license       # por defecto (~1,9 GB); su licencia exige aceptar
+uv run vlm-ocr models fetch phi4mini nuextract-tiny           # puedes bajar varios de una vez
+uv run vlm-ocr models list --verify                           # comprueba el sha256 de los presentes
+```
+
+- **Dónde caen**: si ejecutas desde un checkout, en `models/` del repo; si lo usas como paquete
+  instalado, en el directorio de datos del SO (`~/.local/share/vlm-local-ocr/models` en Linux,
+  `%LOCALAPPDATA%\vlm-local-ocr\models` en Windows, `Application Support` en macOS).
+- **Sin descarga**: copia un GGUF que ya tengas a `models/` o pásalo directo con
+  `--model /ruta/al/modelo.gguf`. El catálogo también admite tus propios alias en el overlay de
+  usuario (ver [rutas por plataforma](#modelos-catálogo-alias-y-perfiles)).
+- **Repos *gated***: exporta `HF_TOKEN` en el entorno. `models list --verify` te dice si el
+  fichero descargado coincide con el `sha256` esperado.
+- **Sin pesos locales**: el alias remoto `cloud-deepseek` (ollama) no descarga nada, pero el
+  texto sale del equipo (aviso por stderr).
+- **Offline / otra máquina**: copia el directorio `models/` completo; no hace falta volver a
+  descargar, y el CLI lo encuentra por las mismas rutas.
+
+Detalle de cada alias y del proveedor remoto: [Modelos](#modelos-catálogo-alias-y-perfiles) y
+[la receta de modelos](docs/GUIA-USO.md#modelos-ver-descargar-medir).
+
 El CLI busca cada GGUF en `models/` del repo, `./models/` o el directorio de datos del usuario (ver rutas por plataforma más abajo); `--model` acepta un alias del catálogo o una ruta. `--contract`, `--instructions`, `--model` y `--profile` requieren `--format json`: con Markdown el CLI los rechaza con `2` en vez de ignorarlos.
 
 **Rutas por plataforma.** Datos (plantillas y modelos): `$XDG_DATA_HOME/vlm-local-ocr/` o `~/.local/share/vlm-local-ocr/` en Linux; `%LOCALAPPDATA%\vlm-local-ocr\` en Windows; `~/Library/Application Support/vlm-local-ocr/` en macOS. Configuración (overlay del catálogo): `~/.config/vlm-local-ocr/` en Linux; `%APPDATA%\vlm-local-ocr\` en Windows; `~/Library/Application Support/vlm-local-ocr/` en macOS. Si el directorio antiguo tiene contenido y el nuevo está vacío, se prefiere el antiguo; `--templates-dir` y las rutas explícitas mandan siempre.

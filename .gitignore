@@ -1,4 +1,8 @@
-models/*.gguf
+# Pesos de modelos: NO viajan en el repo (se bajan con `vlm-ocr models fetch`)
+models/*
+!models/.gitkeep
+*.gguf
+*.gguf.part
 __pycache__/
 *.py[cod]
 .venv/
