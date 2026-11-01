@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from . import catalog, extract, homologate, inputs, metrics, templates, verify
-from .annotations import field_map, has_annotations
+from .annotations import field_map, has_annotations, item_hints
 from .bench import run_bench
 from .contract import (
     ContractError,
@@ -775,7 +775,7 @@ def main(argv: list[str] | None = None) -> int:
                 input_text = rows_text(row_blocks)
                 if annotated:
                     assignment = extract.assign(row_blocks, contract)
-                    annotated_fields = len(field_map(contract))
+                    annotated_fields = len(field_map(contract)) + len(item_hints(contract))
                     coverage = (
                         len(assignment.matched) / annotated_fields
                         if annotated_fields

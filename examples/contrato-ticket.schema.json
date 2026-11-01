@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["pedido", "total"],
+  "properties": {
+    "pedido": {
+      "type": ["array", "null"],
+      "x-item-columns": {
+        "producto": "text",
+        "cantidad": "quantity",
+        "precio": "number_right",
+        "observaciones": "observation"
+      },
+      "x-stop-labels": ["COUNTER", "TAX", "AMOUNT DUE", "TENDER", "CHANGE"],
+      "items": {
+        "type": "object",
+        "required": ["producto", "precio"],
+        "properties": {
+          "producto": {"type": "string"},
+          "cantidad": {"type": ["integer", "null"]},
+          "precio": {"type": ["number", "null"]},
+          "observaciones": {"type": ["string", "null"]}
+        },
+        "additionalProperties": false
+      }
+    },
+    "total": {
+      "type": ["number", "null"],
+      "x-labels": ["AMOUNT DUE", "AUTH AMT"]
+    }
+  },
+  "additionalProperties": false
+}
