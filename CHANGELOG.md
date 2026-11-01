@@ -9,6 +9,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- Listas repetidas en tickets: `x-item-columns`, `x-stop-labels` obligatorio, `cantidad`, observaciones unidas con espacio + salto de línea, extractor determinista, stop de pagos, fallback al LLM y verificación de precios. Plantillas/homologación por línea (`ItemMap`) con 0 tokens. Ejemplo: `examples/contrato-ticket.schema.json`.
 - Modo `--prompt` con LLM sin contrato: tarea libre sobre el texto, excluyente con `--contract`, modelo explícito y salida md (respuesta) o json (`text` + `answer`); sin gramática ni verificación literal.
 - Texto plano como documento: ficheros `.txt` y `--input-format txt|text` por stdin. Se decodifica en UTF-8 estricto (BOM tolerado), no pasa por OCR y cada línea no vacía es un bloque; vacío o no UTF-8 es error.
 - Entrada por stdin (`-`) para el documento, `--contract` y `--instructions`, con detección del tipo de documento por firma y `--input-format` de rescate. Sin APIs POSIX: la misma ruta sirve en Linux, macOS y Windows. Como máximo una entrada puede ser `-` por invocación.
