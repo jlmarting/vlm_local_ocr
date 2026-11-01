@@ -103,6 +103,37 @@ uv run vlm-ocr factura.pdf --format json --contract factura.json \
 uv run vlm-ocr documento.pdf --out salida.md
 ```
 
+### Entrada por stdin
+
+`-` lee de la entrada estándar en el documento, `--contract` y `--instructions`. Como máximo
+una de las tres entradas puede ser `-` por invocación.
+
+```bash
+# Captura del portapapeles
+wl-paste -t image/png | uv run vlm-ocr -
+
+# Descarga y extracción sin fichero temporal
+curl -sL https://example.com/factura.pdf | uv run vlm-ocr - \
+  --format json --contract factura.json
+
+# Contrato generado al vuelo
+uv run vlm-ocr factura.pdf --format json --contract - < contrato.json
+
+# Instrucciones por tubería
+printf 'usa TOTAL' | uv run vlm-ocr factura.pdf --format json \
+  --contract factura.json --instructions -
+```
+
+- El tipo del documento se detecta por firma (PDF, PNG, JPEG, TIFF, BMP, WebP);
+  `--input-format pdf|png|jpg|jpeg|tiff|bmp|webp` lo fuerza. Con un fichero, se ignora con un
+  aviso por stderr.
+- `vlm-ocr -` en un terminal interactivo falla con exit `2` en vez de quedarse esperando.
+- Con `--contract -` no se autodetecta el sidecar `<contrato>.prompt.md`: pasa
+  `--instructions` explícito o no habrá instrucciones.
+- Windows no tiene la sustitución de procesos `<(...)` de POSIX: `-` es la vía de pipe. En CMD,
+  `type doc.pdf | vlm-ocr -`; PowerShell puede alterar binarios, así que para PDF/imágenes
+  prefiere CMD o redirección.
+
 ### Ajuste por contrato (sidecar)
 
 Cada contrato puede llevar su propio fichero de instrucciones:

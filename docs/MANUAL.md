@@ -102,13 +102,14 @@ uv run vlm-ocr documento.pdf --out salida.md
 | Flag | Defecto | Qué hace |
 |---|---|---|
 | `--format md\|json` | `md` | Markdown o JSON |
-| `--contract PATH` | — | Ejemplo de payload o JSON Schema |
+| `--contract PATH` | — | Ejemplo de payload o JSON Schema; `-` lee de stdin |
 | `--contract-kind example\|schema` | autodetecta | Fuerza la interpretación |
+| `--input-format pdf\|png\|jpg\|jpeg\|tiff\|bmp\|webp` | autodetecta | Tipo del documento cuando llega por stdin; con fichero se ignora con aviso |
 | `--model PATH\|ALIAS` | modelo por defecto | GGUF (ruta) o alias del catálogo para inferir el contrato |
 | `--profile fast\|balanced\|quality\|extract` | — | Elige un modelo local del catálogo; `--model` gana |
 | `--n-ctx N` | 4096 | Contexto del modelo local en tokens; súbelo si el prompt no cabe |
 | `--max-tokens N` | catálogo/fórmula | Techo de tokens de salida; `--max-tokens` gana y en local se capa por `--n-ctx` |
-| `--instructions PATH` | sidecar | Instrucciones de ajuste |
+| `--instructions PATH` | sidecar | Instrucciones de ajuste; `-` lee de stdin |
 | `--dpi N` | 200 | DPI al rasterizar PDFs |
 | `--text-format md\|rows` | md (rows con contrato anotado) | Representación del texto para el contrato |
 | `--no-llm` | off | Solo asignación determinista; no carga modelo |
@@ -123,6 +124,24 @@ uv run vlm-ocr documento.pdf --out salida.md
 | `--out PATH` | stdout | Escribe la salida a fichero |
 | `--metrics` | off | Informe de métricas JSON por stderr |
 | `--metrics-out PATH` | — | Escribe el informe de métricas a fichero |
+
+### Entrada por stdin
+
+El documento posicional, `--contract` y `--instructions` aceptan `-` para leer de la entrada
+estándar. Como máximo una de las tres entradas puede ser `-` por invocación; si dos o más lo
+piden, el CLI falla con exit `2` antes de leer nada.
+
+- **Documento**: el tipo se detecta por firma de bytes (PDF, PNG, JPEG, TIFF, BMP, WebP). Si no
+  se reconoce, `--input-format` lo fuerza. Un documento vacío o de tipo desconocido es exit `1`.
+- **Contrato**: se lee como UTF-8; un JSON inválido conserva el mensaje con línea y motivo
+  (exit `2`). Con `--contract -` no se autodetecta el sidecar `<contrato>.prompt.md`.
+- **Instrucciones**: se leen como UTF-8 y mantienen el límite de 4 000 caracteres.
+- **TTY**: si `-` se usa con un terminal interactivo, falla con exit `2` y un hint; está pensado
+  para tuberías o redirección.
+- **Métricas**: `file.path` es `-`, `file.size_bytes` son los bytes leídos y `file.format` el
+  tipo detectado.
+- **Windows**: no hay `<(...)`; usa `type doc.pdf | vlm-ocr -` en CMD o una tubería equivalente.
+  PowerShell puede alterar binarios; para PDF/imágenes prefiere CMD o redirección.
 
 ### Exit codes
 

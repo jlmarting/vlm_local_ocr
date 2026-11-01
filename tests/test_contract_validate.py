@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from vlm_ocr.contract import load_contract, validate_payload
+import pytest
+
+from vlm_ocr.contract import ContractError, load_contract, validate_payload
 
 
 def _write(tmp_path: Path, payload: dict) -> Path:
@@ -105,3 +107,27 @@ def test_example_int_rejects_fractional_string() -> None:
 
 def test_example_int_accepts_integral_float() -> None:
     assert validate_payload({"n": 2.0}, {"n": 1}, "example") == []
+
+
+def test_load_contract_from_stdin_data() -> None:
+    contract, kind = load_contract(
+        "-", data=b'{"$schema": "https://json-schema.org/draft/2020-12/schema"}'
+    )
+
+    assert kind == "schema"
+    assert contract["$schema"]
+
+
+def test_load_contract_from_stdin_reports_label_and_line() -> None:
+    with pytest.raises(ContractError, match=r"stdin \(línea 2\)"):
+        load_contract("-", data=b'{\n  "a": }')
+
+
+def test_load_contract_from_stdin_rejects_non_utf8() -> None:
+    with pytest.raises(ContractError, match="stdin"):
+        load_contract("-", data=b"\xff")
+
+
+def test_load_contract_from_stdin_must_be_an_object() -> None:
+    with pytest.raises(ContractError, match="objeto JSON"):
+        load_contract("-", data=b"[1, 2]")
