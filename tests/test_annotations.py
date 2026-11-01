@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from vlm_ocr.annotations import field_map, has_annotations
+import pytest
+
+from vlm_ocr.annotations import field_map, has_annotations, item_hints
 from vlm_ocr.contract import infer_contract, validate_payload
+from vlm_ocr.errors import ContractError
 
 SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -126,3 +129,79 @@ def test_prompt_without_annotations_has_no_field_map(monkeypatch, tmp_path: Path
 def test_annotated_schema_is_still_validated() -> None:
     assert validate_payload({"nomina": {}}, SCHEMA, "schema") == []
     assert validate_payload({"nomina": {"devengos": {"salario_base": "x"}}}, SCHEMA, "schema")
+
+
+ITEM_SCHEMA = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+        "pedido": {
+            "type": "array",
+            "x-item-columns": {
+                "producto": "text",
+                "cantidad": "quantity",
+                "precio": "number_right",
+                "observaciones": "observation",
+            },
+            "x-stop-labels": ["COUNTER", "TAX"],
+            "x-item-labels": ["CHECK"],
+            "items": {
+                "type": "object",
+                "properties": {
+                    "producto": {"type": "string"},
+                    "cantidad": {"type": ["integer", "null"]},
+                    "precio": {"type": ["number", "null"]},
+                    "observaciones": {"type": ["string", "null"]},
+                },
+            },
+        },
+        "total": {"type": ["number", "null"], "x-labels": ["AMOUNT DUE"]},
+    },
+}
+
+
+def test_item_hints_reads_columns_and_labels() -> None:
+    hints = item_hints(ITEM_SCHEMA)
+
+    assert len(hints) == 1
+    assert hints[0].path == "pedido"
+    assert hints[0].columns["producto"] == "text"
+    assert hints[0].columns["precio"] == "number_right"
+    assert hints[0].stop_labels == ("COUNTER", "TAX")
+    assert hints[0].start_labels == ("CHECK",)
+
+
+def test_item_hints_requires_stop_labels() -> None:
+    schema = json.loads(json.dumps(ITEM_SCHEMA))
+    del schema["properties"]["pedido"]["x-stop-labels"]
+
+    with pytest.raises(ContractError, match="x-stop-labels"):
+        item_hints(schema)
+
+
+def test_item_hints_rejects_unknown_role() -> None:
+    schema = json.loads(json.dumps(ITEM_SCHEMA))
+    schema["properties"]["pedido"]["x-item-columns"]["precio"] = "centro"
+
+    with pytest.raises(ContractError, match="rol"):
+        item_hints(schema)
+
+
+def test_item_hints_rejects_unknown_property() -> None:
+    schema = json.loads(json.dumps(ITEM_SCHEMA))
+    schema["properties"]["pedido"]["x-item-columns"]["descuento"] = "text"
+
+    with pytest.raises(ContractError, match="propiedad"):
+        item_hints(schema)
+
+
+def test_item_hints_requires_text_and_number_right() -> None:
+    schema = json.loads(json.dumps(ITEM_SCHEMA))
+    schema["properties"]["pedido"]["x-item-columns"].pop("precio")
+
+    with pytest.raises(ContractError, match="number_right"):
+        item_hints(schema)
+
+
+def test_has_annotations_includes_item_schema() -> None:
+    assert has_annotations(ITEM_SCHEMA) is True

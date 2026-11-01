@@ -5,6 +5,8 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
+from .errors import ContractError
+
 SOURCE_ALIASES = {
     "UNIDADES": "unidades",
     "IMPORTE": "importe",
@@ -29,6 +31,19 @@ class FieldHint:
     source: str | None
     kind: str | None
     join_label: bool | None = None
+
+
+ITEM_ROLES = {"text", "quantity", "number_right", "observation"}
+
+
+@dataclass(frozen=True)
+class ItemHint:
+    """Un array repetido con los roles geométricos de sus propiedades."""
+
+    path: str
+    columns: dict[str, str]
+    stop_labels: tuple[str, ...]
+    start_labels: tuple[str, ...]
 
 
 def normalize_label(text: str) -> str:
@@ -74,8 +89,80 @@ def field_map(schema: dict) -> list[FieldHint]:
     return list(_walk(schema))
 
 
+def _has_array_type(node: dict) -> bool:
+    declared = node.get("type")
+    return declared == "array" or (
+        isinstance(declared, list) and "array" in declared
+    )
+
+
+def _item_hint(node: dict, path: str) -> ItemHint:
+    raw_columns = node.get("x-item-columns")
+    if not isinstance(raw_columns, dict) or not raw_columns:
+        raise ContractError(f"{path}: x-item-columns debe ser un objeto no vacío")
+    if "x-stop-labels" not in node:
+        raise ContractError(f"{path}: falta x-stop-labels (puede ser una lista vacía)")
+    raw_stop = node.get("x-stop-labels")
+    if not isinstance(raw_stop, list):
+        raise ContractError(f"{path}: x-stop-labels debe ser una lista")
+    raw_start = node.get("x-item-labels", [])
+    if not isinstance(raw_start, list):
+        raise ContractError(f"{path}: x-item-labels debe ser una lista")
+
+    items = node.get("items")
+    properties = items.get("properties") if isinstance(items, dict) else None
+    if not isinstance(properties, dict):
+        raise ContractError(f"{path}: el array necesita items.properties")
+
+    columns: dict[str, str] = {}
+    seen_roles: set[str] = set()
+    for prop, role in raw_columns.items():
+        if not isinstance(prop, str) or prop not in properties:
+            raise ContractError(f"{path}: propiedad desconocida en x-item-columns: {prop!r}")
+        if not isinstance(role, str) or role not in ITEM_ROLES:
+            raise ContractError(f"{path}: rol desconocido en x-item-columns: {role!r}")
+        if role in seen_roles:
+            raise ContractError(f"{path}: rol duplicado en x-item-columns: {role!r}")
+        seen_roles.add(role)
+        columns[prop] = role
+    for required in ("text", "number_right"):
+        if required not in seen_roles:
+            raise ContractError(f"{path}: x-item-columns necesita un rol {required}")
+
+    return ItemHint(
+        path=path,
+        columns=columns,
+        stop_labels=tuple(str(label) for label in raw_stop),
+        start_labels=tuple(str(label) for label in raw_start),
+    )
+
+
+def _walk_items(schema: Any, path: str = ""):
+    if not isinstance(schema, dict):
+        return
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return
+    for key, sub in properties.items():
+        if not isinstance(sub, dict):
+            continue
+        full = f"{path}.{key}" if path else key
+        if _has_array_type(sub) and "x-item-columns" in sub:
+            yield _item_hint(sub, full)
+        yield from _walk_items(sub, full)
+
+
+def item_hints(schema: dict) -> list[ItemHint]:
+    """Arrays anotados con roles de línea, en orden de documento."""
+    return list(_walk_items(schema))
+
+
+def has_item_annotations(schema: dict) -> bool:
+    return any(True for _ in _walk_items(schema))
+
+
 def has_annotations(schema: dict) -> bool:
-    return any(True for _ in _walk(schema))
+    return any(True for _ in _walk(schema)) or has_item_annotations(schema)
 
 
 def leaf_paths(schema: Any, path: str = "") -> list[str]:
