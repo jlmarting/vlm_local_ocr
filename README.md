@@ -37,7 +37,7 @@ El CLI busca cada GGUF en `models/` del repo, `./models/` o `~/.local/share/vlm-
 | `qwen05b` | Qwen2.5-0.5B-Instruct Q4_K_M | 0,5 GB | Apache-2.0 | `fast` | sí |
 | `nuextract-tiny` | NuExtract-1.5-tiny Q4_K_M | 0,4 GB | MIT | `extract` | sí |
 | `qwen25-3b` | Qwen2.5-3B-Instruct Q4_K_M | 2,0 GB | qwen-research | — | **no** (descarga aparte) |
-| `llama32-3b-cloud` | Llama 3.2 3B en ollama | — | Llama 3.2 Community | — | no (API) |
+| `cloud-deepseek` | DeepSeek V4.1 Flash en ollama | — | ollama-cloud | — | no (API) |
 
 ```bash
 uv run vlm-ocr models fetch qwen05b                      # descarga verificada (sha256)
@@ -56,10 +56,16 @@ uv run vlm-ocr doc.pdf --format json --contract c.json --profile fast
 
 ```bash
 export OLLAMA_API_KEY=...        # https://ollama.com/settings/keys
-uv run vlm-ocr doc.pdf --format json --contract c.json --model llama32-3b-cloud
+uv run vlm-ocr doc.pdf --format json --contract c.json --model cloud-deepseek
 ```
 
-Habla el API nativo de ollama (`POST /api/chat`, structured outputs por `format`). Sirve también para un daemon local: pon `base_url` a `http://localhost:11434` en la entrada del catálogo. **Privacidad**: con un alias remoto el texto del documento sale del equipo y se envía a ese endpoint; el CLI lo avisa por stderr. La API key se lee solo de `OLLAMA_API_KEY` (nunca por argumentos) y no se escribe en métricas ni en errores.
+Habla el API nativo de ollama (`POST /api/chat`, structured outputs por `format`). Sirve también para un daemon local: pon `base_url` a `http://localhost:11434` en la entrada del catálogo. La entrada declara su `context` (1.048.576 en `deepseek-v4.1-flash`) y, para extracción, `max_tokens` y `think`:
+
+- **`max_tokens`** es un techo, no un gasto: solo se paga si el modelo lo usa. `--max-tokens N` lo sobrescribe (en local sigue capado por `--n-ctx`).
+- **`think: false`** desactiva el razonamiento donde el proveedor lo respeta (`deepseek-v4.1-flash`: 184 tokens y <1 s; `gpt-oss:120b` lo ignora y gasta ~1.400 de *thinking*).
+- El `num_ctx` enviado se calcula solo (prompt + techo, mínimo 8.192, capado por `context`).
+
+**Privacidad**: con un alias remoto el texto del documento sale del equipo y se envía a ese endpoint; el CLI lo avisa por stderr. La API key se lee solo de `OLLAMA_API_KEY` (nunca por argumentos) y no se escribe en métricas ni en errores.
 
 ## Uso
 

@@ -330,3 +330,36 @@ def test_nuextract_warns_when_instructions_are_ignored(
 
     assert code == 0
     assert "se omiten" in capsys.readouterr().err
+
+
+def test_max_tokens_reaches_infer(tmp_path: Path, monkeypatch, capsys, install) -> None:
+    models = install({"llama32-3b": gguf(file="l.gguf", default=True)})
+    (models / "l.gguf").write_bytes(b"")
+    _mock_pipeline(monkeypatch)
+    seen: dict = {}
+    monkeypatch.setattr(
+        cli,
+        "infer_contract",
+        lambda *a, **k: seen.update(k) or EXAMPLE,
+    )
+
+    code = cli.main(
+        [str(_contract(tmp_path).parent / "doc.pdf"), "--format", "json",
+         "--contract", str(_contract(tmp_path)), "--max-tokens", "1500"]
+    )
+
+    assert code == 0
+    assert seen["max_output_tokens"] == 1500
+
+
+def test_max_tokens_must_be_positive(tmp_path: Path, capsys) -> None:
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+
+    code = cli.main(
+        [str(source), "--format", "json", "--contract", str(_contract(tmp_path)),
+         "--max-tokens", "0"]
+    )
+
+    assert code == 2
+    assert "--max-tokens" in capsys.readouterr().err
