@@ -8,6 +8,7 @@ const state = {
   selectedBlock: null,
   fields: [],
   extraction: null,
+  stopSuggestions: [],
 };
 
 const $ = (id) => document.getElementById(id);
@@ -93,6 +94,163 @@ function clearError() {
   node.textContent = "";
 }
 
+const STOP_KEYWORDS = [
+  "total",
+  "subtotal",
+  "total a pagar",
+  "importe total",
+  "suma",
+  "iva",
+  "impuesto",
+  "impuestos",
+  "tax",
+  "amount due",
+  "tender",
+  "change",
+  "cambio",
+  "pagado",
+  "pago",
+  "efectivo",
+  "base imponible",
+  "propina",
+  "servicio",
+];
+
+function normLabel(text) {
+  return text
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function looksLikeNumber(text) {
+  const cleaned = text.replace(/[$\u20ac\u00a3\u00a5]/g, "").replace(/\s/g, "");
+  return /^[-+]?\d+([.,]\d+)*[.,]?\d*$/.test(cleaned) && /\d/.test(cleaned);
+}
+
+function labelHit(blocks, labels) {
+  const wanted = (labels || []).map(normLabel).filter(Boolean);
+  if (!wanted.length) {
+    return false;
+  }
+  return blocks.some((block) => {
+    const normalized = normLabel(block.text || "");
+    return wanted.some(
+      (want) => normalized === want || normalized.startsWith(`${want} `)
+    );
+  });
+}
+
+function suggestStops(blocks) {
+  const seen = new Set();
+  const found = [];
+  for (const block of blocks || []) {
+    const normalized = normLabel(block.text || "");
+    if (!normalized) {
+      continue;
+    }
+    const matched = STOP_KEYWORDS.some((keyword) => {
+      const want = normLabel(keyword);
+      return normalized === want || normalized.startsWith(`${want} `);
+    });
+    if (!matched) {
+      continue;
+    }
+    const candidate = (block.text || "").trim().slice(0, 24);
+    const key = normLabel(candidate);
+    if (!seen.has(key)) {
+      seen.add(key);
+      found.push(candidate);
+    }
+    if (found.length >= 6) {
+      break;
+    }
+  }
+  return found;
+}
+
+function documentRows(blocks) {
+  const rows = [];
+  const byPage = new Map();
+  for (const block of blocks || []) {
+    if (!block.box || block.box[3] <= block.box[1]) {
+      continue;
+    }
+    const list = byPage.get(block.page) || [];
+    list.push(block);
+    byPage.set(block.page, list);
+  }
+  for (const pageBlocks of byPage.values()) {
+    const sorted = [...pageBlocks].sort(
+      (left, right) =>
+        (left.box[1] + left.box[3]) / 2 - (right.box[1] + right.box[3]) / 2
+    );
+    for (const block of sorted) {
+      const center = (block.box[1] + block.box[3]) / 2;
+      const height = block.box[3] - block.box[1];
+      const row = rows.find(
+        (item) => Math.abs(item.center - center) <= Math.max(6, height * 0.6)
+      );
+      if (row) {
+        row.blocks.push(block);
+      } else {
+        rows.push({ center, blocks: [block] });
+      }
+    }
+  }
+  return rows;
+}
+
+function itemLikeRow(row) {
+  const cells = row.blocks.filter((block) => (block.text || "").trim());
+  if (!cells.length) {
+    return false;
+  }
+  const texts = cells.filter((block) => !looksLikeNumber(block.text));
+  const numbers = cells.filter((block) => looksLikeNumber(block.text));
+  if (!texts.length || !numbers.length) {
+    return false;
+  }
+  return numbers.some((number) =>
+    texts.some((text) => number.box[0] >= text.box[2] - 2)
+  );
+}
+
+function previewRows(field) {
+  if (!state.document) {
+    return 0;
+  }
+  const rows = documentRows(state.document.blocks);
+  const hasStart = (field.startLabels || []).length > 0;
+  let counting = false;
+  let count = 0;
+  for (const row of rows) {
+    if (!counting) {
+      if (hasStart) {
+        if (labelHit(row.blocks, field.startLabels)) {
+          counting = true;
+        }
+        continue;
+      }
+      if (itemLikeRow(row)) {
+        counting = true;
+        count += 1;
+      }
+      continue;
+    }
+    if (labelHit(row.blocks, field.stopLabels)) {
+      break;
+    }
+    if (itemLikeRow(row)) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
   headers.set("Authorization", `Bearer ${token()}`);
@@ -146,18 +304,126 @@ function observePage() {
   resizeObserver.observe(image);
 }
 
+function listIndices() {
+  const indices = [];
+  state.fields.forEach((field, index) => {
+    if (field.kind === "list") {
+      indices.push(index);
+    }
+  });
+  return indices;
+}
+
+function targetListIndex() {
+  const indices = listIndices();
+  if (!indices.length) {
+    return null;
+  }
+  if (indices.length === 1) {
+    return indices[0];
+  }
+  const target = $("action-list-target");
+  if (target && target.value !== "") {
+    const value = Number(target.value);
+    if (indices.includes(value)) {
+      return value;
+    }
+  }
+  return indices[0];
+}
+
 function updateSelection() {
-  const node = $("selection");
-  if (!node) {
+  const text = $("selection-text");
+  if (!text) {
     return;
   }
-  node.textContent = state.selectedBlock
+  const has = Boolean(state.selectedBlock);
+  text.textContent = has
     ? t("field.selected", { text: state.selectedBlock.text })
     : t("field.noSelection");
+  const newField = $("action-new-field");
+  const start = $("action-list-start");
+  const stop = $("action-list-stop");
+  const clear = $("action-clear");
+  const target = $("action-list-target");
+  const indices = listIndices();
+  if (newField) {
+    newField.disabled = !has;
+  }
+  if (target) {
+    if (indices.length > 1) {
+      target.hidden = false;
+      const previous = target.value;
+      target.innerHTML = "";
+      for (const index of indices) {
+        const option = document.createElement("option");
+        option.value = String(index);
+        option.textContent = state.fields[index].name;
+        target.appendChild(option);
+      }
+      target.value = indices.includes(Number(previous))
+        ? previous
+        : String(indices[0]);
+    } else {
+      target.hidden = true;
+    }
+  }
+  const listReady = indices.length > 0;
+  if (start) {
+    start.disabled = !has || !listReady;
+  }
+  if (stop) {
+    stop.disabled = !has || !listReady;
+  }
+  if (clear) {
+    clear.disabled = !has;
+  }
   const addFromBlock = $("add-field-block");
   if (addFromBlock) {
     addFromBlock.disabled = !state.selectedBlock;
   }
+}
+
+function clearSelection() {
+  state.selected = null;
+  state.selectedBlock = null;
+  for (const element of state.boxes.values()) {
+    element.classList.remove("selected");
+  }
+  for (const element of $("text-panel").children) {
+    element.classList.remove("selected");
+  }
+  updateSelection();
+  renderFields();
+}
+
+function updateCoach() {
+  const node = $("coach");
+  if (!node) {
+    return;
+  }
+  if (!state.document || $("viewer").hidden) {
+    node.hidden = true;
+    return;
+  }
+  const lists = state.fields.filter((field) => field.kind === "list");
+  const scalars = state.fields.filter((field) => field.kind === "scalar");
+  let key;
+  if (!state.fields.length) {
+    key = "coach.start";
+  } else if (lists.some((field) => !(field.stopLabels || []).length)) {
+    key = "coach.stop";
+  } else if (scalars.some((field) => !(field.labels || []).length)) {
+    key = "coach.labels";
+  } else if (!state.extraction) {
+    key = "coach.extract";
+  } else if (state.extraction.pending.length || state.extraction.unmatched.length) {
+    key = "coach.review";
+  } else {
+    key = "coach.done";
+  }
+  node.hidden = false;
+  node.textContent = t(key);
 }
 
 function pageBlocks(page) {
@@ -275,6 +541,7 @@ async function upload(file) {
     state.pageUrls = new Map();
     state.fields = [];
     state.extraction = null;
+    state.stopSuggestions = suggestStops(payload.document.blocks);
     $("extract-summary").textContent = "";
     showResult(null);
     showViewer();
@@ -310,6 +577,7 @@ async function openWorkspace(workspaceId) {
     state.pageUrls = new Map();
     state.fields = [];
     state.extraction = null;
+    state.stopSuggestions = suggestStops(state.document.blocks);
     showResult(null);
     await loadContract(workspaceId);
     showViewer();
@@ -521,7 +789,7 @@ function roleRow(role, field) {
   return row;
 }
 
-function labelListEditor(titleKey, hintKey, values, onChange) {
+function labelListEditor(titleKey, hintKey, values, onChange, suggestions) {
   let current = values.slice();
   const wrap = document.createElement("div");
   wrap.className = "label-list";
@@ -560,6 +828,34 @@ function labelListEditor(titleKey, hintKey, values, onChange) {
   hint.className = "field-hint";
   hint.textContent = t(hintKey);
   wrap.append(title, line, hint);
+  if (suggestions && suggestions.length) {
+    const chipsTitle = document.createElement("span");
+    chipsTitle.className = "chips-title";
+    chipsTitle.textContent = t("list.suggestions");
+    const chips = document.createElement("div");
+    chips.className = "chips";
+    for (const suggestion of suggestions.slice(0, 6)) {
+      if (current.includes(suggestion)) {
+        continue;
+      }
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip";
+      chip.textContent = `+ ${suggestion}`;
+      chip.addEventListener("click", () => {
+        if (current.includes(suggestion)) {
+          return;
+        }
+        current = [...current, suggestion];
+        input.value = current.join(", ");
+        onChange(current);
+      });
+      chips.appendChild(chip);
+    }
+    if (chips.childElementCount) {
+      wrap.append(chipsTitle, chips);
+    }
+  }
   return wrap;
 }
 
@@ -641,17 +937,44 @@ function listCard(field, index) {
   rolesHint.className = "field-hint";
   rolesHint.textContent = t("list.rolesHint");
 
+  const preview = document.createElement("p");
+  preview.className = "list-preview";
+  const refreshPreview = () => {
+    const count = previewRows(field);
+    preview.textContent =
+      count > 0 ? t("list.preview", { count }) : t("list.previewNone");
+    preview.classList.toggle("ok", count > 0);
+  };
+
   const labels = document.createElement("div");
   labels.className = "label-lists";
   labels.appendChild(
-    labelListEditor("list.startLabels", "list.startHint", field.startLabels, (next) => {
-      field.startLabels = next;
-    })
+    labelListEditor(
+      "list.startLabels",
+      "list.startHint",
+      field.startLabels,
+      (next) => {
+        field.startLabels = next;
+        refreshPreview();
+        updateCoach();
+      }
+    )
+  );
+  const suggestions = (state.stopSuggestions || []).filter(
+    (suggestion) => !(field.stopLabels || []).includes(suggestion)
   );
   labels.appendChild(
-    labelListEditor("list.stopLabels", "list.stopHint", field.stopLabels, (next) => {
-      field.stopLabels = next;
-    })
+    labelListEditor(
+      "list.stopLabels",
+      "list.stopHint",
+      field.stopLabels,
+      (next) => {
+        field.stopLabels = next;
+        refreshPreview();
+        updateCoach();
+      },
+      suggestions
+    )
   );
   if (!field.stopLabels.length) {
     const warn = document.createElement("p");
@@ -659,6 +982,7 @@ function listCard(field, index) {
     warn.textContent = t("list.stopWarning");
     labels.appendChild(warn);
   }
+  refreshPreview();
 
   const actions = document.createElement("div");
   actions.className = "field-actions";
@@ -670,7 +994,7 @@ function listCard(field, index) {
     actions.appendChild(node);
   }
 
-  card.append(head, rolesTitle, roles, rolesHint, labels, actions);
+  card.append(head, rolesTitle, roles, rolesHint, labels, preview, actions);
   const table = listTable(field);
   if (table) {
     card.appendChild(table);
@@ -728,6 +1052,7 @@ function fieldCard(field, index) {
       .split(",")
       .map((value) => value.trim())
       .filter(Boolean);
+    updateCoach();
   });
   body.appendChild(
     labelNode(t("field.labelsLabel"), labels, t("field.labelsHint"))
@@ -825,6 +1150,8 @@ function renderFields() {
       field.kind === "list" ? listCard(field, index) : fieldCard(field, index)
     );
   });
+  updateSelection();
+  updateCoach();
 }
 
 function parseSchema(schema) {
@@ -1055,6 +1382,8 @@ function reset() {
   state.selectedBlock = null;
   state.fields = [];
   state.extraction = null;
+  state.stopSuggestions = [];
+  $("coach").hidden = true;
   $("page-image").src = "";
   $("boxes").innerHTML = "";
   $("text-panel").innerHTML = "";
@@ -1096,6 +1425,36 @@ function wire() {
   $("add-field").addEventListener("click", addField);
   $("add-field-block").addEventListener("click", addFieldFromBlock);
   $("add-list").addEventListener("click", addList);
+  $("action-new-field").addEventListener("click", () => {
+    if (state.selectedBlock) {
+      addFieldFromBlock();
+    }
+  });
+  $("action-list-start").addEventListener("click", () => {
+    const index = targetListIndex();
+    if (index === null || !state.selectedBlock) {
+      return;
+    }
+    const field = state.fields[index];
+    field.startLabels = field.startLabels || [];
+    if (!field.startLabels.includes(state.selectedBlock.text)) {
+      field.startLabels.push(state.selectedBlock.text);
+      renderFields();
+    }
+  });
+  $("action-list-stop").addEventListener("click", () => {
+    const index = targetListIndex();
+    if (index === null || !state.selectedBlock) {
+      return;
+    }
+    const field = state.fields[index];
+    field.stopLabels = field.stopLabels || [];
+    if (!field.stopLabels.includes(state.selectedBlock.text)) {
+      field.stopLabels.push(state.selectedBlock.text);
+      renderFields();
+    }
+  });
+  $("action-clear").addEventListener("click", clearSelection);
   $("extract").addEventListener("click", extract);
   $("homologate").addEventListener("click", homologate);
   $("export-schema").addEventListener("click", () => exportCurrent("schema"));

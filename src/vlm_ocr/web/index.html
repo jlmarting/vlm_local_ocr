@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>vlm-local-ocr</title>
-    <link rel="stylesheet" href="styles.css?v=4" />
+    <link rel="stylesheet" href="styles.css?v=5" />
   </head>
   <body>
     <header>
@@ -82,6 +82,7 @@
             <button
               id="extract"
               type="button"
+              class="primary"
               data-i18n="contract.extract"
               data-i18n-title="contract.extractHint"
             >
@@ -135,9 +136,48 @@
             </ol>
           </div>
 
-          <p id="selection" class="selection" data-i18n="field.noSelection">
-            Ningún bloque seleccionado
-          </p>
+          <p id="coach" class="coach" hidden></p>
+
+          <div id="selection" class="selection-bar">
+            <span id="selection-text" class="selection-text" data-i18n="field.noSelection">
+              Ningún bloque seleccionado
+            </span>
+            <span class="selection-actions">
+              <button
+                id="action-new-field"
+                type="button"
+                data-i18n="action.newField"
+                data-i18n-title="contract.addFieldBlockHint"
+              >
+                Crear campo desde el bloque
+              </button>
+              <select id="action-list-target" hidden aria-label="Lista"></select>
+              <button
+                id="action-list-start"
+                type="button"
+                data-i18n="action.listStart"
+                data-i18n-title="action.listStartHint"
+              >
+                Inicio de lista
+              </button>
+              <button
+                id="action-list-stop"
+                type="button"
+                data-i18n="action.listStop"
+                data-i18n-title="action.listStopHint"
+              >
+                Fin de lista
+              </button>
+              <button
+                id="action-clear"
+                type="button"
+                class="danger"
+                data-i18n-title="action.clear"
+              >
+                ×
+              </button>
+            </span>
+          </div>
 
           <div id="fields" class="fields"></div>
 
@@ -160,6 +200,6 @@
 
       <p id="error" class="error" hidden></p>
     </main>
-    <script src="app.js?v=4"></script>
+    <script src="app.js?v=5"></script>
   </body>
 </html>

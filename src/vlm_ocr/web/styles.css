@@ -221,13 +221,85 @@ button.secondary {
   font-size: 0.9rem;
 }
 
-.selection {
+.coach {
+  margin: 0 0 0.7rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.4rem;
+  background: color-mix(in srgb, #16a34a 10%, transparent);
+  font-size: 0.9rem;
+}
+
+.selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
   margin: 0 0 0.7rem;
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--border);
   border-radius: 0.4rem;
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   font-size: 0.9rem;
+}
+
+.selection-text {
+  flex: 1;
+  min-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selection-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+button.primary:disabled {
+  opacity: 0.4;
+}
+
+.chips-title {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.chips {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.chip {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px dashed var(--border);
+  background: Canvas;
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+
+.chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.list-preview {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.list-preview.ok {
+  color: #15803d;
 }
 
 .fields {
