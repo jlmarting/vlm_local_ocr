@@ -12,6 +12,11 @@
       <span id="status">conectando…</span>
     </header>
     <main>
+      <section id="recents" class="recents" hidden>
+        <h2>Recientes</h2>
+        <div id="recents-list" class="recents-list"></div>
+      </section>
+
       <section id="dropzone" class="dropzone">
         <p>Arrastra un PDF o una imagen aquí</p>
         <label class="button">
@@ -46,7 +51,13 @@
             <h2>Contrato</h2>
             <button id="add-field" type="button">Añadir campo</button>
             <button id="extract" type="button">Probar extracción</button>
+            <button id="homologate" type="button">Homologar plantilla</button>
             <span id="extract-summary" class="summary"></span>
+          </div>
+          <div class="toolbar exports">
+            <button id="export-schema" type="button">Exportar schema</button>
+            <button id="export-result" type="button">Exportar resultado</button>
+            <button id="export-text" type="button">Exportar texto</button>
           </div>
           <div id="fields" class="fields"></div>
           <datalist id="sources">

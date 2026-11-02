@@ -68,6 +68,14 @@ def _process_document(
     ocr = {
         "text": text,
         "blocks": blocks,
+        "pages": [
+            {
+                "index": page["index"],
+                "width": page["width"],
+                "height": page["height"],
+            }
+            for page in processed["pages"]
+        ],
         "native_pages": sorted(processed["native_pages"]),
         "dpi": dpi,
     }
@@ -184,6 +192,50 @@ def _extract_contract(
     return {"workspace": meta.meta, "extraction": extraction}
 
 
+def _homologate(
+    base: Path, workspace: workspace_mod.Workspace, schema: object
+) -> dict:
+    if not isinstance(schema, dict):
+        raise ContractError("el contrato debe ser un objeto JSON")
+    schema_path = workspace.root / "contracts" / "contract.schema.json"
+    schema_path.write_text(
+        json.dumps(schema, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    report_path = workspace.root / "results" / "homologate.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    document = _document_path(workspace)
+    code, payload, stderr = _run_cli(
+        document,
+        [
+            "--format",
+            "json",
+            "--contract",
+            str(schema_path),
+            "--contract-kind",
+            "schema",
+            "--no-llm",
+            "--with-layout",
+            "--homologate",
+            "--homologate-report",
+            str(report_path),
+        ],
+    )
+    if code != 0 or payload is None:
+        raise ContractError(stderr or "el CLI no pudo homologar")
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        report = {}
+    if not isinstance(report, dict):
+        report = {}
+    saved = bool(report.get("saved", False))
+    result: dict = {"template_saved": saved}
+    if not saved:
+        result["blocked"] = bool(report.get("blocked", False))
+        result["unlocated"] = list(report.get("unlocated", []))
+    return result
+
+
 def create_app(workspace_dir: Path, token: str) -> FastAPI:
     app = FastAPI(title="vlm-local-ocr", version=__version__)
     app.state.workspace_dir = Path(workspace_dir)
@@ -295,7 +347,72 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
             return JSONResponse(
                 {"error": "not_found", "detail": str(exc)}, status_code=404
             )
-        return JSONResponse({"text": ocr["text"], "blocks": ocr["blocks"]})
+        return JSONResponse(
+            {
+                "text": ocr["text"],
+                "blocks": ocr["blocks"],
+                "pages": ocr.get("pages", []),
+            }
+        )
+
+    @app.get("/api/workspaces/{workspace_id}/export/schema")
+    def export_schema(workspace_id: str) -> Response:
+        try:
+            workspace = workspace_mod.get_workspace(
+                app.state.workspace_dir, workspace_id
+            )
+        except InputError as exc:
+            return JSONResponse(
+                {"error": "not_found", "detail": str(exc)}, status_code=404
+            )
+        path = workspace.root / "contracts" / "contract.schema.json"
+        if not path.exists():
+            return JSONResponse(
+                {"error": "not_found", "detail": "no hay contrato guardado"},
+                status_code=404,
+            )
+        return FileResponse(
+            path,
+            media_type="application/json",
+            filename="contract.schema.json",
+        )
+
+    @app.get("/api/workspaces/{workspace_id}/export/result")
+    def export_result(workspace_id: str) -> Response:
+        try:
+            workspace = workspace_mod.get_workspace(
+                app.state.workspace_dir, workspace_id
+            )
+        except InputError as exc:
+            return JSONResponse(
+                {"error": "not_found", "detail": str(exc)}, status_code=404
+            )
+        path = workspace.root / "results" / "last.json"
+        if not path.exists():
+            return JSONResponse(
+                {"error": "not_found", "detail": "no hay resultado guardado"},
+                status_code=404,
+            )
+        return FileResponse(
+            path, media_type="application/json", filename="result.json"
+        )
+
+    @app.get("/api/workspaces/{workspace_id}/export/text")
+    def export_text(workspace_id: str) -> Response:
+        try:
+            workspace = workspace_mod.get_workspace(
+                app.state.workspace_dir, workspace_id
+            )
+            ocr = _read_ocr(workspace)
+        except InputError as exc:
+            return JSONResponse(
+                {"error": "not_found", "detail": str(exc)}, status_code=404
+            )
+        return Response(
+            content=ocr.get("text", ""),
+            media_type="text/markdown",
+            headers={"Content-Disposition": 'attachment; filename="text.md"'},
+        )
 
     @app.post("/api/workspaces/{workspace_id}/contract")
     def extract_contract(workspace_id: str, body: dict) -> JSONResponse:
@@ -309,6 +426,26 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
             )
         try:
             result = _extract_contract(
+                app.state.workspace_dir, workspace, body.get("schema")
+            )
+        except (InputError, ContractError) as exc:
+            return JSONResponse(
+                {"error": "contract", "detail": str(exc)}, status_code=422
+            )
+        return JSONResponse(result)
+
+    @app.post("/api/workspaces/{workspace_id}/homologate")
+    def homologate(workspace_id: str, body: dict) -> JSONResponse:
+        try:
+            workspace = workspace_mod.get_workspace(
+                app.state.workspace_dir, workspace_id
+            )
+        except InputError as exc:
+            return JSONResponse(
+                {"error": "not_found", "detail": str(exc)}, status_code=404
+            )
+        try:
+            result = _homologate(
                 app.state.workspace_dir, workspace, body.get("schema")
             )
         except (InputError, ContractError) as exc:

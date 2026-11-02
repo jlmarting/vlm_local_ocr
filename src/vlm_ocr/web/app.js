@@ -67,6 +67,9 @@ function drawBoxes(page) {
   const container = $("boxes");
   container.innerHTML = "";
   state.boxes = new Map();
+  if (!page.width || !page.height) {
+    return;
+  }
   pageBlocks(page).forEach((block, index) => {
     const [x0, y0, x1, y1] = block.box;
     if (x1 <= x0 || y1 <= y0) {
@@ -132,10 +135,24 @@ async function showPage(index) {
   $("page-label").textContent = `${index + 1} / ${state.document.pages.length}`;
   $("prev").disabled = index === 0;
   $("next").disabled = index === state.document.pages.length - 1;
-  $("page-image").src = await loadPageImage(page);
+  const image = $("page-image");
+  image.onload = () => {
+    if (!page.width || !page.height) {
+      page.width = image.naturalWidth;
+      page.height = image.naturalHeight;
+    }
+    drawBoxes(page);
+  };
+  image.src = await loadPageImage(page);
   drawBoxes(page);
   renderText(page);
   renderFields();
+}
+
+function showViewer() {
+  $("dropzone").hidden = true;
+  $("recents").hidden = true;
+  $("viewer").hidden = false;
 }
 
 async function upload(file) {
@@ -152,12 +169,140 @@ async function upload(file) {
     state.fields = [];
     state.extraction = null;
     $("extract-summary").textContent = "";
-    $("dropzone").hidden = true;
-    $("viewer").hidden = false;
+    showViewer();
     await showPage(0);
     setStatus(`${payload.document.filename} · ${payload.document.pages.length} pág.`);
+    await loadRecents();
   } catch (error) {
     setStatus("error");
+    showError(error);
+  }
+}
+
+async function openWorkspace(workspaceId) {
+  clearError();
+  setStatus("abriendo…");
+  try {
+    const metaResponse = await api(`/api/workspaces/${workspaceId}`);
+    const meta = (await metaResponse.json()).workspace;
+    const textResponse = await api(`/api/workspaces/${workspaceId}/text`);
+    const ocr = await textResponse.json();
+    const pages = (ocr.pages || []).map((page) => ({
+      ...page,
+      image_url: `/api/workspaces/${workspaceId}/pages/${page.index}.png`,
+    }));
+    state.workspace = meta;
+    state.document = {
+      filename: meta.document.filename,
+      format: meta.document.format,
+      pages,
+      blocks: ocr.blocks || [],
+      text: ocr.text || "",
+    };
+    state.pageUrls = new Map();
+    state.fields = [];
+    state.extraction = null;
+    await loadContract(workspaceId);
+    showViewer();
+    await showPage(0);
+    setStatus(`${meta.document.filename} · ${pages.length} pág.`);
+  } catch (error) {
+    setStatus("error");
+    showError(error);
+  }
+}
+
+async function loadContract(workspaceId) {
+  try {
+    const schemaResponse = await api(
+      `/api/workspaces/${workspaceId}/export/schema`
+    );
+    const schema = await schemaResponse.json();
+    state.fields = Object.entries(schema.properties || {}).map(
+      ([name, node]) => ({
+        name,
+        type: Array.isArray(node.type)
+          ? node.type.find((item) => item !== "null") || "text"
+          : node.type || "text",
+        labels: node["x-labels"] || [],
+        source: node["x-source"] || "",
+      })
+    );
+  } catch (error) {
+    state.fields = [];
+  }
+  try {
+    const resultResponse = await api(
+      `/api/workspaces/${workspaceId}/export/result`
+    );
+    const result = await resultResponse.json();
+    state.extraction = result.extraction || null;
+    if (state.extraction) {
+      const { matched, pending, unmatched } = state.extraction;
+      $("extract-summary").textContent =
+        `${matched.length} ok · ${pending.length} pendientes · ` +
+        `${unmatched.length} sin localizar`;
+    }
+  } catch (error) {
+    state.extraction = null;
+  }
+}
+
+async function loadRecents() {
+  if (!token()) {
+    return;
+  }
+  try {
+    const response = await api("/api/workspaces");
+    const payload = await response.json();
+    renderRecents(payload.workspaces || []);
+  } catch (error) {
+    // sin token o servidor no disponible: el health ya lo indica
+  }
+}
+
+function renderRecents(rows) {
+  const section = $("recents");
+  const list = $("recents-list");
+  list.innerHTML = "";
+  if (!rows.length) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  for (const row of rows) {
+    const item = document.createElement("div");
+    item.className = "recent";
+
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "recent-open";
+    open.textContent = row.name || row.document.filename;
+    open.title = `${row.document.filename} · ${row.updated_at}`;
+    open.addEventListener("click", () => openWorkspace(row.id));
+    item.appendChild(open);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "danger";
+    remove.textContent = "×";
+    remove.title = "Borrar workspace";
+    remove.addEventListener("click", () => deleteWorkspace(row.id));
+    item.appendChild(remove);
+
+    list.appendChild(item);
+  }
+}
+
+async function deleteWorkspace(workspaceId) {
+  if (!window.confirm("¿Borrar este workspace y sus ficheros?")) {
+    return;
+  }
+  try {
+    await api(`/api/workspaces/${workspaceId}`, { method: "DELETE" });
+    await loadRecents();
+    setStatus("workspace borrado");
+  } catch (error) {
     showError(error);
   }
 }
@@ -338,6 +483,66 @@ async function extract() {
   }
 }
 
+async function homologate() {
+  clearError();
+  if (!state.workspace) {
+    return;
+  }
+  try {
+    const schema = buildSchema();
+    const response = await api(
+      `/api/workspaces/${state.workspace.id}/homologate`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schema }),
+      }
+    );
+    const payload = await response.json();
+    if (payload.template_saved) {
+      setStatus("plantilla homologada");
+    } else {
+      const blockers = (payload.unlocated || []).join(", ");
+      showError(
+        `no se homologó${blockers ? `: ${blockers}` : ""}`
+      );
+    }
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function download(path, filename) {
+  clearError();
+  try {
+    const response = await api(path);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    showError(error);
+  }
+}
+
+function exportCurrent(kind) {
+  if (!state.workspace) {
+    return;
+  }
+  const names = {
+    schema: "contract.schema.json",
+    result: "result.json",
+    text: "text.md",
+  };
+  download(
+    `/api/workspaces/${state.workspace.id}/export/${kind}`,
+    names[kind]
+  );
+}
+
 function reset() {
   for (const url of state.pageUrls.values()) {
     URL.revokeObjectURL(url);
@@ -359,6 +564,7 @@ function reset() {
   $("dropzone").hidden = false;
   $("file").value = "";
   setStatus("listo");
+  loadRecents();
 }
 
 function wire() {
@@ -387,6 +593,10 @@ function wire() {
   $("new").addEventListener("click", reset);
   $("add-field").addEventListener("click", addField);
   $("extract").addEventListener("click", extract);
+  $("homologate").addEventListener("click", homologate);
+  $("export-schema").addEventListener("click", () => exportCurrent("schema"));
+  $("export-result").addEventListener("click", () => exportCurrent("result"));
+  $("export-text").addEventListener("click", () => exportCurrent("text"));
 }
 
 async function health() {
@@ -411,3 +621,4 @@ if (initialToken) {
 
 wire();
 health();
+loadRecents();

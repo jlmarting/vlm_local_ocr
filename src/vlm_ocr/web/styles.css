@@ -243,3 +243,32 @@ button.danger {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+.recents {
+  margin-bottom: 1rem;
+}
+
+.recents h2 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+
+.recents-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.recent {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.recent-open {
+  flex: 1;
+  text-align: left;
+}
+
+.exports {
+  margin-bottom: 0.6rem;
+}
