@@ -64,6 +64,13 @@ def _process_document(
     blocks = serve_layout.normalize_blocks(
         payload.get("layout", []), processed["native_pages"], dpi
     )
+    blocks.sort(
+        key=lambda block: (
+            block.get("page", 0),
+            round((block["box"][1] + block["box"][3]) / 20),
+            block["box"][0],
+        )
+    )
     text = payload.get("text", "")
     ocr = {
         "text": text,
