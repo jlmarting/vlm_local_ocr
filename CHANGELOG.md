@@ -55,6 +55,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Fixed
 
+- El editor de la SPA envía `"string"` para los campos de tipo texto/fecha (antes `"text"` rompía el JSON Schema) y los errores filtran los `[INFO]` de RapidOCR/ONNX.
 - `--with-layout` usa las cajas reales del texto nativo en PDFs con capa de texto (antes devolvía `[0, 0, 0, 0]`), lo que permite pintar el visor de la SPA.
 - `--text-format rows` con contrato sin anotar ya no se salta el LLM: la asignación determinista solo corre con anotaciones o variante.
 - `_row_blocks` reutiliza los bloques OCR ya calculados en vez de repetir el OCR de las páginas rasterizadas.
