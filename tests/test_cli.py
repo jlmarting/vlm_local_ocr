@@ -93,7 +93,7 @@ def test_json_without_contract_returns_text(monkeypatch, tmp_path: Path, capsys)
 
 def test_json_without_contract_with_layout(monkeypatch, tmp_path: Path, capsys) -> None:
     _mock_pipeline(monkeypatch)
-    source = tmp_path / "doc.pdf"
+    source = tmp_path / "doc.png"
     source.write_bytes(b"")
 
     code = cli.main([str(source), "--format", "json", "--with-layout"])
@@ -102,6 +102,33 @@ def test_json_without_contract_with_layout(monkeypatch, tmp_path: Path, capsys) 
     payload = json.loads(capsys.readouterr().out)
     assert payload["text"] == "texto de prueba"
     assert payload["layout"][0]["text"] == "texto de prueba"
+
+
+def test_json_with_layout_uses_native_boxes(monkeypatch, tmp_path: Path, capsys) -> None:
+    monkeypatch.setattr(
+        cli, "ingest", lambda path, dpi=200: [PageInput(0, "texto nativo", None)]
+    )
+    monkeypatch.setattr(
+        cli,
+        "ocr_pages",
+        lambda pages, lang="default": [
+            LayoutBlock(0, "texto nativo", 1.0, (0.0, 0.0, 0.0, 0.0))
+        ],
+    )
+    monkeypatch.setattr(
+        cli,
+        "native_blocks",
+        lambda path: [LayoutBlock(0, "texto nativo", 1.0, (10.0, 20.0, 110.0, 36.0))],
+    )
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"")
+
+    code = cli.main([str(source), "--format", "json", "--with-layout"])
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["text"] == "texto nativo"
+    assert payload["layout"][0]["box"] == [10.0, 20.0, 110.0, 36.0]
 
 
 def test_json_without_contract_does_not_need_model(monkeypatch, tmp_path: Path, capsys) -> None:

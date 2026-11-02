@@ -751,9 +751,19 @@ def main(argv: list[str] | None = None) -> int:
         elif args.format == "md":
             output = to_markdown(blocks)
         elif contract is None:
+            layout_blocks = blocks
+            if args.with_layout:
+                layout_blocks = _row_blocks(
+                    args.file,
+                    pages,
+                    blocks,
+                    args.lang,
+                    kind=document_kind,
+                    data=document_data,
+                )
             output = to_text_json(
                 to_markdown(blocks),
-                blocks if args.with_layout else None,
+                layout_blocks if args.with_layout else None,
             )
         else:
             input_text = to_markdown(blocks)
