@@ -9,18 +9,22 @@
   <body>
     <header>
       <h1>vlm-local-ocr</h1>
-      <span id="status">conectando…</span>
+      <span id="status" data-i18n="status.connecting">conectando…</span>
+      <select id="lang" aria-label="Idioma / Language">
+        <option value="es">ES</option>
+        <option value="en">EN</option>
+      </select>
     </header>
     <main>
       <section id="recents" class="recents" hidden>
-        <h2>Recientes</h2>
+        <h2 data-i18n="recents.title">Recientes</h2>
         <div id="recents-list" class="recents-list"></div>
       </section>
 
       <section id="dropzone" class="dropzone">
-        <p>Arrastra un PDF o una imagen aquí</p>
+        <p data-i18n="dropzone.text">Arrastra un PDF o una imagen aquí</p>
         <label class="button">
-          Elegir archivo
+          <span data-i18n="dropzone.choose">Elegir archivo</span>
           <input
             id="file"
             type="file"
@@ -32,11 +36,13 @@
 
       <section id="viewer" hidden>
         <div class="toolbar">
-          <button id="prev" type="button" title="Página anterior">‹</button>
+          <button id="prev" type="button" data-i18n-title="viewer.prev">‹</button>
           <span id="page-label">1 / 1</span>
-          <button id="next" type="button" title="Página siguiente">›</button>
+          <button id="next" type="button" data-i18n-title="viewer.next">›</button>
           <span class="spacer"></span>
-          <button id="new" type="button" class="secondary">Nuevo documento</button>
+          <button id="new" type="button" class="secondary" data-i18n="viewer.new">
+            Nuevo documento
+          </button>
         </div>
         <div class="content">
           <div id="page-wrap" class="page-wrap">
@@ -48,16 +54,28 @@
 
         <section id="contract" class="contract">
           <div class="toolbar">
-            <h2>Contrato</h2>
-            <button id="add-field" type="button">Añadir campo</button>
-            <button id="extract" type="button">Probar extracción</button>
-            <button id="homologate" type="button">Homologar plantilla</button>
+            <h2 data-i18n="contract.title">Contrato</h2>
+            <button id="add-field" type="button" data-i18n="contract.addField">
+              Añadir campo
+            </button>
+            <button id="extract" type="button" data-i18n="contract.extract">
+              Probar extracción
+            </button>
+            <button id="homologate" type="button" data-i18n="contract.homologate">
+              Homologar plantilla
+            </button>
             <span id="extract-summary" class="summary"></span>
           </div>
           <div class="toolbar exports">
-            <button id="export-schema" type="button">Exportar schema</button>
-            <button id="export-result" type="button">Exportar resultado</button>
-            <button id="export-text" type="button">Exportar texto</button>
+            <button id="export-schema" type="button" data-i18n="contract.exportSchema">
+              Exportar schema
+            </button>
+            <button id="export-result" type="button" data-i18n="contract.exportResult">
+              Exportar resultado
+            </button>
+            <button id="export-text" type="button" data-i18n="contract.exportText">
+              Exportar texto
+            </button>
           </div>
           <div id="fields" class="fields"></div>
           <datalist id="sources">

@@ -11,9 +11,51 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
+const SUPPORTED_LANGS = ["es", "en"];
+let locale = {};
 
 function token() {
   return sessionStorage.getItem("vlm-token") || "";
+}
+
+function t(key, params = {}) {
+  let text = locale[key] ?? key;
+  for (const [name, value] of Object.entries(params)) {
+    text = text.replaceAll(`{${name}}`, String(value));
+  }
+  return text;
+}
+
+function detectLang() {
+  const stored = localStorage.getItem("vlm-lang");
+  if (stored && SUPPORTED_LANGS.includes(stored)) {
+    return stored;
+  }
+  return (navigator.language || "es").toLowerCase().startsWith("en") ? "en" : "es";
+}
+
+async function loadLocale(lang) {
+  const response = await fetch(`locales/${lang}.json`);
+  locale = await response.json();
+  document.documentElement.lang = lang;
+  $("lang").value = lang;
+  applyI18n();
+}
+
+function applyI18n() {
+  for (const node of document.querySelectorAll("[data-i18n]")) {
+    node.textContent = t(node.dataset.i18n);
+  }
+  for (const node of document.querySelectorAll("[data-i18n-placeholder]")) {
+    node.setAttribute("placeholder", t(node.dataset.i18nPlaceholder));
+  }
+  for (const node of document.querySelectorAll("[data-i18n-title]")) {
+    node.setAttribute("title", t(node.dataset.i18nTitle));
+  }
+  renderFields();
+  if (state.document) {
+    renderRecentsFromState();
+  }
 }
 
 function setStatus(text) {
@@ -157,7 +199,7 @@ function showViewer() {
 
 async function upload(file) {
   clearError();
-  setStatus("procesando…");
+  setStatus(t("status.processing"));
   const form = new FormData();
   form.append("file", file);
   try {
@@ -171,17 +213,17 @@ async function upload(file) {
     $("extract-summary").textContent = "";
     showViewer();
     await showPage(0);
-    setStatus(`${payload.document.filename} · ${payload.document.pages.length} pág.`);
+    $("status").textContent = `${payload.document.filename} · ${payload.document.pages.length}`;
     await loadRecents();
   } catch (error) {
-    setStatus("error");
+    setStatus(t("status.error"));
     showError(error);
   }
 }
 
 async function openWorkspace(workspaceId) {
   clearError();
-  setStatus("abriendo…");
+  setStatus(t("status.opening"));
   try {
     const metaResponse = await api(`/api/workspaces/${workspaceId}`);
     const meta = (await metaResponse.json()).workspace;
@@ -205,11 +247,19 @@ async function openWorkspace(workspaceId) {
     await loadContract(workspaceId);
     showViewer();
     await showPage(0);
-    setStatus(`${meta.document.filename} · ${pages.length} pág.`);
+    $("status").textContent = `${meta.document.filename} · ${pages.length}`;
   } catch (error) {
-    setStatus("error");
+    setStatus(t("status.error"));
     showError(error);
   }
+}
+
+function summaryText(extraction) {
+  return t("summary", {
+    ok: extraction.matched.length,
+    pending: extraction.pending.length,
+    missing: extraction.unmatched.length,
+  });
 }
 
 async function loadContract(workspaceId) {
@@ -238,15 +288,14 @@ async function loadContract(workspaceId) {
     const result = await resultResponse.json();
     state.extraction = result.extraction || null;
     if (state.extraction) {
-      const { matched, pending, unmatched } = state.extraction;
-      $("extract-summary").textContent =
-        `${matched.length} ok · ${pending.length} pendientes · ` +
-        `${unmatched.length} sin localizar`;
+      $("extract-summary").textContent = summaryText(state.extraction);
     }
   } catch (error) {
     state.extraction = null;
   }
 }
+
+let recentsCache = [];
 
 async function loadRecents() {
   if (!token()) {
@@ -255,10 +304,15 @@ async function loadRecents() {
   try {
     const response = await api("/api/workspaces");
     const payload = await response.json();
-    renderRecents(payload.workspaces || []);
+    recentsCache = payload.workspaces || [];
+    renderRecents(recentsCache);
   } catch (error) {
     // sin token o servidor no disponible: el health ya lo indica
   }
+}
+
+function renderRecentsFromState() {
+  renderRecents(recentsCache);
 }
 
 function renderRecents(rows) {
@@ -286,7 +340,7 @@ function renderRecents(rows) {
     remove.type = "button";
     remove.className = "danger";
     remove.textContent = "×";
-    remove.title = "Borrar workspace";
+    remove.title = t("recents.delete");
     remove.addEventListener("click", () => deleteWorkspace(row.id));
     item.appendChild(remove);
 
@@ -295,13 +349,13 @@ function renderRecents(rows) {
 }
 
 async function deleteWorkspace(workspaceId) {
-  if (!window.confirm("¿Borrar este workspace y sus ficheros?")) {
+  if (!window.confirm(t("confirm.delete"))) {
     return;
   }
   try {
     await api(`/api/workspaces/${workspaceId}`, { method: "DELETE" });
     await loadRecents();
-    setStatus("workspace borrado");
+    setStatus(t("status.workspaceDeleted"));
   } catch (error) {
     showError(error);
   }
@@ -327,18 +381,21 @@ function fieldStatus(field) {
     return { kind: "ok", text: String(result.data[field.name] ?? "") };
   }
   if (result.pending.includes(field.name)) {
-    return { kind: "pending", text: "pendiente" };
+    return { kind: "pending", text: t("status.pending") };
   }
-  return { kind: "missing", text: "sin localizar" };
+  return { kind: "missing", text: t("status.missing") };
 }
 
 function renderFields() {
   const container = $("fields");
+  if (!container) {
+    return;
+  }
   container.innerHTML = "";
   if (!state.fields.length) {
     const empty = document.createElement("p");
     empty.className = "muted";
-    empty.textContent = "Añade un campo y asigna bloques de texto.";
+    empty.textContent = t("contract.empty");
     container.appendChild(empty);
     return;
   }
@@ -348,7 +405,7 @@ function renderFields() {
 
     const name = document.createElement("input");
     name.value = field.name;
-    name.placeholder = "nombre";
+    name.placeholder = t("field.name");
     name.addEventListener("input", () => {
       field.name = name.value;
     });
@@ -358,7 +415,7 @@ function renderFields() {
     for (const option of ["text", "number", "integer", "date"]) {
       const node = document.createElement("option");
       node.value = option;
-      node.textContent = option;
+      node.textContent = t(`type.${option}`);
       node.selected = field.type === option;
       type.appendChild(node);
     }
@@ -369,7 +426,7 @@ function renderFields() {
 
     const labels = document.createElement("input");
     labels.value = field.labels.join(", ");
-    labels.placeholder = "etiquetas (separadas por coma)";
+    labels.placeholder = t("field.labels");
     labels.addEventListener("input", () => {
       field.labels = labels.value
         .split(",")
@@ -380,7 +437,7 @@ function renderFields() {
 
     const source = document.createElement("input");
     source.value = field.source;
-    source.placeholder = "columna (opcional)";
+    source.placeholder = t("field.source");
     source.setAttribute("list", "sources");
     source.addEventListener("input", () => {
       field.source = source.value.trim();
@@ -389,7 +446,7 @@ function renderFields() {
 
     const assign = document.createElement("button");
     assign.type = "button";
-    assign.textContent = "Asignar bloque";
+    assign.textContent = t("field.assign");
     assign.disabled = !state.selectedBlock;
     assign.addEventListener("click", () => {
       if (!state.selectedBlock) {
@@ -406,7 +463,7 @@ function renderFields() {
     remove.type = "button";
     remove.className = "danger";
     remove.textContent = "×";
-    remove.title = "Eliminar campo";
+    remove.title = t("field.remove");
     remove.addEventListener("click", () => {
       state.fields.splice(index, 1);
       renderFields();
@@ -430,10 +487,10 @@ function buildSchema() {
   for (const field of state.fields) {
     const name = field.name.trim();
     if (!name) {
-      throw new Error("hay un campo sin nombre");
+      throw new Error(t("error.noName"));
     }
     if (properties[name]) {
-      throw new Error(`campo duplicado: ${name}`);
+      throw new Error(t("error.duplicate", { name }));
     }
     const type = field.type === "date" ? "string" : field.type;
     const node = { type: [type, "null"], "x-labels": field.labels };
@@ -455,10 +512,10 @@ async function extract() {
     return;
   }
   if (!state.fields.length) {
-    showError("añade al menos un campo");
+    showError(t("error.noFields"));
     return;
   }
-  setStatus("extrayendo…");
+  setStatus(t("status.extracting"));
   try {
     const schema = buildSchema();
     const response = await api(
@@ -472,13 +529,10 @@ async function extract() {
     const payload = await response.json();
     state.extraction = payload.extraction;
     renderFields();
-    const { matched, pending, unmatched } = payload.extraction;
-    $("extract-summary").textContent =
-      `${matched.length} ok · ${pending.length} pendientes · ` +
-      `${unmatched.length} sin localizar`;
-    setStatus("extracción lista");
+    $("extract-summary").textContent = summaryText(payload.extraction);
+    setStatus(t("status.extractionReady"));
   } catch (error) {
-    setStatus("error");
+    setStatus(t("status.error"));
     showError(error);
   }
 }
@@ -500,12 +554,10 @@ async function homologate() {
     );
     const payload = await response.json();
     if (payload.template_saved) {
-      setStatus("plantilla homologada");
+      setStatus(t("status.templateSaved"));
     } else {
-      const blockers = (payload.unlocated || []).join(", ");
-      showError(
-        `no se homologó${blockers ? `: ${blockers}` : ""}`
-      );
+      const fields = (payload.unlocated || []).join(", ");
+      showError(t("error.noHomologate", { fields: fields ? `: ${fields}` : "" }));
     }
   } catch (error) {
     showError(error);
@@ -563,7 +615,7 @@ function reset() {
   $("viewer").hidden = true;
   $("dropzone").hidden = false;
   $("file").value = "";
-  setStatus("listo");
+  setStatus(t("status.ready"));
   loadRecents();
 }
 
@@ -597,6 +649,11 @@ function wire() {
   $("export-schema").addEventListener("click", () => exportCurrent("schema"));
   $("export-result").addEventListener("click", () => exportCurrent("result"));
   $("export-text").addEventListener("click", () => exportCurrent("text"));
+  $("lang").addEventListener("change", async (event) => {
+    const lang = event.target.value;
+    localStorage.setItem("vlm-lang", lang);
+    await loadLocale(lang);
+  });
 }
 
 async function health() {
@@ -608,7 +665,7 @@ async function health() {
     const payload = await response.json();
     setStatus(`v${payload.version}`);
   } catch (error) {
-    setStatus("sin conexión");
+    setStatus(t("status.noConnection"));
   }
 }
 
@@ -620,5 +677,7 @@ if (initialToken) {
 }
 
 wire();
-health();
-loadRecents();
+loadLocale(detectLang()).then(() => {
+  health();
+  loadRecents();
+});
