@@ -12,7 +12,37 @@
       <span id="status">conectando…</span>
     </header>
     <main>
-      <p>Servidor local de OCR y contratos.</p>
+      <section id="dropzone" class="dropzone">
+        <p>Arrastra un PDF o una imagen aquí</p>
+        <label class="button">
+          Elegir archivo
+          <input
+            id="file"
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp,.txt"
+            hidden
+          />
+        </label>
+      </section>
+
+      <section id="viewer" hidden>
+        <div class="toolbar">
+          <button id="prev" type="button" title="Página anterior">‹</button>
+          <span id="page-label">1 / 1</span>
+          <button id="next" type="button" title="Página siguiente">›</button>
+          <span class="spacer"></span>
+          <button id="new" type="button" class="secondary">Nuevo documento</button>
+        </div>
+        <div class="content">
+          <div id="page-wrap" class="page-wrap">
+            <img id="page-image" alt="Página del documento" />
+            <div id="boxes" class="boxes"></div>
+          </div>
+          <aside id="text-panel" class="text-panel"></aside>
+        </div>
+      </section>
+
+      <p id="error" class="error" hidden></p>
     </main>
     <script src="app.js"></script>
   </body>

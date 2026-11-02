@@ -1,6 +1,13 @@
 :root {
   color-scheme: light dark;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --border: color-mix(in srgb, CanvasText 20%, transparent);
+  --accent: #2563eb;
+  --muted: color-mix(in srgb, CanvasText 55%, transparent);
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
@@ -13,8 +20,8 @@ header {
   display: flex;
   align-items: baseline;
   gap: 1rem;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+  padding: 0.9rem 1.5rem;
+  border-bottom: 1px solid var(--border);
 }
 
 header h1 {
@@ -24,9 +31,139 @@ header h1 {
 
 #status {
   font-size: 0.9rem;
-  opacity: 0.75;
+  color: var(--muted);
 }
 
 main {
   padding: 1.5rem;
+}
+
+.dropzone {
+  display: grid;
+  place-items: center;
+  gap: 1rem;
+  min-height: 18rem;
+  border: 2px dashed var(--border);
+  border-radius: 0.75rem;
+  text-align: center;
+}
+
+.dropzone.over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.button {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+button {
+  font: inherit;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: Canvas;
+  color: CanvasText;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+button.secondary {
+  margin-left: auto;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.content {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(16rem, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .content {
+    grid-template-columns: 1fr;
+  }
+}
+
+.page-wrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  background: white;
+}
+
+.page-wrap img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.boxes {
+  position: absolute;
+  inset: 0;
+}
+
+.box {
+  position: absolute;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-radius: 2px;
+}
+
+.box:hover,
+.box.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.text-panel {
+  max-height: 75vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+}
+
+.text-block {
+  display: block;
+  width: 100%;
+  margin: 0 0 0.25rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 0.3rem;
+  text-align: left;
+  background: transparent;
+}
+
+.text-block:hover,
+.text-block.selected {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.error {
+  margin-top: 1rem;
+  color: #b91c1c;
+  white-space: pre-wrap;
 }
