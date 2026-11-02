@@ -635,7 +635,8 @@ function buildSchema() {
     if (properties[name]) {
       throw new Error(t("error.duplicate", { name }));
     }
-    const type = field.type === "date" ? "string" : field.type;
+    const type =
+      field.type === "text" || field.type === "date" ? "string" : field.type;
     const node = { type: [type, "null"], "x-labels": field.labels };
     if (field.source) {
       node["x-source"] = field.source;

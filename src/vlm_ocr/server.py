@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import secrets
 import subprocess
 import sys
@@ -24,6 +25,20 @@ from .types import LayoutBlock
 WEB_DIR = Path(__file__).parent / "web"
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _clean_stderr(text: str) -> str:
+    """Quita el ruido de RapidOCR/ONNX y conserva avisos y errores accionables."""
+    lines: list[str] = []
+    for raw in ANSI_RE.sub("", text).splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if "[INFO]" in line or "RapidOCR" in line:
+            continue
+        lines.append(line)
+    return "\n".join(lines)
 
 
 def is_loopback(host: str) -> bool:
@@ -38,13 +53,14 @@ def _document_path(workspace: workspace_mod.Workspace) -> Path:
 def _run_cli(document: Path, extra: list[str]) -> tuple[int, dict | None, str]:
     command = [sys.executable, "-m", "vlm_ocr", str(document), *extra]
     result = subprocess.run(command, capture_output=True, text=True, check=False)
+    stderr = _clean_stderr(result.stderr)
     if result.returncode != 0:
-        return result.returncode, None, result.stderr.strip()
+        return result.returncode, None, stderr
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError:
         return 1, None, "el CLI no devolvió JSON"
-    return 0, payload if isinstance(payload, dict) else None, result.stderr.strip()
+    return 0, payload if isinstance(payload, dict) else None, stderr
 
 
 def _process_document(

@@ -52,3 +52,21 @@ def test_wrong_token_is_rejected(tmp_path: Path) -> None:
     )
 
     assert response.status_code == 401
+
+
+def test_clean_stderr_drops_rapidocr_info_and_keeps_actions() -> None:
+    from vlm_ocr.server import _clean_stderr
+
+    raw = (
+        "\x1b[32m[INFO] 2026-11-02 22:03:37,527 [RapidOCR] base.py:23: "
+        "Using engine_name: onnxruntime\x1b[0m\n"
+        "aviso: cobertura baja: 0/2 campos anotados\n"
+        "error: JSON Schema inválido: ['text', 'null'] is not valid\n"
+    )
+
+    cleaned = _clean_stderr(raw)
+
+    assert "RapidOCR" not in cleaned
+    assert "[INFO]" not in cleaned
+    assert "aviso: cobertura baja" in cleaned
+    assert "error: JSON Schema inválido" in cleaned
