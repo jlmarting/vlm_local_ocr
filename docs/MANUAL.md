@@ -266,6 +266,20 @@ uv run vlm-ocr documento.pdf --metrics-out metricas.json
 - `mean_confidence` solo sobre bloques de páginas rasterizadas; `null` sin OCR real.
 - Sin contrato/modelo: `llm.enabled=false` y el resto se mide igual.
 
+### Servidor local y SPA (experimental)
+
+```bash
+uv sync --extra serve
+uv run vlm-ocr serve            # imprime la URL con token y abre el navegador
+uv run vlm-ocr serve --no-open  # sin abrir navegador
+```
+
+- Solo loopback; token efímero en el fragmento de la URL.
+- Workspaces en `data_dir()/workspaces/`; recientes en `index.json`.
+- Flujo: arrastrar documento → texto + cajas → añadir campos → asignar bloques → probar extracción determinista → exportar schema/resultado/texto → homologar plantilla.
+- MVP determinista (sin LLM). UI bilingüe ES/EN.
+- Requiere el extra `serve`; el CLI base no carga FastAPI.
+
 ## 5. Contratos
 
 ### 5.1 Ejemplo de payload

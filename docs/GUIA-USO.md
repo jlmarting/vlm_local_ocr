@@ -44,6 +44,15 @@ casi instantáneos. Moraleja: no pagues al LLM si solo quieres leer.
 
 ## Recetas por tarea
 
+### «Prefiero no tocar la terminal: quiero la SPA»
+
+```bash
+uv sync --extra serve
+uv run vlm-ocr serve
+```
+
+Arrastra el documento, revisa el texto y las cajas, crea campos y asígnales bloques. «Probar extracción» usa el camino determinista; «Homologar plantilla» guarda la variante. La instalación del CLI sigue siendo técnica; el bundle de escritorio es una fase posterior.
+
 ### «Quiero el texto de un PDF/imagen y nada más»
 
 ```bash

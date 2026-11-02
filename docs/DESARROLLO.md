@@ -9,6 +9,7 @@ el stack desde junior, antes por aquí: [learn/](learn/README.md).
 ```bash
 git clone <repo> && cd vlm_local_ocr
 uv sync                      # crea .venv con deps + dev (pytest, ruff)
+uv sync --extra serve        # añade FastAPI/uvicorn para la SPA local
 uv run pytest -q -m "not integration"   # rápido: unidades
 uv run pytest -q                         # todo (los de integración piden modelos reales)
 uv run ruff check .
@@ -23,7 +24,7 @@ uv run ruff check .
 
 ## El mapa (para no perderse)
 
-19 módulos, ~5.200 líneas, una responsabilidad cada uno. El grafo de dependencias manda: si
+22 módulos, ~5.900 líneas, una responsabilidad cada uno. El grafo de dependencias manda: si
 «no estás seguro de dónde ponerlo», probablemente es porque estás creando una dependencia
 circular y el grafo te está haciendo un favor.
 
@@ -49,6 +50,10 @@ circular y el grafo te está haciendo un favor.
 | `types.py` | `LayoutBlock` y poco más (tipos compartidos) | casi todos |
 | `errors.py` | jerarquía `VlmOcrError → InputError | ContractError | ...` | casi todos |
 | `bench.py` | `models bench`: un documento, un modelo, JSONL con métricas (spike) | `cli` |
+| `server.py` | servidor local (FastAPI/uvicorn) y API de la SPA; extra opcional `[serve]` | `cli` |
+| `workspace.py` | persistencia de workspaces (documento, contrato, resultado, recientes) | `server` |
+| `serve_layout.py` | render de páginas y normalización de cajas nativas/OCR | `server` |
+| `web/` | SPA estática (HTML/CSS/JS, locales ES/EN) servida por `server.py` | `server` |
 
 ## El pipeline, en una vista
 
