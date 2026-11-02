@@ -9,6 +9,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- Servidor local `vlm-ocr serve` (extra `[serve]`: `fastapi`, `uvicorn`, `python-multipart`): SPA bilingüe ES/EN para arrastrar documentos, ver texto y cajas, construir contratos anotados, extraer en determinista, exportar schema/resultado/texto y homologar plantillas. Escucha solo en loopback con token efímero; workspaces persistentes con recientes.
 - Listas repetidas en tickets: `x-item-columns`, `x-stop-labels` obligatorio, `cantidad`, observaciones unidas con espacio + salto de línea, extractor determinista, stop de pagos, fallback al LLM y verificación de precios. Plantillas/homologación por línea (`ItemMap`) con 0 tokens. Ejemplo: `examples/contrato-ticket.schema.json`.
 - Modo `--prompt` con LLM sin contrato: tarea libre sobre el texto, excluyente con `--contract`, modelo explícito y salida md (respuesta) o json (`text` + `answer`); sin gramática ni verificación literal.
 - Texto plano como documento: ficheros `.txt` y `--input-format txt|text` por stdin. Se decodifica en UTF-8 estricto (BOM tolerado), no pasa por OCR y cada línea no vacía es un bloque; vacío o no UTF-8 es error.
@@ -53,6 +54,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Fixed
 
+- `--with-layout` usa las cajas reales del texto nativo en PDFs con capa de texto (antes devolvía `[0, 0, 0, 0]`), lo que permite pintar el visor de la SPA.
 - `--text-format rows` con contrato sin anotar ya no se salta el LLM: la asignación determinista solo corre con anotaciones o variante.
 - `_row_blocks` reutiliza los bloques OCR ya calculados en vez de repetir el OCR de las páginas rasterizadas.
 - El reintento del contrato ya no pide `max_tokens` a ciegas: el presupuesto de cada intento se ajusta al contexto que deja el prompt y falla antes de generar si no cabe.

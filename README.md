@@ -246,6 +246,25 @@ Al terminar, `verify` comprueba que cada valor aparezca en el texto: números, f
 
 Para campos numéricos, si el texto contiene la etiqueta del campo (por ejemplo `Total:`), prevalece ese valor literal sobre lo que devuelva el modelo. Así se evita confundir el total con un precio unitario o una cantidad.
 
+## Servidor local y SPA (experimental)
+
+El CLI incluye una capa de usabilidad para usuarios no técnicos: una SPA local que permite arrastrar un documento, ver el texto con sus cajas, construir un contrato asignando bloques a campos, ejecutar la extracción determinista y exportar u homologar. El motor sigue siendo el CLI; la SPA es una capa fina.
+
+```bash
+uv sync --extra serve
+uv run vlm-ocr serve
+# imprime http://127.0.0.1:<puerto>/#token=... y abre el navegador
+```
+
+- Escucha solo en loopback (`127.0.0.1`, `::1`, `localhost`) y exige un token efímero que viaja en el fragmento de la URL.
+- `--no-open` no abre el navegador; `--workspace-dir` cambia el directorio de trabajos; `--port 0` (defecto) elige un puerto libre.
+- Los workspaces se guardan en el directorio de datos del usuario (`paths.py`), con documento, texto, contrato y resultado. La lista de recientes vive en `index.json`.
+- El MVP es determinista: no descarga pesos ni llama al LLM. La UI es bilingüe ES/EN.
+- Limitación conocida: una página escaneada con una capa de texto mínima mezcla coordenadas nativas y OCR. El MVP la resolverá con `origin` por bloque; el spike cubre páginas puras.
+- Requiere el extra `serve` (`fastapi`, `uvicorn`, `python-multipart`); el CLI base sigue sin dependencias web.
+
+La instalación del propio CLI sigue siendo técnica; el empaquetado de escritorio queda para una fase posterior.
+
 ## Contrato anotado (JSON Schema)
 
 Un contrato puede anotar cada campo con `x-labels` (etiquetas con las que aparece en el documento) y `x-source` (columna de la que se toma el valor: `unidades`, `importe`, `devengado`, `a_deducir`, `base`, `porcentaje`, `cuota`):
