@@ -17,7 +17,9 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__, paths, serve_layout
 from . import workspace as workspace_mod
-from .errors import InputError
+from .errors import ContractError, InputError
+from .extract import assign
+from .types import LayoutBlock
 
 WEB_DIR = Path(__file__).parent / "web"
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
@@ -108,6 +110,78 @@ def _read_ocr(workspace: workspace_mod.Workspace) -> dict:
     if not isinstance(data, dict):
         raise InputError("el workspace no tiene texto extraído")
     return data
+
+
+def _assignment_from_ocr(ocr: dict, schema: dict):
+    blocks = [
+        LayoutBlock(
+            page=int(block["page"]),
+            text=str(block["text"]),
+            confidence=0.0,
+            box=tuple(float(value) for value in block["box"]),
+        )
+        for block in ocr.get("blocks", [])
+        if isinstance(block, dict)
+    ]
+    return assign(blocks, schema)
+
+
+def _extract_contract(
+    base: Path, workspace: workspace_mod.Workspace, schema: object
+) -> dict:
+    if not isinstance(schema, dict):
+        raise ContractError("el contrato debe ser un objeto JSON")
+    schema_path = workspace.root / "contracts" / "contract.schema.json"
+    schema_path.write_text(
+        json.dumps(schema, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    document = _document_path(workspace)
+    code, payload, stderr = _run_cli(
+        document,
+        [
+            "--format",
+            "json",
+            "--contract",
+            str(schema_path),
+            "--contract-kind",
+            "schema",
+            "--no-llm",
+            "--with-layout",
+        ],
+    )
+    if code != 0 or payload is None:
+        raise ContractError(stderr or "el CLI no pudo extraer el contrato")
+
+    ocr = _read_ocr(workspace)
+    assignment = _assignment_from_ocr(ocr, schema)
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        data = assignment.data
+    extraction = {
+        "data": data,
+        "matched": assignment.matched,
+        "pending": assignment.pending,
+        "unmatched": assignment.unmatched,
+        "sources": {
+            path: {"label": cell.label, "source": cell.source}
+            for path, cell in assignment.sources.items()
+        },
+    }
+    created_at = workspace_mod._now()
+    result = {"schema": schema, "extraction": extraction, "created_at": created_at}
+    (workspace.root / "results" / "last.json").write_text(
+        json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    meta = workspace_mod.update_workspace(
+        workspace,
+        base,
+        contract={
+            "path": "contracts/contract.schema.json",
+            "updated_at": created_at,
+        },
+        last_result={"path": "results/last.json", "updated_at": created_at},
+    )
+    return {"workspace": meta.meta, "extraction": extraction}
 
 
 def create_app(workspace_dir: Path, token: str) -> FastAPI:
@@ -222,6 +296,26 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
                 {"error": "not_found", "detail": str(exc)}, status_code=404
             )
         return JSONResponse({"text": ocr["text"], "blocks": ocr["blocks"]})
+
+    @app.post("/api/workspaces/{workspace_id}/contract")
+    def extract_contract(workspace_id: str, body: dict) -> JSONResponse:
+        try:
+            workspace = workspace_mod.get_workspace(
+                app.state.workspace_dir, workspace_id
+            )
+        except InputError as exc:
+            return JSONResponse(
+                {"error": "not_found", "detail": str(exc)}, status_code=404
+            )
+        try:
+            result = _extract_contract(
+                app.state.workspace_dir, workspace, body.get("schema")
+            )
+        except (InputError, ContractError) as exc:
+            return JSONResponse(
+                {"error": "contract", "detail": str(exc)}, status_code=422
+            )
+        return JSONResponse(result)
 
     if WEB_DIR.exists():
         app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")

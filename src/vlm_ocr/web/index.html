@@ -40,6 +40,25 @@
           </div>
           <aside id="text-panel" class="text-panel"></aside>
         </div>
+
+        <section id="contract" class="contract">
+          <div class="toolbar">
+            <h2>Contrato</h2>
+            <button id="add-field" type="button">Añadir campo</button>
+            <button id="extract" type="button">Probar extracción</button>
+            <span id="extract-summary" class="summary"></span>
+          </div>
+          <div id="fields" class="fields"></div>
+          <datalist id="sources">
+            <option value="unidades"></option>
+            <option value="importe"></option>
+            <option value="devengado"></option>
+            <option value="a_deducir"></option>
+            <option value="base"></option>
+            <option value="porcentaje"></option>
+            <option value="cuota"></option>
+          </datalist>
+        </section>
       </section>
 
       <p id="error" class="error" hidden></p>

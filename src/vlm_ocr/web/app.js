@@ -5,6 +5,9 @@ const state = {
   pageUrls: new Map(),
   boxes: new Map(),
   selected: null,
+  selectedBlock: null,
+  fields: [],
+  extraction: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -64,8 +67,7 @@ function drawBoxes(page) {
   const container = $("boxes");
   container.innerHTML = "";
   state.boxes = new Map();
-  const blocks = pageBlocks(page);
-  blocks.forEach((block, index) => {
+  pageBlocks(page).forEach((block, index) => {
     const [x0, y0, x1, y1] = block.box;
     if (x1 <= x0 || y1 <= y0) {
       return;
@@ -100,6 +102,7 @@ function renderText(page) {
 
 function selectBlock(index) {
   state.selected = index;
+  state.selectedBlock = pageBlocks(state.document.pages[state.page])[index] || null;
   for (const [key, element] of state.boxes.entries()) {
     element.classList.toggle("selected", key === index);
   }
@@ -115,6 +118,7 @@ function selectBlock(index) {
       item.scrollIntoView({ block: "nearest" });
     }
   }
+  renderFields();
 }
 
 async function showPage(index) {
@@ -124,12 +128,14 @@ async function showPage(index) {
   }
   state.page = index;
   state.selected = null;
+  state.selectedBlock = null;
   $("page-label").textContent = `${index + 1} / ${state.document.pages.length}`;
   $("prev").disabled = index === 0;
   $("next").disabled = index === state.document.pages.length - 1;
   $("page-image").src = await loadPageImage(page);
   drawBoxes(page);
   renderText(page);
+  renderFields();
 }
 
 async function upload(file) {
@@ -143,10 +149,189 @@ async function upload(file) {
     state.workspace = payload.workspace;
     state.document = payload.document;
     state.pageUrls = new Map();
+    state.fields = [];
+    state.extraction = null;
+    $("extract-summary").textContent = "";
     $("dropzone").hidden = true;
     $("viewer").hidden = false;
     await showPage(0);
     setStatus(`${payload.document.filename} · ${payload.document.pages.length} pág.`);
+  } catch (error) {
+    setStatus("error");
+    showError(error);
+  }
+}
+
+function addField() {
+  const index = state.fields.length + 1;
+  state.fields.push({
+    name: `campo_${index}`,
+    type: "text",
+    labels: [],
+    source: "",
+  });
+  renderFields();
+}
+
+function fieldStatus(field) {
+  const result = state.extraction;
+  if (!result) {
+    return null;
+  }
+  if (result.matched.includes(field.name)) {
+    return { kind: "ok", text: String(result.data[field.name] ?? "") };
+  }
+  if (result.pending.includes(field.name)) {
+    return { kind: "pending", text: "pendiente" };
+  }
+  return { kind: "missing", text: "sin localizar" };
+}
+
+function renderFields() {
+  const container = $("fields");
+  container.innerHTML = "";
+  if (!state.fields.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "Añade un campo y asigna bloques de texto.";
+    container.appendChild(empty);
+    return;
+  }
+  state.fields.forEach((field, index) => {
+    const row = document.createElement("div");
+    row.className = "field-row";
+
+    const name = document.createElement("input");
+    name.value = field.name;
+    name.placeholder = "nombre";
+    name.addEventListener("input", () => {
+      field.name = name.value;
+    });
+    row.appendChild(name);
+
+    const type = document.createElement("select");
+    for (const option of ["text", "number", "integer", "date"]) {
+      const node = document.createElement("option");
+      node.value = option;
+      node.textContent = option;
+      node.selected = field.type === option;
+      type.appendChild(node);
+    }
+    type.addEventListener("change", () => {
+      field.type = type.value;
+    });
+    row.appendChild(type);
+
+    const labels = document.createElement("input");
+    labels.value = field.labels.join(", ");
+    labels.placeholder = "etiquetas (separadas por coma)";
+    labels.addEventListener("input", () => {
+      field.labels = labels.value
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+    });
+    row.appendChild(labels);
+
+    const source = document.createElement("input");
+    source.value = field.source;
+    source.placeholder = "columna (opcional)";
+    source.setAttribute("list", "sources");
+    source.addEventListener("input", () => {
+      field.source = source.value.trim();
+    });
+    row.appendChild(source);
+
+    const assign = document.createElement("button");
+    assign.type = "button";
+    assign.textContent = "Asignar bloque";
+    assign.disabled = !state.selectedBlock;
+    assign.addEventListener("click", () => {
+      if (!state.selectedBlock) {
+        return;
+      }
+      if (!field.labels.includes(state.selectedBlock.text)) {
+        field.labels.push(state.selectedBlock.text);
+        labels.value = field.labels.join(", ");
+      }
+    });
+    row.appendChild(assign);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "danger";
+    remove.textContent = "×";
+    remove.title = "Eliminar campo";
+    remove.addEventListener("click", () => {
+      state.fields.splice(index, 1);
+      renderFields();
+    });
+    row.appendChild(remove);
+
+    const status = fieldStatus(field);
+    if (status) {
+      const node = document.createElement("span");
+      node.className = `field-status ${status.kind}`;
+      node.textContent = status.text;
+      row.appendChild(node);
+    }
+
+    container.appendChild(row);
+  });
+}
+
+function buildSchema() {
+  const properties = {};
+  for (const field of state.fields) {
+    const name = field.name.trim();
+    if (!name) {
+      throw new Error("hay un campo sin nombre");
+    }
+    if (properties[name]) {
+      throw new Error(`campo duplicado: ${name}`);
+    }
+    const type = field.type === "date" ? "string" : field.type;
+    const node = { type: [type, "null"], "x-labels": field.labels };
+    if (field.source) {
+      node["x-source"] = field.source;
+    }
+    properties[name] = node;
+  }
+  return {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    properties,
+  };
+}
+
+async function extract() {
+  clearError();
+  if (!state.workspace) {
+    return;
+  }
+  if (!state.fields.length) {
+    showError("añade al menos un campo");
+    return;
+  }
+  setStatus("extrayendo…");
+  try {
+    const schema = buildSchema();
+    const response = await api(
+      `/api/workspaces/${state.workspace.id}/contract`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schema }),
+      }
+    );
+    const payload = await response.json();
+    state.extraction = payload.extraction;
+    renderFields();
+    const { matched, pending, unmatched } = payload.extraction;
+    $("extract-summary").textContent =
+      `${matched.length} ok · ${pending.length} pendientes · ` +
+      `${unmatched.length} sin localizar`;
+    setStatus("extracción lista");
   } catch (error) {
     setStatus("error");
     showError(error);
@@ -162,9 +347,14 @@ function reset() {
   state.pageUrls = new Map();
   state.boxes = new Map();
   state.selected = null;
+  state.selectedBlock = null;
+  state.fields = [];
+  state.extraction = null;
   $("page-image").src = "";
   $("boxes").innerHTML = "";
   $("text-panel").innerHTML = "";
+  $("fields").innerHTML = "";
+  $("extract-summary").textContent = "";
   $("viewer").hidden = true;
   $("dropzone").hidden = false;
   $("file").value = "";
@@ -195,6 +385,8 @@ function wire() {
   $("prev").addEventListener("click", () => showPage(state.page - 1));
   $("next").addEventListener("click", () => showPage(state.page + 1));
   $("new").addEventListener("click", reset);
+  $("add-field").addEventListener("click", addField);
+  $("extract").addEventListener("click", extract);
 }
 
 async function health() {
