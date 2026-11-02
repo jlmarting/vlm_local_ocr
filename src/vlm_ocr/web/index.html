@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>vlm-local-ocr</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=2" />
   </head>
   <body>
     <header>
@@ -55,29 +55,88 @@
         <section id="contract" class="contract">
           <div class="toolbar">
             <h2 data-i18n="contract.title">Contrato</h2>
-            <button id="add-field" type="button" data-i18n="contract.addField">
+            <button
+              id="add-field"
+              type="button"
+              data-i18n="contract.addField"
+              data-i18n-title="contract.addFieldHint"
+            >
               Añadir campo
             </button>
-            <button id="extract" type="button" data-i18n="contract.extract">
+            <button
+              id="add-field-block"
+              type="button"
+              data-i18n="contract.addFieldBlock"
+              data-i18n-title="contract.addFieldBlockHint"
+            >
+              Campo desde el bloque
+            </button>
+            <button
+              id="extract"
+              type="button"
+              data-i18n="contract.extract"
+              data-i18n-title="contract.extractHint"
+            >
               Probar extracción
             </button>
-            <button id="homologate" type="button" data-i18n="contract.homologate">
+            <button
+              id="homologate"
+              type="button"
+              data-i18n="contract.homologate"
+              data-i18n-title="contract.homologateHint"
+            >
               Homologar plantilla
             </button>
             <span id="extract-summary" class="summary"></span>
           </div>
           <div class="toolbar exports">
-            <button id="export-schema" type="button" data-i18n="contract.exportSchema">
+            <button
+              id="export-schema"
+              type="button"
+              data-i18n="contract.exportSchema"
+              data-i18n-title="contract.exportSchemaHint"
+            >
               Exportar schema
             </button>
-            <button id="export-result" type="button" data-i18n="contract.exportResult">
+            <button
+              id="export-result"
+              type="button"
+              data-i18n="contract.exportResult"
+              data-i18n-title="contract.exportResultHint"
+            >
               Exportar resultado
             </button>
-            <button id="export-text" type="button" data-i18n="contract.exportText">
+            <button
+              id="export-text"
+              type="button"
+              data-i18n="contract.exportText"
+              data-i18n-title="contract.exportTextHint"
+            >
               Exportar texto
             </button>
           </div>
+
+          <div class="help">
+            <p class="help-title" data-i18n="contract.helpTitle">Cómo funciona</p>
+            <ol>
+              <li data-i18n="contract.help1"></li>
+              <li data-i18n="contract.help2"></li>
+              <li data-i18n="contract.help3"></li>
+              <li data-i18n="contract.help4"></li>
+            </ol>
+          </div>
+
+          <p id="selection" class="selection" data-i18n="field.noSelection">
+            Ningún bloque seleccionado
+          </p>
+
           <div id="fields" class="fields"></div>
+
+          <details id="result-panel" class="result-panel" hidden>
+            <summary data-i18n="contract.result">Resultado JSON</summary>
+            <pre id="result-json"></pre>
+          </details>
+
           <datalist id="sources">
             <option value="unidades"></option>
             <option value="importe"></option>
@@ -92,6 +151,6 @@
 
       <p id="error" class="error" hidden></p>
     </main>
-    <script src="app.js"></script>
+    <script src="app.js?v=2"></script>
   </body>
 </html>
