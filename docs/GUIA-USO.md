@@ -53,6 +53,8 @@ uv run vlm-ocr serve
 
 Arrastra el documento, revisa el texto y las cajas, crea campos y asígnales bloques. «Probar extracción» usa el camino determinista; «Homologar plantilla» guarda la variante. La instalación del CLI sigue siendo técnica; el bundle de escritorio es una fase posterior.
 
+Para tickets o facturas con líneas, usa «Añadir lista»: defines los roles una vez (texto, cantidad, importe, observación) y las etiquetas de fin (`TOTAL`, `IVA`…). No hay que seleccionar cada artículo.
+
 ### «Quiero el texto de un PDF/imagen y nada más»
 
 ```bash

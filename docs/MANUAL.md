@@ -278,6 +278,7 @@ uv run vlm-ocr serve --no-open  # sin abrir navegador
 - Workspaces en `data_dir()/workspaces/`; recientes en `index.json`.
 - Flujo: arrastrar documento → texto + cajas → añadir campos → asignar bloques → probar extracción determinista → exportar schema/resultado/texto → homologar plantilla.
 - MVP determinista (sin LLM). UI bilingüe ES/EN.
+- Listas repetidas: «Añadir lista» declara `x-item-columns` una vez (roles de texto, cantidad, importe y observación) y etiquetas de fin; el extractor recorre todas las filas.
 - Requiere el extra `serve`; el CLI base no carga FastAPI.
 
 ## 5. Contratos

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>vlm-local-ocr</title>
-    <link rel="stylesheet" href="styles.css?v=3" />
+    <link rel="stylesheet" href="styles.css?v=4" />
   </head>
   <body>
     <header>
@@ -72,6 +72,14 @@
               Campo desde el bloque
             </button>
             <button
+              id="add-list"
+              type="button"
+              data-i18n="contract.addList"
+              data-i18n-title="contract.addListHint"
+            >
+              Añadir lista
+            </button>
+            <button
               id="extract"
               type="button"
               data-i18n="contract.extract"
@@ -123,6 +131,7 @@
               <li data-i18n="contract.help2"></li>
               <li data-i18n="contract.help3"></li>
               <li data-i18n="contract.help4"></li>
+              <li data-i18n="contract.helpLists"></li>
             </ol>
           </div>
 
@@ -151,6 +160,6 @@
 
       <p id="error" class="error" hidden></p>
     </main>
-    <script src="app.js?v=3"></script>
+    <script src="app.js?v=4"></script>
   </body>
 </html>

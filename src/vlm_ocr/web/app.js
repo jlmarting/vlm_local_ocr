@@ -21,6 +21,14 @@ const SOURCE_OPTIONS = [
   "porcentaje",
   "cuota",
 ];
+const ROLE_ORDER = ["text", "quantity", "number_right", "observation"];
+const ROLE_TYPES = {
+  text: { type: "string", required: true },
+  quantity: { type: ["integer", "null"], required: false },
+  number_right: { type: ["number", "null"], required: true },
+  observation: { type: ["string", "null"], required: false },
+};
+const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 let locale = {};
 let resizeObserver = null;
 
@@ -327,16 +335,7 @@ async function loadContract(workspaceId) {
       `/api/workspaces/${workspaceId}/export/schema`
     );
     const schema = await schemaResponse.json();
-    state.fields = Object.entries(schema.properties || {}).map(
-      ([name, node]) => ({
-        name,
-        type: Array.isArray(node.type)
-          ? node.type.find((item) => item !== "null") || "text"
-          : node.type || "text",
-        labels: node["x-labels"] || [],
-        source: node["x-source"] || "",
-      })
-    );
+    state.fields = parseSchema(schema);
   } catch (error) {
     state.fields = [];
   }
@@ -425,6 +424,7 @@ async function deleteWorkspace(workspaceId) {
 function addField() {
   const index = state.fields.length + 1;
   state.fields.push({
+    kind: "scalar",
     name: `campo_${index}`,
     type: "text",
     labels: [],
@@ -439,10 +439,28 @@ function addFieldFromBlock() {
   }
   const index = state.fields.length + 1;
   state.fields.push({
+    kind: "scalar",
     name: `campo_${index}`,
     type: "text",
     labels: [state.selectedBlock.text],
     source: "",
+  });
+  renderFields();
+}
+
+function addList() {
+  const index = state.fields.length + 1;
+  state.fields.push({
+    kind: "list",
+    name: `pedido_${index}`,
+    roles: {
+      text: "producto",
+      quantity: "cantidad",
+      number_right: "precio",
+      observation: "",
+    },
+    startLabels: [],
+    stopLabels: [],
   });
   renderFields();
 }
@@ -453,6 +471,17 @@ function fieldStatus(field) {
     return null;
   }
   if (result.matched.includes(field.name)) {
+    if (field.kind === "list") {
+      const items = Array.isArray(result.data[field.name])
+        ? result.data[field.name]
+        : [];
+      return {
+        kind: "ok",
+        text: items.length
+          ? t("list.count", { count: items.length })
+          : t("list.empty"),
+      };
+    }
     const value = result.data[field.name];
     return { kind: "ok", text: value === null ? "ok" : String(value) };
   }
@@ -472,6 +501,181 @@ function labelNode(title, control, hint) {
   hintNode.textContent = hint;
   label.append(span, control, hintNode);
   return label;
+}
+
+function roleRow(role, field) {
+  const row = document.createElement("div");
+  row.className = "role-row";
+  const required = role === "text" || role === "number_right";
+  const label = document.createElement("span");
+  label.className = "role-label";
+  label.textContent = `${t(`role.${role}`)}${required ? " *" : ""}`;
+  label.title = required ? t("list.required") : "";
+  const input = document.createElement("input");
+  input.value = field.roles?.[role] || "";
+  input.placeholder = t("list.property");
+  input.addEventListener("input", () => {
+    field.roles[role] = input.value.trim();
+  });
+  row.append(label, input);
+  return row;
+}
+
+function labelListEditor(titleKey, hintKey, values, onChange) {
+  let current = values.slice();
+  const wrap = document.createElement("div");
+  wrap.className = "label-list";
+  const title = document.createElement("span");
+  title.className = "field-label-title";
+  title.textContent = t(titleKey);
+  const line = document.createElement("div");
+  line.className = "label-line";
+  const input = document.createElement("input");
+  input.value = current.join(", ");
+  input.placeholder = t("field.labels");
+  input.addEventListener("input", () => {
+    current = input.value
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    onChange(current);
+  });
+  const use = document.createElement("button");
+  use.type = "button";
+  use.textContent = t("list.useBlock");
+  use.disabled = !state.selectedBlock;
+  use.title = state.selectedBlock ? "" : t("field.assignHint");
+  use.addEventListener("click", () => {
+    if (!state.selectedBlock) {
+      return;
+    }
+    if (!current.includes(state.selectedBlock.text)) {
+      current = [...current, state.selectedBlock.text];
+      input.value = current.join(", ");
+      onChange(current);
+    }
+  });
+  line.append(input, use);
+  const hint = document.createElement("span");
+  hint.className = "field-hint";
+  hint.textContent = t(hintKey);
+  wrap.append(title, line, hint);
+  return wrap;
+}
+
+function listTable(field) {
+  const data = state.extraction?.data?.[field.name];
+  if (!Array.isArray(data) || !data.length) {
+    return null;
+  }
+  const columns = ROLE_ORDER.map((role) => ({
+    role,
+    prop: field.roles?.[role] || "",
+  })).filter(({ prop }) => prop);
+  const wrapper = document.createElement("div");
+  wrapper.className = "list-table-wrap";
+  const table = document.createElement("table");
+  table.className = "list-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const { role } of columns) {
+    const th = document.createElement("th");
+    th.textContent = t(`role.${role}`);
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  for (const item of data) {
+    const tr = document.createElement("tr");
+    for (const { prop } of columns) {
+      const td = document.createElement("td");
+      const value = item?.[prop];
+      td.textContent = value === null || value === undefined ? "" : String(value);
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  wrapper.appendChild(table);
+  return wrapper;
+}
+
+function listCard(field, index) {
+  const card = document.createElement("div");
+  card.className = "field-card list-card";
+
+  const head = document.createElement("div");
+  head.className = "field-head";
+  const name = document.createElement("input");
+  name.value = field.name;
+  name.placeholder = t("field.name");
+  name.addEventListener("input", () => {
+    field.name = name.value;
+  });
+  head.appendChild(labelNode(t("list.title"), name, t("list.nameHint")));
+  const badge = document.createElement("span");
+  badge.className = "badge";
+  badge.textContent = t("list.badge");
+  head.appendChild(badge);
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "danger";
+  remove.textContent = "×";
+  remove.title = t("list.remove");
+  remove.addEventListener("click", () => {
+    state.fields.splice(index, 1);
+    renderFields();
+  });
+  head.appendChild(remove);
+
+  const rolesTitle = document.createElement("p");
+  rolesTitle.className = "field-label-title";
+  rolesTitle.textContent = t("list.roles");
+  const roles = document.createElement("div");
+  roles.className = "role-grid";
+  for (const role of ROLE_ORDER) {
+    roles.appendChild(roleRow(role, field));
+  }
+  const rolesHint = document.createElement("p");
+  rolesHint.className = "field-hint";
+  rolesHint.textContent = t("list.rolesHint");
+
+  const labels = document.createElement("div");
+  labels.className = "label-lists";
+  labels.appendChild(
+    labelListEditor("list.startLabels", "list.startHint", field.startLabels, (next) => {
+      field.startLabels = next;
+    })
+  );
+  labels.appendChild(
+    labelListEditor("list.stopLabels", "list.stopHint", field.stopLabels, (next) => {
+      field.stopLabels = next;
+    })
+  );
+  if (!field.stopLabels.length) {
+    const warn = document.createElement("p");
+    warn.className = "field-hint warn";
+    warn.textContent = t("list.stopWarning");
+    labels.appendChild(warn);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "field-actions";
+  const status = fieldStatus(field);
+  if (status) {
+    const node = document.createElement("span");
+    node.className = `field-status ${status.kind}`;
+    node.textContent = status.text;
+    actions.appendChild(node);
+  }
+
+  card.append(head, rolesTitle, roles, rolesHint, labels, actions);
+  const table = listTable(field);
+  if (table) {
+    card.appendChild(table);
+  }
+  return card;
 }
 
 function fieldCard(field, index) {
@@ -617,31 +821,113 @@ function renderFields() {
     return;
   }
   state.fields.forEach((field, index) => {
-    container.appendChild(fieldCard(field, index));
+    container.appendChild(
+      field.kind === "list" ? listCard(field, index) : fieldCard(field, index)
+    );
   });
+}
+
+function parseSchema(schema) {
+  const fields = [];
+  for (const [name, node] of Object.entries(schema.properties || {})) {
+    const declared = Array.isArray(node.type) ? node.type : [node.type];
+    if (declared.includes("array") && node["x-item-columns"]) {
+      const roles = { text: "", quantity: "", number_right: "", observation: "" };
+      for (const [prop, role] of Object.entries(node["x-item-columns"])) {
+        if (role in roles) {
+          roles[role] = prop;
+        }
+      }
+      fields.push({
+        kind: "list",
+        name,
+        roles,
+        startLabels: node["x-item-labels"] || [],
+        stopLabels: node["x-stop-labels"] || [],
+      });
+    } else {
+      const raw = Array.isArray(node.type)
+        ? node.type.find((item) => item !== "null")
+        : node.type;
+      fields.push({
+        kind: "scalar",
+        name,
+        type: !raw || raw === "string" ? "text" : raw,
+        labels: node["x-labels"] || [],
+        source: node["x-source"] || "",
+      });
+    }
+  }
+  return fields;
 }
 
 function buildSchema() {
   const properties = {};
-  const validName = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  const names = new Set();
   for (const field of state.fields) {
     const name = field.name.trim();
     if (!name) {
       throw new Error(t("error.noName"));
     }
-    if (!validName.test(name)) {
+    if (!FIELD_NAME.test(name)) {
       throw new Error(t("error.invalidName"));
     }
-    if (properties[name]) {
+    if (names.has(name)) {
       throw new Error(t("error.duplicate", { name }));
     }
-    const type =
-      field.type === "text" || field.type === "date" ? "string" : field.type;
-    const node = { type: [type, "null"], "x-labels": field.labels };
-    if (field.source) {
-      node["x-source"] = field.source;
+    names.add(name);
+    if (field.kind === "list") {
+      const columns = {};
+      const itemProperties = {};
+      const required = [];
+      const used = new Set();
+      for (const role of ROLE_ORDER) {
+        const prop = (field.roles?.[role] || "").trim();
+        if (!prop) {
+          if (ROLE_TYPES[role].required) {
+            throw new Error(
+              t("error.listRequiredRole", { role: t(`role.${role}`) })
+            );
+          }
+          continue;
+        }
+        if (!FIELD_NAME.test(prop)) {
+          throw new Error(t("error.invalidName"));
+        }
+        if (used.has(prop)) {
+          throw new Error(t("error.listDuplicate", { name: prop }));
+        }
+        used.add(prop);
+        columns[prop] = role;
+        itemProperties[prop] = { type: ROLE_TYPES[role].type };
+        if (ROLE_TYPES[role].required) {
+          required.push(prop);
+        }
+      }
+      if (required.length < 2) {
+        throw new Error(t("error.listEmpty"));
+      }
+      properties[name] = {
+        type: ["array", "null"],
+        "x-item-columns": columns,
+        "x-item-labels": field.startLabels || [],
+        "x-stop-labels": field.stopLabels || [],
+        items: {
+          type: "object",
+          required,
+          properties: itemProperties,
+          additionalProperties: false,
+        },
+      };
+    } else {
+      const type =
+        field.type === "text" || field.type === "date" ? "string" : field.type;
+      const node = { type: [type, "null"], "x-labels": field.labels || [] };
+      if (field.source) {
+        node["x-source"] = field.source;
+      }
+      properties[name] = node;
     }
-    properties[name] = node;
   }
   return {
     $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -809,6 +1095,7 @@ function wire() {
   $("new").addEventListener("click", reset);
   $("add-field").addEventListener("click", addField);
   $("add-field-block").addEventListener("click", addFieldFromBlock);
+  $("add-list").addEventListener("click", addList);
   $("extract").addEventListener("click", extract);
   $("homologate").addEventListener("click", homologate);
   $("export-schema").addEventListener("click", () => exportCurrent("schema"));
