@@ -34,6 +34,13 @@ Repository = "https://github.com/jlmarting/vlm_local_ocr"
 Issues = "https://github.com/jlmarting/vlm_local_ocr/issues"
 Changelog = "https://github.com/jlmarting/vlm_local_ocr/blob/master/CHANGELOG.md"
 
+[project.optional-dependencies]
+serve = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "python-multipart>=0.0.9",
+]
+
 [project.scripts]
 vlm-ocr = "vlm_ocr.cli:main"
 
@@ -60,6 +67,7 @@ dev = [
     "ruff>=0.6",
     "pillow>=10",
     "reportlab>=4",
+    "httpx>=0.27",
 ]
 
 [[tool.uv.index]]

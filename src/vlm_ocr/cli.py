@@ -441,8 +441,67 @@ def _models_main(argv: list[str]) -> int:
     return 2
 
 
+def _serve_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="vlm-ocr serve",
+        description="Servidor local (loopback) para la SPA de OCR y contratos.",
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="host loopback (127.0.0.1, ::1, localhost)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=0,
+        help="puerto (0 = efímero)",
+    )
+    parser.add_argument(
+        "--no-open",
+        action="store_true",
+        help="no abre el navegador",
+    )
+    parser.add_argument(
+        "--workspace-dir",
+        type=Path,
+        help="directorio de workspaces (por defecto, datos del usuario)",
+    )
+    return parser
+
+
+def _serve_main(argv: list[str]) -> int:
+    args = _serve_parser().parse_args(argv)
+    if not 0 <= args.port <= 65535:
+        print("error: --port debe estar entre 0 y 65535", file=sys.stderr)
+        return 2
+    try:
+        from . import server
+    except ImportError:
+        print(
+            'error: el servidor requiere el extra "serve"; '
+            'instálalo con `pip install "vlm-local-ocr[serve]"`',
+            file=sys.stderr,
+        )
+        return 2
+    if not server.is_loopback(args.host):
+        print(
+            "error: --host solo admite loopback (127.0.0.1, ::1, localhost)",
+            file=sys.stderr,
+        )
+        return 2
+    return server.run(
+        args.host,
+        args.port,
+        open_browser=not args.no_open,
+        workspace_dir=args.workspace_dir,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "serve":
+        return _serve_main(argv[1:])
     if argv and argv[0] == "models":
         return _models_main(argv[1:])
     if argv and argv[0] == "templates":
