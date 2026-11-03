@@ -648,9 +648,19 @@ button.danger {
 }
 
 .error {
-  margin: 1rem 0 0;
-  padding: 0 1.5rem 1rem;
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  z-index: 20;
+  transform: translateX(-50%);
+  max-width: min(90vw, 48rem);
+  margin: 0;
+  padding: 0.6rem 1rem;
   color: #b91c1c;
+  background: Canvas;
+  border: 1px solid #b91c1c;
+  border-radius: 0.5rem;
+  box-shadow: 0 6px 24px color-mix(in srgb, CanvasText 18%, transparent);
   white-space: pre-wrap;
 }
 
