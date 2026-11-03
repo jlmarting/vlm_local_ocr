@@ -154,15 +154,18 @@
   "list.showInPhoto": "Ver en la foto",
   "list.hideInPhoto": "Ocultar de la foto",
   "list.columnsTitle": "Columnas de la lista",
-  "list.columnsHint": "Cada columna tiene nombre, tipo y rango x (0–1) relativo a la región de la lista.",
-  "list.columnsEmpty": "Sin columnas: pulsa «Detectar columnas» o añádelas a mano.",
+  "list.columnsHint": "Cada columna tiene nombre, tipo y rango x (0 = borde izquierdo de la región, 1 = derecho). Selecciona una cabecera y usa «Añadir desde bloque».",
+  "list.columnsEmpty": "Sin columnas: selecciona una cabecera y usa «Añadir desde bloque», o «Añadir columna» y ajusta x0/x1.",
   "list.detectColumns": "Detectar columnas",
-  "list.detectColumnsError": "No se detectó una cabecera con columnas; añádelas a mano.",
+  "list.detectColumnsError": "No se detectó una cabecera; se abre el editor de columnas: selecciona una cabecera y usa «Añadir desde bloque» o añade columnas a mano.",
   "list.useRoles": "Volver a roles de ticket",
   "list.addColumn": "Añadir columna",
   "list.columnName": "nombre",
   "list.columnRequired": "obligatoria",
   "list.removeColumn": "Eliminar columna",
   "error.columnRange": "la columna {name} necesita 0 ≤ x0 < x1 ≤ 1",
-  "error.listColumnsStart": "las columnas libres necesitan una etiqueta de inicio (la cabecera)"
+  "error.listColumnsStart": "las columnas libres necesitan una etiqueta de inicio (la cabecera)",
+  "list.columnFromBlock": "Añadir desde bloque",
+  "list.columnPickBlock": "Selecciona un bloque del documento (p. ej. una cabecera).",
+  "list.columnsNeedRegion": "Marca primero el inicio y el fin de la lista para calcular los rangos."
 }

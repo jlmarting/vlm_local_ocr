@@ -154,15 +154,18 @@
   "list.showInPhoto": "Show in photo",
   "list.hideInPhoto": "Hide from photo",
   "list.columnsTitle": "List columns",
-  "list.columnsHint": "Each column has a name, type and x range (0–1) relative to the list region.",
-  "list.columnsEmpty": "No columns: press «Detect columns» or add them by hand.",
+  "list.columnsHint": "Each column has a name, type and x range (0 = left edge of the region, 1 = right). Select a header and use «Add from block».",
+  "list.columnsEmpty": "No columns: select a header and use «Add from block», or «Add column» and adjust x0/x1.",
   "list.detectColumns": "Detect columns",
-  "list.detectColumnsError": "No header with columns was detected; add them by hand.",
+  "list.detectColumnsError": "No header was detected; the column editor opens: select a header and use «Add from block», or add columns by hand.",
   "list.useRoles": "Back to ticket roles",
   "list.addColumn": "Add column",
   "list.columnName": "name",
   "list.columnRequired": "required",
   "list.removeColumn": "Remove column",
   "error.columnRange": "column {name} needs 0 ≤ x0 < x1 ≤ 1",
-  "error.listColumnsStart": "free columns need a start label (the header)"
+  "error.listColumnsStart": "free columns need a start label (the header)",
+  "list.columnFromBlock": "Add from block",
+  "list.columnPickBlock": "Select a block in the document (e.g. a header).",
+  "list.columnsNeedRegion": "Mark the list start and end first to compute the ranges."
 }

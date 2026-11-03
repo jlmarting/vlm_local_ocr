@@ -280,16 +280,11 @@ function parseListRow(row, quantityDeclared) {
   return { kind: "extra", text: joined };
 }
 
-function previewColumns(field) {
-  const empty = { items: [], noPrice: 0, merged: false, aborted: false };
-  if (!state.document || !field.columns?.length) {
-    return empty;
+function listRegion(field) {
+  if (!state.document || !(field.startLabels || []).length) {
+    return null;
   }
   const rows = documentRows(state.document.blocks);
-  const hasStart = (field.startLabels || []).length > 0;
-  if (!hasStart) {
-    return empty;
-  }
   const dataRows = [];
   let counting = false;
   for (const row of rows) {
@@ -306,21 +301,31 @@ function previewColumns(field) {
       dataRows.push(row);
     }
   }
-  if (!dataRows.length) {
-    return empty;
-  }
-  const region = dataRows
+  const blocks = dataRows
     .flatMap((row) => row.blocks)
     .filter((block) => block.box[2] > block.box[0]);
-  if (!region.length) {
-    return empty;
+  if (!blocks.length) {
+    return null;
   }
-  const x0 = Math.min(...region.map((block) => block.box[0]));
-  const x1 = Math.max(...region.map((block) => block.box[2]));
+  const x0 = Math.min(...blocks.map((block) => block.box[0]));
+  const x1 = Math.max(...blocks.map((block) => block.box[2]));
   const width = x1 - x0;
   if (width <= 0) {
+    return null;
+  }
+  return { x0, x1, width, dataRows };
+}
+
+function previewColumns(field) {
+  const empty = { items: [], noPrice: 0, merged: false, aborted: false };
+  if (!state.document || !field.columns?.length) {
     return empty;
   }
+  const region = listRegion(field);
+  if (!region) {
+    return empty;
+  }
+  const { x0, width, dataRows } = region;
   const items = [];
   for (const row of dataRows) {
     const cells = row.blocks.filter(
@@ -1670,6 +1675,38 @@ function detectColumnsFromDocument(field) {
   };
 }
 
+function addColumnFromBlock(field) {
+  const block = state.selectedBlock;
+  if (!block) {
+    showError(t("list.columnPickBlock"));
+    return;
+  }
+  const region = listRegion(field);
+  if (!region) {
+    showError(t("list.columnsNeedRegion"));
+    return;
+  }
+  const left = Math.max(
+    0,
+    Math.min(1, (block.box[0] - region.x0) / region.width)
+  );
+  const right = Math.max(
+    0,
+    Math.min(1, (block.box[2] - region.x0) / region.width)
+  );
+  const x0 = Math.min(left, right);
+  const x1 = Math.max(left, right);
+  field.columns = field.columns || [];
+  field.columns.push({
+    name: slugifyColumn(block.text) || `columna_${field.columns.length + 1}`,
+    x0: Number(x0.toFixed(4)),
+    x1: Number(x1.toFixed(4)),
+    type: inferColumnType(region.dataRows, region.x0, region.width, x0, x1),
+    required: true,
+  });
+  renderFields();
+}
+
 function columnsEditor(field, refreshPreview) {
   const wrap = document.createElement("div");
   wrap.className = "columns-editor";
@@ -1756,6 +1793,14 @@ function columnsEditor(field, refreshPreview) {
 
     wrap.appendChild(row);
   });
+  const fromBlock = document.createElement("button");
+  fromBlock.type = "button";
+  fromBlock.textContent = t("list.columnFromBlock");
+  fromBlock.disabled = !state.selectedBlock;
+  fromBlock.title = state.selectedBlock ? "" : t("list.columnPickBlock");
+  fromBlock.addEventListener("click", () => addColumnFromBlock(field));
+  wrap.appendChild(fromBlock);
+
   const add = document.createElement("button");
   add.type = "button";
   add.textContent = t("list.addColumn");
@@ -1949,13 +1994,14 @@ function listCard(field, index) {
       return;
     }
     const detected = detectColumnsFromDocument(field);
-    if (!detected) {
-      showError(t("list.detectColumnsError"));
-      return;
-    }
     field.mode = "columns";
-    field.columns = detected.columns;
-    field.startLabels = detected.startLabels;
+    if (detected) {
+      field.columns = detected.columns;
+      field.startLabels = detected.startLabels;
+    } else {
+      field.columns = field.columns || [];
+      showError(t("list.detectColumnsError"));
+    }
     renderFields();
   });
   actions.appendChild(modeButton);

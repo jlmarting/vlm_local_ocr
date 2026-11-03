@@ -66,6 +66,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Fixed
 
+- SPA: si falla «Detectar columnas», se abre el editor vacío y se pueden añadir columnas a mano o desde el bloque seleccionado (nombre y rango x automáticos).
 - SPA: «Proponer contrato» amplía el presupuesto a 3000 tokens de salida y 8192 de contexto, acota el schema (30 campos / 3 listas) e instruye un máximo de 20/2; si aun así trunca, el error sugiere reducir el documento o usar un modelo mayor. No se sube a 50k: en CPU sería inviable y no arregla la generación desbocada.
 - SPA: «Proponer contrato» ya no interpreta el evento del clic como instrucciones (`extraInstructions.trim is not a function`); el botón se envuelve y el parámetro se valida.
 - El editor de la SPA envía `"string"` para los campos de tipo texto/fecha (antes `"text"` rompía el JSON Schema) y los errores filtran los `[INFO]` de RapidOCR/ONNX.
