@@ -63,6 +63,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Fixed
 
+- SPA: «Proponer contrato» ya no interpreta el evento del clic como instrucciones (`extraInstructions.trim is not a function`); el botón se envuelve y el parámetro se valida.
 - El editor de la SPA envía `"string"` para los campos de tipo texto/fecha (antes `"text"` rompía el JSON Schema) y los errores filtran los `[INFO]` de RapidOCR/ONNX.
 - `--with-layout` usa las cajas reales del texto nativo en PDFs con capa de texto (antes devolvía `[0, 0, 0, 0]`), lo que permite pintar el visor de la SPA.
 - `--text-format rows` con contrato sin anotar ya no se salta el LLM: la asignación determinista solo corre con anotaciones o variante.

@@ -971,6 +971,8 @@ function refreshProposeButton() {
 }
 
 async function proposeContract(extraInstructions = "") {
+  const extra =
+    typeof extraInstructions === "string" ? extraInstructions.trim() : "";
   clearError();
   if (!state.workspace) {
     return;
@@ -990,8 +992,8 @@ async function proposeContract(extraInstructions = "") {
   setStatus(t("propose.loading"));
   try {
     const body = { model };
-    if (extraInstructions.trim()) {
-      body.instructions = extraInstructions.trim();
+    if (extra) {
+      body.instructions = extra;
     }
     const response = await api(
       `/api/workspaces/${state.workspace.id}/propose`,
@@ -1957,7 +1959,7 @@ function wire() {
   $("action-clear").addEventListener("click", clearSelection);
   $("extract").addEventListener("click", extract);
   $("homologate").addEventListener("click", homologate);
-  $("propose").addEventListener("click", proposeContract);
+  $("propose").addEventListener("click", () => proposeContract());
   $("export-schema").addEventListener("click", () => exportCurrent("schema"));
   $("export-result").addEventListener("click", () => exportCurrent("result"));
   $("export-text").addEventListener("click", () => exportCurrent("text"));
