@@ -250,6 +250,8 @@ Para campos numéricos, si el texto contiene la etiqueta del campo (por ejemplo 
 
 El CLI incluye una capa de usabilidad para usuarios no técnicos: una SPA local que permite arrastrar un documento, ver el texto con sus cajas, construir un contrato asignando bloques a campos, ejecutar la extracción determinista y exportar u homologar. El motor sigue siendo el CLI; la SPA es una capa fina.
 
+> **Experimental.** La SPA (visor, listas y «Proponer contrato») está en una rama de trabajo y sujeta a cambios; el CLI base y la extracción determinista son estables. La propuesta del LLM es orientativa y requiere revisión humana.
+
 ```bash
 uv sync --extra serve
 uv run vlm-ocr serve
@@ -259,10 +261,10 @@ uv run vlm-ocr serve
 - Escucha solo en loopback (`127.0.0.1`, `::1`, `localhost`) y exige un token efímero que viaja en el fragmento de la URL.
 - `--no-open` no abre el navegador; `--workspace-dir` cambia el directorio de trabajos; `--port 0` (defecto) elige un puerto libre.
 - Los workspaces se guardan en el directorio de datos del usuario (`paths.py`), con documento, texto, contrato y resultado. La lista de recientes vive en `index.json`.
-- El MVP es determinista: no descarga pesos ni llama al LLM. La UI es bilingüe ES/EN.
+- La extracción por defecto es determinista (sin LLM); «Proponer contrato» usa un modelo local ya descargado y nunca descarga pesos. La UI es bilingüe ES/EN.
 - Limitación conocida: una página escaneada con una capa de texto mínima mezcla coordenadas nativas y OCR. El MVP la resolverá con `origin` por bloque; el spike cubre páginas puras.
 - Listas repetidas: «Añadir lista» declara un array con roles (texto, cantidad, importe, observación) y etiquetas de fin (`TOTAL`, `IVA`…). El extractor aplica los roles a todas las filas; no se selecciona artículo por artículo.
-- «Proponer contrato»: un modelo local redacta una propuesta de campos, etiquetas, columnas y listas a partir del texto extraído; rellena el editor para que la revises. Recomendado `llama32-3b`; en CPU puede tardar un minuto. Solo modelos locales.
+- «Proponer contrato» (experimental): un modelo local redacta una propuesta de campos, etiquetas, columnas y listas a partir del texto extraído; rellena el editor para que la revises. Recomendado `llama32-3b`; en CPU puede tardar un minuto. Solo modelos locales.
 - Requiere el extra `serve` (`fastapi`, `uvicorn`, `python-multipart`); el CLI base sigue sin dependencias web.
 
 La instalación del propio CLI sigue siendo técnica; el empaquetado de escritorio queda para una fase posterior.

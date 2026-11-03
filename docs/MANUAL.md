@@ -268,6 +268,8 @@ uv run vlm-ocr documento.pdf --metrics-out metricas.json
 
 ### Servidor local y SPA (experimental)
 
+> La SPA (visor, listas y «Proponer contrato») está sujeta a cambios; el CLI base y la extracción determinista son estables. La propuesta del LLM es orientativa y se revisa a mano.
+
 ```bash
 uv sync --extra serve
 uv run vlm-ocr serve            # imprime la URL con token y abre el navegador
@@ -277,9 +279,9 @@ uv run vlm-ocr serve --no-open  # sin abrir navegador
 - Solo loopback; token efímero en el fragmento de la URL.
 - Workspaces en `data_dir()/workspaces/`; recientes en `index.json`.
 - Flujo: arrastrar documento → texto + cajas → añadir campos → asignar bloques → probar extracción determinista → exportar schema/resultado/texto → homologar plantilla.
-- MVP determinista (sin LLM). UI bilingüe ES/EN.
+- Extracción determinista por defecto (sin LLM); «Proponer contrato» usa un modelo local ya descargado. UI bilingüe ES/EN.
 - Listas repetidas: «Añadir lista» declara `x-item-columns` una vez (roles de texto, cantidad, importe y observación) y etiquetas de fin; el extractor recorre todas las filas.
-- «Proponer contrato»: el LLM local propone campos, etiquetas, columnas y listas sobre el texto ya extraído; la propuesta se aplica al editor y el usuario la revisa. Solo modelos locales; `llama32-3b` recomendado.
+- «Proponer contrato» (experimental): el LLM local propone campos, etiquetas, columnas y listas sobre el texto ya extraído; la propuesta se aplica al editor y el usuario la revisa. Solo modelos locales; `llama32-3b` recomendado.
 - Requiere el extra `serve`; el CLI base no carga FastAPI.
 
 ## 5. Contratos

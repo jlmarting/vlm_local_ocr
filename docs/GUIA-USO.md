@@ -51,6 +51,8 @@ uv sync --extra serve
 uv run vlm-ocr serve
 ```
 
+> La SPA es **experimental** y está sujeta a cambios; el CLI base sigue siendo estable.
+
 Arrastra el documento, revisa el texto y las cajas, crea campos y asígnales bloques. «Probar extracción» usa el camino determinista; «Homologar plantilla» guarda la variante. La instalación del CLI sigue siendo técnica; el bundle de escritorio es una fase posterior.
 
 Para tickets o facturas con líneas, usa «Añadir lista»: defines los roles una vez (texto, cantidad, importe, observación) y las etiquetas de fin (`TOTAL`, `IVA`…). No hay que seleccionar cada artículo.
