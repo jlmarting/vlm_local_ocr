@@ -108,6 +108,12 @@ verdad. La regla «stdout es el producto, stderr es el taller» no se negocia.
 **Decisión.** `x-item-columns` acepta el rol legacy o un objeto `{x0, x1, type, required}` con rangos 0–1 relativos a la región de la lista (filas de datos). Las columnas libres requieren `x-item-labels` (cabecera); la extracción asigna cada celda por el centro x normalizado y coacciona por tipo. No se mezclan roles y columnas en el mismo array.
 **Descartada.** Rangos absolutos en píxeles (frágiles a escala y márgenes) y una anotación nueva (`x-item-table`) que fragmentaría el formato; el objeto en la misma clave mantiene compatibilidad.
 
+## 13. Modelos remotos visibles en la SPA, nunca por defecto
+
+**Contexto.** El CLI ya soporta modelos ollama; la SPA solo mostraba locales. El usuario quiere ver `cloud-deepseek`.
+**Decisión.** `/api/models` lista también los remotos con `remote`, `available` y `key_env`; se pueden usar si `OLLAMA_API_KEY` está en el entorno del servidor. La UI avisa de que el documento sale de la máquina y nunca selecciona un remoto por defecto.
+**Descartada.** Ocultarlos (el usuario pidió verlos) y usarlos por defecto (rompe la promesa local del proyecto).
+
 ---
 
 **Cómo se añade una decisión.** Cuando una ronda cierre una decisión de arquitectura que no sea

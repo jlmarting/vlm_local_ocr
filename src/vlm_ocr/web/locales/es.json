@@ -167,5 +167,20 @@
   "error.listColumnsStart": "las columnas libres necesitan una etiqueta de inicio (la cabecera)",
   "list.columnFromBlock": "Añadir desde bloque",
   "list.columnPickBlock": "Selecciona un bloque del documento (p. ej. una cabecera).",
-  "list.columnsNeedRegion": "Marca primero el inicio y el fin de la lista para calcular los rangos."
+  "list.columnsNeedRegion": "Marca primero el inicio y el fin de la lista para calcular los rangos.",
+  "viewer.hideDocument": "Ocultar documento",
+  "viewer.showDocument": "Mostrar documento",
+  "viewer.zoomIn": "Acercar",
+  "viewer.zoomOut": "Alejar",
+  "viewer.zoomReset": "100%",
+  "llm.title": "LLM e instrucciones",
+  "llm.placeholder": "Instrucciones para proponer o pregunta para el modelo…",
+  "llm.remote": "remoto",
+  "llm.unavailable": "no disponible",
+  "llm.needsKey": "requiere {env}",
+  "llm.warningRemote": "Modelo remoto: el documento se enviará a {model}.",
+  "group.contract": "Contrato",
+  "group.extract": "Extracción",
+  "group.export": "Exportar",
+  "list.columnUseBlock": "Usar bloque"
 }

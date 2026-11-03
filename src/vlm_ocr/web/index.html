@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>vlm-local-ocr</title>
-    <link rel="stylesheet" href="styles.css?v=13" />
+    <link rel="stylesheet" href="styles.css?v=14" />
   </head>
   <body>
     <header>
@@ -38,9 +38,6 @@
 
       <section id="viewer" hidden>
         <div class="work-toolbar">
-          <button id="prev" type="button" data-i18n-title="viewer.prev">‹</button>
-          <span id="page-label">1 / 1</span>
-          <button id="next" type="button" data-i18n-title="viewer.next">›</button>
           <span class="legend">
             <i class="dot selected"></i>
             <span data-i18n="legend.selected">seleccionado</span>
@@ -50,39 +47,43 @@
             <span data-i18n="legend.list">lista</span>
           </span>
           <span class="spacer"></span>
-          <button id="toggle-page" type="button" data-i18n="viewer.hideTicket">
-            Ocultar ticket
-          </button>
-          <button id="toggle-text" type="button" data-i18n="viewer.hideText">
-            Ocultar texto
+          <button id="toggle-page" type="button" data-i18n="viewer.hideDocument">
+            Ocultar documento
           </button>
           <button id="new" type="button" data-i18n="viewer.home">Inicio</button>
         </div>
 
         <div id="work" class="work">
           <section class="work-page">
-            <div id="page-wrap" class="page-wrap">
-              <img id="page-image" alt="Página del documento" />
-              <div id="boxes" class="boxes"></div>
+            <div class="panel-toolbar">
+              <button id="prev" type="button" data-i18n-title="viewer.prev">‹</button>
+              <span id="page-label">1 / 1</span>
+              <button id="next" type="button" data-i18n-title="viewer.next">›</button>
+              <span class="spacer"></span>
+              <button id="zoom-out" type="button" data-i18n-title="viewer.zoomOut">−</button>
+              <span id="zoom-label" class="zoom-label">100%</span>
+              <button id="zoom-in" type="button" data-i18n-title="viewer.zoomIn">+</button>
+              <button id="zoom-reset" type="button" data-i18n="viewer.zoomReset">1:1</button>
+              <button id="toggle-text" type="button" data-i18n="viewer.hideText">
+                Ocultar texto
+              </button>
             </div>
+            <div class="page-view">
+              <div id="page-wrap" class="page-wrap">
+                <img id="page-image" alt="Página del documento" />
+                <div id="columns" class="columns"></div>
+                <div id="boxes" class="boxes"></div>
+              </div>
+            </div>
+            <aside
+              id="text-panel"
+              class="work-text"
+              data-i18n-title="viewer.textTitle"
+            ></aside>
           </section>
 
           <div
-            id="resize-page-text"
-            class="resizer"
-            role="separator"
-            aria-orientation="vertical"
-            data-i18n-title="layout.resize"
-          ></div>
-
-          <aside
-            id="text-panel"
-            class="work-text"
-            data-i18n-title="viewer.textTitle"
-          ></aside>
-
-          <div
-            id="resize-text-ops"
+            id="resize-page-ops"
             class="resizer"
             role="separator"
             aria-orientation="vertical"
@@ -90,6 +91,37 @@
           ></div>
 
           <section id="contract" class="work-ops">
+            <details id="llm-panel" class="llm-panel" open>
+              <summary data-i18n="llm.title">LLM e instrucciones</summary>
+              <div class="toolbar">
+                <label class="inline-field">
+                  <span data-i18n="propose.model">Modelo</span>
+                  <select id="propose-model"></select>
+                </label>
+                <span id="llm-status" class="summary"></span>
+              </div>
+              <p id="model-warning" class="field-hint warn" hidden></p>
+              <textarea
+                id="prompt-text"
+                rows="3"
+                data-i18n-placeholder="llm.placeholder"
+              ></textarea>
+              <div class="toolbar">
+                <button id="prompt-run" type="button" data-i18n="prompt.ask">
+                  Preguntar
+                </button>
+                <button
+                  id="propose"
+                  type="button"
+                  data-i18n="propose.button"
+                  data-i18n-title="propose.hint"
+                >
+                  Proponer contrato
+                </button>
+              </div>
+              <pre id="prompt-answer" class="prompt-answer" hidden></pre>
+            </details>
+
             <p id="coach" class="coach" hidden></p>
 
             <div id="selection" class="selection-bar">
@@ -137,117 +169,90 @@
               </span>
             </div>
 
-            <div class="toolbar">
-              <h2 data-i18n="contract.title">Contrato</h2>
-              <button
-                id="add-field"
-                type="button"
-                data-i18n="contract.addField"
-                data-i18n-title="contract.addFieldHint"
-              >
-                Añadir campo
-              </button>
-              <button
-                id="add-field-block"
-                type="button"
-                data-i18n="contract.addFieldBlock"
-                data-i18n-title="contract.addFieldBlockHint"
-              >
-                Campo desde el bloque
-              </button>
-              <button
-                id="add-list"
-                type="button"
-                data-i18n="contract.addList"
-                data-i18n-title="contract.addListHint"
-              >
-                Añadir lista
-              </button>
-            </div>
-
-            <div class="toolbar">
-              <button
-                id="extract"
-                type="button"
-                class="primary"
-                data-i18n="contract.extract"
-                data-i18n-title="contract.extractHint"
-              >
-                Probar extracción
-              </button>
-              <button
-                id="homologate"
-                type="button"
-                data-i18n="contract.homologate"
-                data-i18n-title="contract.homologateHint"
-              >
-                Homologar plantilla
-              </button>
-              <span id="extract-summary" class="summary"></span>
-            </div>
-
-            <div class="toolbar propose">
-              <label class="inline-field">
-                <span data-i18n="propose.model">Modelo</span>
-                <select id="propose-model"></select>
-              </label>
-              <button
-                id="propose"
-                type="button"
-                data-i18n="propose.button"
-                data-i18n-title="propose.hint"
-              >
-                Proponer contrato
-              </button>
-              <span id="propose-status" class="summary"></span>
-            </div>
-
-            <details id="prompt-panel" class="prompt-panel">
-              <summary data-i18n="prompt.title">Prompt del LLM</summary>
-              <p class="field-hint" data-i18n="prompt.hint"></p>
-              <textarea
-                id="prompt-text"
-                rows="3"
-                data-i18n-placeholder="prompt.placeholder"
-              ></textarea>
+            <section class="group">
+              <h2 data-i18n="group.contract">Contrato</h2>
               <div class="toolbar">
-                <button id="prompt-run" type="button" data-i18n="prompt.ask">
-                  Preguntar
+                <button
+                  id="add-field"
+                  type="button"
+                  data-i18n="contract.addField"
+                  data-i18n-title="contract.addFieldHint"
+                >
+                  Añadir campo
                 </button>
-                <button id="prompt-propose" type="button" data-i18n="prompt.propose">
-                  Proponer con estas instrucciones
+                <button
+                  id="add-field-block"
+                  type="button"
+                  data-i18n="contract.addFieldBlock"
+                  data-i18n-title="contract.addFieldBlockHint"
+                >
+                  Campo desde el bloque
                 </button>
-                <span id="prompt-status" class="summary"></span>
+                <button
+                  id="add-list"
+                  type="button"
+                  data-i18n="contract.addList"
+                  data-i18n-title="contract.addListHint"
+                >
+                  Añadir lista
+                </button>
               </div>
-              <pre id="prompt-answer" class="prompt-answer" hidden></pre>
-            </details>
+              <div id="fields" class="fields"></div>
+            </section>
 
-            <div class="toolbar exports">
-              <button
-                id="export-schema"
-                type="button"
-                data-i18n="contract.exportSchema"
-                data-i18n-title="contract.exportSchemaHint"
-              >
-                Exportar schema
-              </button>
-              <button
-                id="export-result"
-                type="button"
-                data-i18n="contract.exportResult"
-                data-i18n-title="contract.exportResultHint"
-              >
-                Exportar resultado
-              </button>
-              <button
-                id="export-text"
-                type="button"
-                data-i18n="contract.exportText"
-                data-i18n-title="contract.exportTextHint"
-              >
-                Exportar texto
-              </button>
-            </div>
+            <section class="group">
+              <h2 data-i18n="group.extract">Extracción</h2>
+              <div class="toolbar">
+                <button
+                  id="extract"
+                  type="button"
+                  class="primary"
+                  data-i18n="contract.extract"
+                  data-i18n-title="contract.extractHint"
+                >
+                  Probar extracción
+                </button>
+                <button
+                  id="homologate"
+                  type="button"
+                  data-i18n="contract.homologate"
+                  data-i18n-title="contract.homologateHint"
+                >
+                  Homologar plantilla
+                </button>
+                <span id="extract-summary" class="summary"></span>
+              </div>
+            </section>
+
+            <section class="group">
+              <h2 data-i18n="group.export">Exportar</h2>
+              <div class="toolbar">
+                <button
+                  id="export-schema"
+                  type="button"
+                  data-i18n="contract.exportSchema"
+                  data-i18n-title="contract.exportSchemaHint"
+                >
+                  Exportar schema
+                </button>
+                <button
+                  id="export-result"
+                  type="button"
+                  data-i18n="contract.exportResult"
+                  data-i18n-title="contract.exportResultHint"
+                >
+                  Exportar resultado
+                </button>
+                <button
+                  id="export-text"
+                  type="button"
+                  data-i18n="contract.exportText"
+                  data-i18n-title="contract.exportTextHint"
+                >
+                  Exportar texto
+                </button>
+              </div>
+            </section>
 
             <details class="help">
               <summary data-i18n="contract.helpTitle">Cómo funciona</summary>
@@ -260,8 +265,6 @@
               </ol>
             </details>
 
-            <div id="fields" class="fields"></div>
-
             <details id="result-panel" class="result-panel" hidden>
               <summary data-i18n="contract.result">Resultado JSON</summary>
               <pre id="result-json"></pre>
@@ -272,6 +275,6 @@
 
       <p id="error" class="error" hidden></p>
     </main>
-    <script src="app.js?v=13"></script>
+    <script src="app.js?v=14"></script>
   </body>
 </html>

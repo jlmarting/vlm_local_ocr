@@ -10,6 +10,7 @@ const state = {
   extraction: null,
   stopSuggestions: [],
   focusedList: null,
+  zoom: 1,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -44,6 +45,7 @@ function schemaTypeForColumn(type) {
 }
 let locale = {};
 let resizeObserver = null;
+let pageViewObserver = null;
 
 function token() {
   return sessionStorage.getItem("vlm-token") || "";
@@ -444,16 +446,55 @@ async function loadPageImage(page) {
 
 function syncOverlay() {
   const image = $("page-image");
-  const overlay = $("boxes");
-  if (!image || !overlay || !image.naturalWidth) {
+  if (!image || !image.naturalWidth) {
     return;
   }
   const imageRect = image.getBoundingClientRect();
   const wrapRect = $("page-wrap").getBoundingClientRect();
-  overlay.style.left = `${imageRect.left - wrapRect.left}px`;
-  overlay.style.top = `${imageRect.top - wrapRect.top}px`;
-  overlay.style.width = `${imageRect.width}px`;
-  overlay.style.height = `${imageRect.height}px`;
+  for (const id of ["boxes", "columns"]) {
+    const overlay = $(id);
+    if (!overlay) {
+      continue;
+    }
+    overlay.style.left = `${imageRect.left - wrapRect.left}px`;
+    overlay.style.top = `${imageRect.top - wrapRect.top}px`;
+    overlay.style.width = `${imageRect.width}px`;
+    overlay.style.height = `${imageRect.height}px`;
+  }
+}
+
+function applyZoom() {
+  const view = document.querySelector(".page-view");
+  const image = $("page-image");
+  if (!view || !image) {
+    return;
+  }
+  const base = Math.max(200, view.getBoundingClientRect().width - 32);
+  const width = Math.max(100, Math.round(base * state.zoom));
+  image.style.width = `${width}px`;
+  image.style.maxWidth = "none";
+  const label = $("zoom-label");
+  if (label) {
+    label.textContent = `${Math.round(state.zoom * 100)}%`;
+  }
+  syncOverlay();
+}
+
+function setZoom(value) {
+  state.zoom = Math.min(4, Math.max(0.25, Math.round(value * 4) / 4));
+  applyZoom();
+}
+
+function observePageView() {
+  const view = document.querySelector(".page-view");
+  if (!view || !window.ResizeObserver) {
+    return;
+  }
+  if (!pageViewObserver) {
+    pageViewObserver = new ResizeObserver(() => applyZoom());
+  }
+  pageViewObserver.disconnect();
+  pageViewObserver.observe(view);
 }
 
 function observePage() {
@@ -625,6 +666,52 @@ function updateBlockStates() {
       Boolean(list && list.anchors.has(block))
     );
   }
+  updateColumnsOverlay();
+}
+
+function updateColumnsOverlay() {
+  const overlay = $("columns");
+  if (!overlay) {
+    return;
+  }
+  overlay.innerHTML = "";
+  const focused =
+    state.focusedList !== null ? state.fields[state.focusedList] : null;
+  if (
+    !focused ||
+    focused.kind !== "list" ||
+    focused.mode !== "columns" ||
+    !state.document
+  ) {
+    return;
+  }
+  const region = listRegion(focused);
+  const page = state.document.pages[state.page];
+  if (!region || !page || !page.width || !page.height) {
+    return;
+  }
+  const blocks = region.dataRows
+    .flatMap((row) => row.blocks)
+    .filter((block) => block.page === state.page && block.box[2] > block.box[0]);
+  if (!blocks.length) {
+    return;
+  }
+  const top = Math.min(...blocks.map((block) => block.box[1]));
+  const bottom = Math.max(...blocks.map((block) => block.box[3]));
+  for (const column of focused.columns || []) {
+    const band = document.createElement("div");
+    band.className = "column-band";
+    const left = region.x0 + column.x0 * region.width;
+    const right = region.x0 + column.x1 * region.width;
+    band.style.left = `${(left / page.width) * 100}%`;
+    band.style.width = `${((right - left) / page.width) * 100}%`;
+    band.style.top = `${(top / page.height) * 100}%`;
+    band.style.height = `${((bottom - top) / page.height) * 100}%`;
+    const label = document.createElement("span");
+    label.textContent = column.name;
+    band.appendChild(label);
+    overlay.appendChild(band);
+  }
 }
 
 function storedPx(key, fallback) {
@@ -637,8 +724,12 @@ function applyLayout() {
   if (!work) {
     return;
   }
-  work.style.setProperty("--text-w", `${storedPx("vlm-text-w", 320)}px`);
-  work.style.setProperty("--ops-w", `${storedPx("vlm-ops-w", 432)}px`);
+  const left = storedPx("vlm-left-w", 0);
+  if (left > 0) {
+    work.style.setProperty("--left-w", `${left}px`);
+  } else {
+    work.style.removeProperty("--left-w");
+  }
   const textCollapsed = localStorage.getItem("vlm-text-collapsed") === "1";
   const pageCollapsed = localStorage.getItem("vlm-page-collapsed") === "1";
   work.classList.toggle("text-collapsed", textCollapsed);
@@ -652,58 +743,35 @@ function applyLayout() {
   const pageButton = $("toggle-page");
   if (pageButton) {
     pageButton.textContent = t(
-      pageCollapsed ? "viewer.showTicket" : "viewer.hideTicket"
+      pageCollapsed ? "viewer.showDocument" : "viewer.hideDocument"
     );
   }
 }
 
-const MIN_TEXT = 180;
-const MAX_TEXT = 640;
-const MIN_OPS = 288;
-const MAX_OPS = 800;
-const MIN_PAGE = 240;
+const MIN_LEFT = 320;
+const MIN_OPS = 360;
 
-function startResize(event, kind) {
+function startResize(event) {
   if (event.button !== undefined && event.button !== 0) {
     return;
   }
   event.preventDefault();
   const work = $("work");
-  const textVisible = !work.classList.contains("text-collapsed");
-  const pageVisible = !work.classList.contains("page-collapsed");
-  const textWidth = parseFloat(work.style.getPropertyValue("--text-w")) || 320;
-  const opsWidth = parseFloat(work.style.getPropertyValue("--ops-w")) || 432;
   const move = (moveEvent) => {
     const rect = work.getBoundingClientRect();
-    if (kind === "text") {
-      const available =
-        rect.width - opsWidth - 5 - (pageVisible ? MIN_PAGE : 0);
-      const width = Math.min(
-        MAX_TEXT,
-        available,
-        Math.max(MIN_TEXT, rect.right - opsWidth - 5 - moveEvent.clientX)
-      );
-      work.style.setProperty("--text-w", `${Math.round(width)}px`);
-    } else {
-      const available =
-        rect.width -
-        (textVisible ? textWidth + 5 : 0) -
-        (pageVisible ? MIN_PAGE : 0);
-      const width = Math.min(
-        MAX_OPS,
-        available,
-        Math.max(MIN_OPS, rect.right - moveEvent.clientX - 5)
-      );
-      work.style.setProperty("--ops-w", `${Math.round(width)}px`);
-    }
-    syncOverlay();
+    const max = Math.max(MIN_LEFT, rect.width - MIN_OPS - 5);
+    const width = Math.min(
+      max,
+      Math.max(MIN_LEFT, moveEvent.clientX - rect.left)
+    );
+    work.style.setProperty("--left-w", `${Math.round(width)}px`);
+    applyZoom();
   };
   const stop = () => {
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerup", stop);
-    localStorage.setItem("vlm-text-w", work.style.getPropertyValue("--text-w"));
-    localStorage.setItem("vlm-ops-w", work.style.getPropertyValue("--ops-w"));
-    syncOverlay();
+    localStorage.setItem("vlm-left-w", work.style.getPropertyValue("--left-w"));
+    applyZoom();
   };
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", stop, { once: true });
@@ -713,14 +781,13 @@ function togglePage() {
   const collapsed = localStorage.getItem("vlm-page-collapsed") === "1";
   localStorage.setItem("vlm-page-collapsed", collapsed ? "0" : "1");
   applyLayout();
-  syncOverlay();
+  applyZoom();
 }
 
 function toggleText() {
   const collapsed = localStorage.getItem("vlm-text-collapsed") === "1";
   localStorage.setItem("vlm-text-collapsed", collapsed ? "0" : "1");
   applyLayout();
-  syncOverlay();
 }
 
 function updateCoach() {
@@ -838,6 +905,8 @@ async function showPage(index) {
   };
   image.src = await loadPageImage(page);
   observePage();
+  observePageView();
+  applyZoom();
   syncOverlay();
   drawBoxes(page);
   renderText(page);
@@ -849,6 +918,8 @@ function showViewer() {
   $("home").hidden = true;
   $("viewer").hidden = false;
   applyLayout();
+  observePageView();
+  setTimeout(applyZoom, 0);
 }
 
 async function upload(file) {
@@ -865,9 +936,10 @@ async function upload(file) {
     state.fields = [];
     state.focusedList = null;
     state.extraction = null;
+    state.zoom = 1;
     state.stopSuggestions = suggestStops(payload.document.blocks);
     $("extract-summary").textContent = "";
-    $("propose-status").textContent = "";
+    $("llm-status").textContent = "";
     clearPrompt();
     showResult(null);
     showViewer();
@@ -904,8 +976,9 @@ async function openWorkspace(workspaceId) {
     state.fields = [];
     state.focusedList = null;
     state.extraction = null;
+    state.zoom = 1;
     state.stopSuggestions = suggestStops(state.document.blocks);
-    $("propose-status").textContent = "";
+    $("llm-status").textContent = "";
     clearPrompt();
     showResult(null);
     await loadContract(workspaceId);
@@ -1030,29 +1103,47 @@ async function loadModels() {
     modelsCache = payload.models || [];
     const select = $("propose-model");
     select.innerHTML = "";
-    const present = modelsCache.filter((model) => model.present);
-    for (const model of present) {
+    for (const model of modelsCache) {
       const option = document.createElement("option");
       option.value = model.alias;
-      option.textContent = `${model.alias} — ${model.label}`;
+      let text = `${model.alias} — ${model.label}`;
+      if (model.remote) {
+        text += ` (${t("llm.remote")})`;
+      }
+      if (!model.available) {
+        text +=
+          model.requires_key && model.key_env
+            ? ` · ${t("llm.needsKey", { env: model.key_env })}`
+            : ` · ${t("llm.unavailable")}`;
+      }
+      option.textContent = text;
+      option.disabled = !model.available;
       select.appendChild(option);
     }
-    if (!present.length) {
+    if (!modelsCache.length) {
       const option = document.createElement("option");
       option.value = "";
       option.textContent = t("propose.noModels");
       select.appendChild(option);
     } else {
       const preferred =
-        present.find((model) => model.default) ||
-        present.find((model) => model.alias === "llama32-3b") ||
-        present[0];
+        modelsCache.find((model) => model.default && model.available) ||
+        modelsCache.find(
+          (model) => model.alias === "llama32-3b" && model.available
+        ) ||
+        modelsCache.find((model) => model.available) ||
+        modelsCache[0];
       select.value = preferred.alias;
     }
     refreshProposeButton();
+    updateModelWarning();
   } catch (error) {
     // sin token o servidor no disponible: el health ya lo indica
   }
+}
+
+function selectedModel() {
+  return modelsCache.find((model) => model.alias === $("propose-model").value);
 }
 
 function refreshProposeButton() {
@@ -1060,15 +1151,28 @@ function refreshProposeButton() {
   if (!button) {
     return;
   }
-  const present = modelsCache.filter((model) => model.present).length;
-  const missing = present === 0;
-  button.disabled = missing;
-  button.title = missing ? t("propose.noModels") : t("propose.hint");
-  for (const id of ["prompt-run", "prompt-propose"]) {
-    const node = $(id);
-    if (node) {
-      node.disabled = missing;
-    }
+  const model = selectedModel();
+  const usable = Boolean(model && model.available);
+  button.disabled = !usable;
+  button.title = usable ? t("propose.hint") : t("propose.noModels");
+  const prompt = $("prompt-run");
+  if (prompt) {
+    prompt.disabled = !usable;
+  }
+}
+
+function updateModelWarning() {
+  const warning = $("model-warning");
+  if (!warning) {
+    return;
+  }
+  const model = selectedModel();
+  if (model && model.remote) {
+    warning.hidden = false;
+    warning.textContent = t("llm.warningRemote", { model: model.alias });
+  } else {
+    warning.hidden = true;
+    warning.textContent = "";
   }
 }
 
@@ -1090,7 +1194,7 @@ async function proposeContract(extraInstructions = "") {
   const button = $("propose");
   button.disabled = true;
   button.textContent = t("propose.loading");
-  $("propose-status").textContent = t("propose.loading");
+  $("llm-status").textContent = t("propose.loading");
   setStatus(t("propose.loading"));
   try {
     const body = { model };
@@ -1111,12 +1215,12 @@ async function proposeContract(extraInstructions = "") {
     showResult(null);
     $("extract-summary").textContent = "";
     renderFields();
-    $("propose-status").textContent = t("propose.done", { model: payload.model });
+    $("llm-status").textContent = t("propose.done", { model: payload.model });
     setStatus(t("propose.done", { model: payload.model }));
   } catch (error) {
     setStatus(t("status.error"));
     showError(error);
-    $("propose-status").textContent = "";
+    $("llm-status").textContent = "";
   } finally {
     button.textContent = t("propose.button");
     refreshProposeButton();
@@ -1140,7 +1244,7 @@ async function runPrompt() {
   }
   const button = $("prompt-run");
   button.disabled = true;
-  $("prompt-status").textContent = t("prompt.loading");
+  $("llm-status").textContent = t("prompt.loading");
   $("prompt-answer").hidden = true;
   setStatus(t("prompt.loading"));
   try {
@@ -1155,20 +1259,16 @@ async function runPrompt() {
     const payload = await response.json();
     $("prompt-answer").hidden = false;
     $("prompt-answer").textContent = payload.answer;
-    $("prompt-status").textContent = t("prompt.done", { model: payload.model });
+    $("llm-status").textContent = t("prompt.done", { model: payload.model });
     setStatus(t("prompt.done", { model: payload.model }));
   } catch (error) {
     setStatus(t("status.error"));
     showError(error);
-    $("prompt-status").textContent = "";
+    $("llm-status").textContent = "";
   } finally {
     button.disabled = false;
     refreshProposeButton();
   }
-}
-
-function proposeWithInstructions() {
-  proposeContract($("prompt-text").value.trim());
 }
 
 function clearPrompt() {
@@ -1181,7 +1281,7 @@ function clearPrompt() {
     answer.hidden = true;
     answer.textContent = "";
   }
-  const status = $("prompt-status");
+  const status = $("llm-status");
   if (status) {
     status.textContent = "";
   }
@@ -1726,7 +1826,10 @@ function columnsEditor(field, refreshPreview) {
     name.addEventListener("input", () => {
       column.name = name.value;
     });
-    name.addEventListener("change", refreshPreview);
+    name.addEventListener("change", () => {
+      refreshPreview();
+      updateBlockStates();
+    });
     row.appendChild(name);
 
     const type = document.createElement("select");
@@ -1762,6 +1865,7 @@ function columnsEditor(field, refreshPreview) {
         column.x0 = Number(x0.value);
         column.x1 = Number(x1.value);
         refreshPreview();
+        updateBlockStates();
       });
     }
     const range = document.createElement("span");
@@ -1779,6 +1883,32 @@ function columnsEditor(field, refreshPreview) {
     });
     required.append(check, document.createTextNode(t("list.columnRequired")));
     row.appendChild(required);
+
+    const useBlock = document.createElement("button");
+    useBlock.type = "button";
+    useBlock.textContent = t("list.columnUseBlock");
+    useBlock.disabled = !state.selectedBlock;
+    useBlock.title = state.selectedBlock ? "" : t("list.columnPickBlock");
+    useBlock.addEventListener("click", () => {
+      const block = state.selectedBlock;
+      const region = listRegion(field);
+      if (!block || !region) {
+        return;
+      }
+      const left = Math.max(
+        0,
+        Math.min(1, (block.box[0] - region.x0) / region.width)
+      );
+      const right = Math.max(
+        0,
+        Math.min(1, (block.box[2] - region.x0) / region.width)
+      );
+      column.x0 = Number(Math.min(left, right).toFixed(4));
+      column.x1 = Number(Math.max(left, right).toFixed(4));
+      refreshPreview();
+      renderFields();
+    });
+    row.appendChild(useBlock);
 
     const remove = document.createElement("button");
     remove.type = "button";
@@ -2496,6 +2626,7 @@ function reset() {
   state.fields = [];
   state.focusedList = null;
   state.extraction = null;
+  state.zoom = 1;
   state.stopSuggestions = [];
   $("coach").hidden = true;
   $("page-image").src = "";
@@ -2503,7 +2634,7 @@ function reset() {
   $("text-panel").innerHTML = "";
   $("fields").innerHTML = "";
   $("extract-summary").textContent = "";
-  $("propose-status").textContent = "";
+  $("llm-status").textContent = "";
   clearPrompt();
   showResult(null);
   updateSelection();
@@ -2541,25 +2672,20 @@ function wire() {
   $("toggle-page").addEventListener("click", togglePage);
   $("toggle-text").addEventListener("click", toggleText);
   $("prompt-run").addEventListener("click", runPrompt);
-  $("prompt-propose").addEventListener("click", proposeWithInstructions);
-  const resizePageText = $("resize-page-text");
-  resizePageText.addEventListener("pointerdown", (event) =>
-    startResize(event, "text")
-  );
-  resizePageText.addEventListener("dblclick", () => {
-    localStorage.removeItem("vlm-text-w");
-    applyLayout();
-    syncOverlay();
+  $("propose-model").addEventListener("change", () => {
+    refreshProposeButton();
+    updateModelWarning();
   });
-  const resizeTextOps = $("resize-text-ops");
-  resizeTextOps.addEventListener("pointerdown", (event) =>
-    startResize(event, "ops")
-  );
-  resizeTextOps.addEventListener("dblclick", () => {
-    localStorage.removeItem("vlm-ops-w");
+  const resizer = $("resize-page-ops");
+  resizer.addEventListener("pointerdown", (event) => startResize(event));
+  resizer.addEventListener("dblclick", () => {
+    localStorage.removeItem("vlm-left-w");
     applyLayout();
-    syncOverlay();
+    applyZoom();
   });
+  $("zoom-out").addEventListener("click", () => setZoom(state.zoom - 0.25));
+  $("zoom-in").addEventListener("click", () => setZoom(state.zoom + 0.25));
+  $("zoom-reset").addEventListener("click", () => setZoom(1));
   $("add-field").addEventListener("click", addField);
   $("add-field-block").addEventListener("click", addFieldFromBlock);
   $("add-list").addEventListener("click", addList);
@@ -2595,7 +2721,9 @@ function wire() {
   $("action-clear").addEventListener("click", clearSelection);
   $("extract").addEventListener("click", extract);
   $("homologate").addEventListener("click", homologate);
-  $("propose").addEventListener("click", () => proposeContract());
+  $("propose").addEventListener("click", () =>
+    proposeContract($("prompt-text").value)
+  );
   $("export-schema").addEventListener("click", () => exportCurrent("schema"));
   $("export-result").addEventListener("click", () => exportCurrent("result"));
   $("export-text").addEventListener("click", () => exportCurrent("text"));

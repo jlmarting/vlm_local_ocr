@@ -167,5 +167,20 @@
   "error.listColumnsStart": "free columns need a start label (the header)",
   "list.columnFromBlock": "Add from block",
   "list.columnPickBlock": "Select a block in the document (e.g. a header).",
-  "list.columnsNeedRegion": "Mark the list start and end first to compute the ranges."
+  "list.columnsNeedRegion": "Mark the list start and end first to compute the ranges.",
+  "viewer.hideDocument": "Hide document",
+  "viewer.showDocument": "Show document",
+  "viewer.zoomIn": "Zoom in",
+  "viewer.zoomOut": "Zoom out",
+  "viewer.zoomReset": "100%",
+  "llm.title": "LLM and instructions",
+  "llm.placeholder": "Instructions to propose or a question for the model…",
+  "llm.remote": "remote",
+  "llm.unavailable": "unavailable",
+  "llm.needsKey": "requires {env}",
+  "llm.warningRemote": "Remote model: the document will be sent to {model}.",
+  "group.contract": "Contract",
+  "group.extract": "Extraction",
+  "group.export": "Export",
+  "list.columnUseBlock": "Use block"
 }
