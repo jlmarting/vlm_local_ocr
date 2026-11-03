@@ -79,7 +79,7 @@
   "confirm.delete": "¿Borrar este workspace y sus ficheros?",
   "contract.addList": "Añadir lista",
   "contract.addListHint": "Declara una lista de artículos una sola vez; los roles se aplican a todas las filas.",
-  "contract.helpLists": "En las listas no se selecciona cada artículo: marca el fin con «Fin de lista» y la vista previa te muestra las líneas detectadas.",
+  "contract.helpLists": "En las listas no se selecciona cada artículo: marca el inicio (cabecera) y el fin. Para tablas con columnas propias usa «Detectar columnas» y ajusta nombre, tipo y rango.",
   "list.title": "Lista repetida",
   "list.badge": "lista",
   "list.roles": "Roles de la lista",
@@ -152,5 +152,17 @@
   "prompt.empty": "escribe un prompt",
   "legend.list": "lista",
   "list.showInPhoto": "Ver en la foto",
-  "list.hideInPhoto": "Ocultar de la foto"
+  "list.hideInPhoto": "Ocultar de la foto",
+  "list.columnsTitle": "Columnas de la lista",
+  "list.columnsHint": "Cada columna tiene nombre, tipo y rango x (0–1) relativo a la región de la lista.",
+  "list.columnsEmpty": "Sin columnas: pulsa «Detectar columnas» o añádelas a mano.",
+  "list.detectColumns": "Detectar columnas",
+  "list.detectColumnsError": "No se detectó una cabecera con columnas; añádelas a mano.",
+  "list.useRoles": "Volver a roles de ticket",
+  "list.addColumn": "Añadir columna",
+  "list.columnName": "nombre",
+  "list.columnRequired": "obligatoria",
+  "list.removeColumn": "Eliminar columna",
+  "error.columnRange": "la columna {name} necesita 0 ≤ x0 < x1 ≤ 1",
+  "error.listColumnsStart": "las columnas libres necesitan una etiqueta de inicio (la cabecera)"
 }

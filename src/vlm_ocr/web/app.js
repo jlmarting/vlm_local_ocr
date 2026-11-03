@@ -31,6 +31,17 @@ const ROLE_TYPES = {
   observation: { type: ["string", "null"], required: false },
 };
 const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const COLUMN_TYPES = ["text", "number", "integer", "date"];
+
+function schemaTypeForColumn(type) {
+  if (type === "number") {
+    return ["number", "null"];
+  }
+  if (type === "integer") {
+    return ["integer", "null"];
+  }
+  return ["string", "null"];
+}
 let locale = {};
 let resizeObserver = null;
 
@@ -269,7 +280,75 @@ function parseListRow(row, quantityDeclared) {
   return { kind: "extra", text: joined };
 }
 
+function previewColumns(field) {
+  const empty = { items: [], noPrice: 0, merged: false, aborted: false };
+  if (!state.document || !field.columns?.length) {
+    return empty;
+  }
+  const rows = documentRows(state.document.blocks);
+  const hasStart = (field.startLabels || []).length > 0;
+  if (!hasStart) {
+    return empty;
+  }
+  const dataRows = [];
+  let counting = false;
+  for (const row of rows) {
+    if (!counting) {
+      if (labelHit(row.blocks, field.startLabels)) {
+        counting = true;
+      }
+      continue;
+    }
+    if (labelHit(row.blocks, field.stopLabels)) {
+      break;
+    }
+    if (row.blocks.some((block) => (block.text || "").trim())) {
+      dataRows.push(row);
+    }
+  }
+  if (!dataRows.length) {
+    return empty;
+  }
+  const region = dataRows
+    .flatMap((row) => row.blocks)
+    .filter((block) => block.box[2] > block.box[0]);
+  if (!region.length) {
+    return empty;
+  }
+  const x0 = Math.min(...region.map((block) => block.box[0]));
+  const x1 = Math.max(...region.map((block) => block.box[2]));
+  const width = x1 - x0;
+  if (width <= 0) {
+    return empty;
+  }
+  const items = [];
+  for (const row of dataRows) {
+    const cells = row.blocks.filter(
+      (block) => (block.text || "").trim() && block.box[2] > block.box[0]
+    );
+    if (!cells.length) {
+      continue;
+    }
+    const item = {};
+    for (const column of field.columns) {
+      const picked = cells
+        .filter((block) => {
+          const ratio = ((block.box[0] + block.box[2]) / 2 - x0) / width;
+          return column.x0 <= ratio && ratio <= column.x1;
+        })
+        .sort((left, right) => left.box[0] - right.box[0]);
+      const text = picked.map((block) => block.text.trim()).join(" ").trim();
+      item[column.name] = text || null;
+    }
+    items.push(item);
+  }
+  return { items, noPrice: 0, merged: false, aborted: false };
+}
+
 function previewItems(field) {
+  if (field.mode === "columns") {
+    return previewColumns(field);
+  }
   if (!state.document) {
     return { items: [], noPrice: 0, merged: false, aborted: false };
   }
@@ -1192,6 +1271,7 @@ function addList() {
   const index = state.fields.length + 1;
   state.fields.push({
     kind: "list",
+    mode: "roles",
     name: `pedido_${index}`,
     roles: {
       text: "producto",
@@ -1333,16 +1413,20 @@ function labelListEditor(titleKey, hintKey, values, onChange, suggestions) {
 
 function previewTable(field, items) {
   const columns = [];
-  if (field.roles?.text) {
+  if (field.mode === "columns") {
+    for (const column of field.columns || []) {
+      columns.push({ key: column.name, label: column.name });
+    }
+  } else if (field.roles?.text) {
     columns.push({ key: "text", label: t("role.text") });
   }
-  if (field.roles?.quantity) {
+  if (field.mode !== "columns" && field.roles?.quantity) {
     columns.push({ key: "quantity", label: t("role.quantity") });
   }
-  if (field.roles?.number_right) {
+  if (field.mode !== "columns" && field.roles?.number_right) {
     columns.push({ key: "price", label: t("role.number_right") });
   }
-  if (field.roles?.observation) {
+  if (field.mode !== "columns" && field.roles?.observation) {
     columns.push({ key: "observation", label: t("role.observation") });
   }
   const wrapper = document.createElement("div");
@@ -1389,19 +1473,25 @@ function listTable(field) {
   if (!Array.isArray(data) || !data.length) {
     return null;
   }
-  const columns = ROLE_ORDER.map((role) => ({
-    role,
-    prop: field.roles?.[role] || "",
-  })).filter(({ prop }) => prop);
+  const columns =
+    field.mode === "columns"
+      ? (field.columns || []).map((column) => ({
+          key: column.name,
+          label: column.name,
+        }))
+      : ROLE_ORDER.map((role) => ({
+          key: field.roles?.[role] || "",
+          label: t(`role.${role}`),
+        })).filter(({ key }) => key);
   const wrapper = document.createElement("div");
   wrapper.className = "list-table-wrap";
   const table = document.createElement("table");
   table.className = "list-table";
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
-  for (const { role } of columns) {
+  for (const { label } of columns) {
     const th = document.createElement("th");
-    th.textContent = t(`role.${role}`);
+    th.textContent = label;
     headRow.appendChild(th);
   }
   thead.appendChild(headRow);
@@ -1409,9 +1499,9 @@ function listTable(field) {
   const tbody = document.createElement("tbody");
   for (const item of data) {
     const tr = document.createElement("tr");
-    for (const { prop } of columns) {
+    for (const { key } of columns) {
       const td = document.createElement("td");
-      const value = item?.[prop];
+      const value = item?.[key];
       td.textContent = value === null || value === undefined ? "" : String(value);
       tr.appendChild(td);
     }
@@ -1420,6 +1510,274 @@ function listTable(field) {
   table.appendChild(tbody);
   wrapper.appendChild(table);
   return wrapper;
+}
+
+function slugifyColumn(text) {
+  return (text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40);
+}
+
+function parseColumnNumber(text) {
+  const cleaned = (text || "").replace(/[$€£¥]/g, "").replace(/\s/g, "");
+  if (!/^[-+]?\d+([.,]\d+)*[.,]?\d*$/.test(cleaned) || !/\d/.test(cleaned)) {
+    return null;
+  }
+  const lastComma = cleaned.lastIndexOf(",");
+  const lastDot = cleaned.lastIndexOf(".");
+  let normalized = cleaned;
+  if (lastComma > lastDot) {
+    normalized = cleaned.replace(/\./g, "").replace(",", ".");
+  } else {
+    normalized = cleaned.replace(/,/g, "");
+  }
+  const value = Number(normalized);
+  return Number.isFinite(value) ? value : null;
+}
+
+function looksLikeDate(text) {
+  return /^\d{1,4}[\/.\-]\d{1,2}[\/.\-]\d{1,4}$/.test((text || "").trim());
+}
+
+function inferColumnType(dataRows, x0, width, left, right) {
+  const values = [];
+  for (const row of dataRows) {
+    for (const block of row.blocks) {
+      if (!block.text.trim() || block.box[2] <= block.box[0]) {
+        continue;
+      }
+      const ratio = ((block.box[0] + block.box[2]) / 2 - x0) / width;
+      if (left <= ratio && ratio <= right) {
+        values.push(block.text.trim());
+      }
+    }
+  }
+  if (!values.length) {
+    return "text";
+  }
+  const numbers = values.map(parseColumnNumber);
+  if (numbers.every((value) => value !== null && Number.isFinite(value))) {
+    return numbers.every((value) => Number.isInteger(value)) ? "integer" : "number";
+  }
+  if (values.every(looksLikeDate)) {
+    return "date";
+  }
+  return "text";
+}
+
+function detectColumnsFromDocument(field) {
+  if (!state.document) {
+    return null;
+  }
+  const rows = documentRows(state.document.blocks);
+  let search = 0;
+  if ((field.startLabels || []).length) {
+    const index = rows.findIndex((row) => labelHit(row.blocks, field.startLabels));
+    if (index < 0) {
+      return null;
+    }
+    search = index + 1;
+  }
+  let firstData = -1;
+  for (let index = search; index < rows.length; index++) {
+    if (labelHit(rows[index].blocks, field.stopLabels)) {
+      break;
+    }
+    const cells = rows[index].blocks.filter((block) => block.text.trim());
+    if (
+      cells.length >= 2 &&
+      cells.some((block) => looksLikeNumber(block.text)) &&
+      cells.some((block) => !looksLikeNumber(block.text))
+    ) {
+      firstData = index;
+      break;
+    }
+  }
+  if (firstData < 0) {
+    return null;
+  }
+  let headerIndex = -1;
+  let best = 0;
+  for (let index = search; index < firstData; index++) {
+    const cells = rows[index].blocks.filter((block) => block.text.trim());
+    if (cells.length > best) {
+      best = cells.length;
+      headerIndex = index;
+    }
+  }
+  if (headerIndex < 0 && firstData > 0) {
+    headerIndex = firstData - 1;
+  }
+  if (headerIndex < 0) {
+    return null;
+  }
+  const headerCells = rows[headerIndex].blocks
+    .filter((block) => block.text.trim() && block.box[2] > block.box[0])
+    .sort((left, right) => left.box[0] - right.box[0]);
+  if (headerCells.length < 2) {
+    return null;
+  }
+  const dataRows = [];
+  for (let index = firstData; index < rows.length; index++) {
+    if (labelHit(rows[index].blocks, field.stopLabels)) {
+      break;
+    }
+    if (rows[index].blocks.some((block) => block.text.trim())) {
+      dataRows.push(rows[index]);
+    }
+  }
+  if (!dataRows.length) {
+    return null;
+  }
+  const region = dataRows
+    .flatMap((row) => row.blocks)
+    .filter((block) => block.box[2] > block.box[0]);
+  if (!region.length) {
+    return null;
+  }
+  const x0 = Math.min(...region.map((block) => block.box[0]));
+  const x1 = Math.max(...region.map((block) => block.box[2]));
+  const width = x1 - x0;
+  if (width <= 0) {
+    return null;
+  }
+  const columns = headerCells
+    .map((cell, index) => {
+      const left = Math.max(0, Math.min(1, (cell.box[0] - x0) / width));
+      const right = Math.max(0, Math.min(1, (cell.box[2] - x0) / width));
+      const start = Math.min(left, right);
+      const finish = Math.max(left, right);
+      const name = slugifyColumn(cell.text) || `columna_${index + 1}`;
+      return {
+        name,
+        x0: Number(start.toFixed(4)),
+        x1: Number(finish.toFixed(4)),
+        type: inferColumnType(dataRows, x0, width, start, finish),
+        required: true,
+      };
+    })
+    .filter((column) => column.x1 > column.x0);
+  if (!columns.length) {
+    return null;
+  }
+  return {
+    columns,
+    startLabels: [headerCells[0].text.trim()],
+  };
+}
+
+function columnsEditor(field, refreshPreview) {
+  const wrap = document.createElement("div");
+  wrap.className = "columns-editor";
+  if (!field.columns || !field.columns.length) {
+    const empty = document.createElement("p");
+    empty.className = "field-hint warn";
+    empty.textContent = t("list.columnsEmpty");
+    wrap.appendChild(empty);
+  }
+  (field.columns || []).forEach((column, columnIndex) => {
+    const row = document.createElement("div");
+    row.className = "column-row";
+
+    const name = document.createElement("input");
+    name.value = column.name;
+    name.placeholder = t("list.columnName");
+    name.addEventListener("input", () => {
+      column.name = name.value;
+    });
+    name.addEventListener("change", refreshPreview);
+    row.appendChild(name);
+
+    const type = document.createElement("select");
+    for (const option of COLUMN_TYPES) {
+      const node = document.createElement("option");
+      node.value = option;
+      node.textContent = t(`type.${option}`);
+      node.selected = column.type === option;
+      type.appendChild(node);
+    }
+    type.addEventListener("change", () => {
+      column.type = type.value;
+      refreshPreview();
+    });
+    row.appendChild(type);
+
+    const x0 = document.createElement("input");
+    x0.type = "number";
+    x0.step = "0.01";
+    x0.min = "0";
+    x0.max = "1";
+    x0.value = String(column.x0);
+    x0.title = "x0";
+    const x1 = document.createElement("input");
+    x1.type = "number";
+    x1.step = "0.01";
+    x1.min = "0";
+    x1.max = "1";
+    x1.value = String(column.x1);
+    x1.title = "x1";
+    for (const input of [x0, x1]) {
+      input.addEventListener("change", () => {
+        column.x0 = Number(x0.value);
+        column.x1 = Number(x1.value);
+        refreshPreview();
+      });
+    }
+    const range = document.createElement("span");
+    range.className = "column-range";
+    range.append(x0, document.createTextNode("–"), x1);
+    row.appendChild(range);
+
+    const required = document.createElement("label");
+    required.className = "column-check";
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.checked = column.required !== false;
+    check.addEventListener("change", () => {
+      column.required = check.checked;
+    });
+    required.append(check, document.createTextNode(t("list.columnRequired")));
+    row.appendChild(required);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "danger";
+    remove.textContent = "×";
+    remove.title = t("list.removeColumn");
+    remove.addEventListener("click", () => {
+      field.columns.splice(columnIndex, 1);
+      renderFields();
+    });
+    row.appendChild(remove);
+
+    wrap.appendChild(row);
+  });
+  const add = document.createElement("button");
+  add.type = "button";
+  add.textContent = t("list.addColumn");
+  add.addEventListener("click", () => {
+    field.columns = field.columns || [];
+    const last = field.columns[field.columns.length - 1];
+    const start = last ? Math.min(0.99, Number(last.x1)) : 0;
+    let end = Math.min(1, Number((start + 0.2).toFixed(2)));
+    if (end <= start) {
+      end = Math.min(1, start + 0.05);
+    }
+    field.columns.push({
+      name: `columna_${field.columns.length + 1}`,
+      x0: start,
+      x1: end,
+      type: "text",
+      required: true,
+    });
+    renderFields();
+  });
+  wrap.appendChild(add);
+  return wrap;
 }
 
 function listCard(field, index) {
@@ -1448,18 +1806,6 @@ function listCard(field, index) {
     removeField(index);
   });
   head.appendChild(remove);
-
-  const rolesTitle = document.createElement("p");
-  rolesTitle.className = "field-label-title";
-  rolesTitle.textContent = t("list.roles");
-  const roles = document.createElement("div");
-  roles.className = "role-grid";
-  for (const role of ROLE_ORDER) {
-    roles.appendChild(roleRow(role, field));
-  }
-  const rolesHint = document.createElement("p");
-  rolesHint.className = "field-hint";
-  rolesHint.textContent = t("list.rolesHint");
 
   const preview = document.createElement("div");
   preview.className = "list-preview-wrap";
@@ -1494,6 +1840,31 @@ function listCard(field, index) {
       preview.appendChild(previewTable(field, result.items));
     }
   };
+
+  const isColumns = field.mode === "columns";
+  let modeNodes;
+  if (isColumns) {
+    const title = document.createElement("p");
+    title.className = "field-label-title";
+    title.textContent = t("list.columnsTitle");
+    const hint = document.createElement("p");
+    hint.className = "field-hint";
+    hint.textContent = t("list.columnsHint");
+    modeNodes = [title, columnsEditor(field, refreshPreview), hint];
+  } else {
+    const title = document.createElement("p");
+    title.className = "field-label-title";
+    title.textContent = t("list.roles");
+    const roles = document.createElement("div");
+    roles.className = "role-grid";
+    for (const role of ROLE_ORDER) {
+      roles.appendChild(roleRow(role, field));
+    }
+    const hint = document.createElement("p");
+    hint.className = "field-hint";
+    hint.textContent = t("list.rolesHint");
+    modeNodes = [title, roles, hint];
+  }
 
   const labels = document.createElement("div");
   labels.className = "label-lists";
@@ -1559,6 +1930,36 @@ function listCard(field, index) {
     }
   });
   actions.appendChild(focus);
+
+  const modeButton = document.createElement("button");
+  modeButton.type = "button";
+  modeButton.textContent = t(
+    isColumns ? "list.useRoles" : "list.detectColumns"
+  );
+  modeButton.addEventListener("click", () => {
+    if (isColumns) {
+      field.mode = "roles";
+      field.roles = {
+        text: "producto",
+        quantity: "cantidad",
+        number_right: "precio",
+        observation: "",
+      };
+      renderFields();
+      return;
+    }
+    const detected = detectColumnsFromDocument(field);
+    if (!detected) {
+      showError(t("list.detectColumnsError"));
+      return;
+    }
+    field.mode = "columns";
+    field.columns = detected.columns;
+    field.startLabels = detected.startLabels;
+    renderFields();
+  });
+  actions.appendChild(modeButton);
+
   const status = fieldStatus(field);
   if (status) {
     const node = document.createElement("span");
@@ -1567,7 +1968,7 @@ function listCard(field, index) {
     actions.appendChild(node);
   }
 
-  card.append(head, rolesTitle, roles, rolesHint, labels, preview, actions);
+  card.append(head, ...modeNodes, labels, preview, actions);
   const table = listTable(field);
   if (table) {
     card.appendChild(table);
@@ -1733,19 +2134,49 @@ function parseSchema(schema) {
   for (const [name, node] of Object.entries(schema.properties || {})) {
     const declared = Array.isArray(node.type) ? node.type : [node.type];
     if (declared.includes("array") && node["x-item-columns"]) {
-      const roles = { text: "", quantity: "", number_right: "", observation: "" };
-      for (const [prop, role] of Object.entries(node["x-item-columns"])) {
-        if (role in roles) {
-          roles[role] = prop;
+      const entries = Object.entries(node["x-item-columns"]);
+      const specs = entries.filter(
+        ([, value]) => value && typeof value === "object"
+      );
+      if (specs.length) {
+        const columns = specs
+          .map(([prop, value]) => ({
+            name: prop,
+            x0: Number(value.x0 ?? 0),
+            x1: Number(value.x1 ?? 1),
+            type: COLUMN_TYPES.includes(value.type) ? value.type : "text",
+            required: value.required !== false,
+          }))
+          .sort((left, right) => left.x0 - right.x0);
+        fields.push({
+          kind: "list",
+          mode: "columns",
+          name,
+          columns,
+          startLabels: node["x-item-labels"] || [],
+          stopLabels: node["x-stop-labels"] || [],
+        });
+      } else {
+        const roles = {
+          text: "",
+          quantity: "",
+          number_right: "",
+          observation: "",
+        };
+        for (const [prop, role] of entries) {
+          if (role in roles) {
+            roles[role] = prop;
+          }
         }
+        fields.push({
+          kind: "list",
+          mode: "roles",
+          name,
+          roles,
+          startLabels: node["x-item-labels"] || [],
+          stopLabels: node["x-stop-labels"] || [],
+        });
       }
-      fields.push({
-        kind: "list",
-        name,
-        roles,
-        startLabels: node["x-item-labels"] || [],
-        stopLabels: node["x-stop-labels"] || [],
-      });
     } else {
       const raw = Array.isArray(node.type)
         ? node.type.find((item) => item !== "null")
@@ -1778,6 +2209,68 @@ function buildSchema() {
     }
     names.add(name);
     if (field.kind === "list") {
+      if (field.mode === "columns") {
+        if (!(field.startLabels || []).length) {
+          throw new Error(t("error.listColumnsStart"));
+        }
+        const columns = {};
+        const itemProperties = {};
+        const required = [];
+        const used = new Set();
+        for (const column of field.columns || []) {
+          const prop = (column.name || "").trim();
+          if (!prop) {
+            throw new Error(t("error.noName"));
+          }
+          if (!FIELD_NAME.test(prop)) {
+            throw new Error(t("error.invalidName"));
+          }
+          if (used.has(prop)) {
+            throw new Error(t("error.listDuplicate", { name: prop }));
+          }
+          used.add(prop);
+          const x0 = Number(column.x0);
+          const x1 = Number(column.x1);
+          if (
+            !Number.isFinite(x0) ||
+            !Number.isFinite(x1) ||
+            x0 < 0 ||
+            x1 > 1 ||
+            x0 >= x1
+          ) {
+            throw new Error(t("error.columnRange", { name: prop }));
+          }
+          const type = COLUMN_TYPES.includes(column.type)
+            ? column.type
+            : "text";
+          columns[prop] = {
+            x0: Number(x0.toFixed(4)),
+            x1: Number(x1.toFixed(4)),
+            type,
+            required: column.required !== false,
+          };
+          itemProperties[prop] = { type: schemaTypeForColumn(type) };
+          if (column.required !== false) {
+            required.push(prop);
+          }
+        }
+        if (!Object.keys(columns).length) {
+          throw new Error(t("error.listEmpty"));
+        }
+        properties[name] = {
+          type: ["array", "null"],
+          "x-item-columns": columns,
+          "x-item-labels": field.startLabels || [],
+          "x-stop-labels": field.stopLabels || [],
+          items: {
+            type: "object",
+            required,
+            properties: itemProperties,
+            additionalProperties: false,
+          },
+        };
+        continue;
+      }
       const columns = {};
       const itemProperties = {};
       const required = [];

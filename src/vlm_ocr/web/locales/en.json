@@ -79,7 +79,7 @@
   "confirm.delete": "Delete this workspace and its files?",
   "contract.addList": "Add list",
   "contract.addListHint": "Declare a list of items once; roles apply to every row.",
-  "contract.helpLists": "Lists do not select each item: mark the end with «List end» and the preview shows the detected lines.",
+  "contract.helpLists": "Lists do not select each item: mark the start (header) and the end. For tables with custom columns use «Detect columns» and adjust name, type and range.",
   "list.title": "Repeated list",
   "list.badge": "list",
   "list.roles": "List roles",
@@ -152,5 +152,17 @@
   "prompt.empty": "write a prompt",
   "legend.list": "list",
   "list.showInPhoto": "Show in photo",
-  "list.hideInPhoto": "Hide from photo"
+  "list.hideInPhoto": "Hide from photo",
+  "list.columnsTitle": "List columns",
+  "list.columnsHint": "Each column has a name, type and x range (0–1) relative to the list region.",
+  "list.columnsEmpty": "No columns: press «Detect columns» or add them by hand.",
+  "list.detectColumns": "Detect columns",
+  "list.detectColumnsError": "No header with columns was detected; add them by hand.",
+  "list.useRoles": "Back to ticket roles",
+  "list.addColumn": "Add column",
+  "list.columnName": "name",
+  "list.columnRequired": "required",
+  "list.removeColumn": "Remove column",
+  "error.columnRange": "column {name} needs 0 ≤ x0 < x1 ≤ 1",
+  "error.listColumnsStart": "free columns need a start label (the header)"
 }
