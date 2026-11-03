@@ -55,6 +55,8 @@ Arrastra el documento, revisa el texto y las cajas, crea campos y asígnales blo
 
 Para tickets o facturas con líneas, usa «Añadir lista»: defines los roles una vez (texto, cantidad, importe, observación) y las etiquetas de fin (`TOTAL`, `IVA`…). No hay que seleccionar cada artículo.
 
+Si no quieres empezar de cero, pulsa «Proponer contrato»: un modelo local propone los campos, etiquetas, columnas y listas; revísalos y ajústalos antes de extraer. `llama32-3b` es la opción recomendada.
+
 ### «Quiero el texto de un PDF/imagen y nada más»
 
 ```bash

@@ -262,6 +262,7 @@ uv run vlm-ocr serve
 - El MVP es determinista: no descarga pesos ni llama al LLM. La UI es bilingüe ES/EN.
 - Limitación conocida: una página escaneada con una capa de texto mínima mezcla coordenadas nativas y OCR. El MVP la resolverá con `origin` por bloque; el spike cubre páginas puras.
 - Listas repetidas: «Añadir lista» declara un array con roles (texto, cantidad, importe, observación) y etiquetas de fin (`TOTAL`, `IVA`…). El extractor aplica los roles a todas las filas; no se selecciona artículo por artículo.
+- «Proponer contrato»: un modelo local redacta una propuesta de campos, etiquetas, columnas y listas a partir del texto extraído; rellena el editor para que la revises. Recomendado `llama32-3b`; en CPU puede tardar un minuto. Solo modelos locales.
 - Requiere el extra `serve` (`fastapi`, `uvicorn`, `python-multipart`); el CLI base sigue sin dependencias web.
 
 La instalación del propio CLI sigue siendo técnica; el empaquetado de escritorio queda para una fase posterior.

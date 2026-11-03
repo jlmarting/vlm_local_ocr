@@ -279,6 +279,7 @@ uv run vlm-ocr serve --no-open  # sin abrir navegador
 - Flujo: arrastrar documento → texto + cajas → añadir campos → asignar bloques → probar extracción determinista → exportar schema/resultado/texto → homologar plantilla.
 - MVP determinista (sin LLM). UI bilingüe ES/EN.
 - Listas repetidas: «Añadir lista» declara `x-item-columns` una vez (roles de texto, cantidad, importe y observación) y etiquetas de fin; el extractor recorre todas las filas.
+- «Proponer contrato»: el LLM local propone campos, etiquetas, columnas y listas sobre el texto ya extraído; la propuesta se aplica al editor y el usuario la revisa. Solo modelos locales; `llama32-3b` recomendado.
 - Requiere el extra `serve`; el CLI base no carga FastAPI.
 
 ## 5. Contratos
