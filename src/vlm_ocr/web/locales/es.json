@@ -131,5 +131,12 @@
   "viewer.home": "Inicio",
   "assign.scalar": "campo «{name}»",
   "assign.listStart": "inicio de «{name}»",
-  "assign.listStop": "fin de «{name}»"
+  "assign.listStop": "fin de «{name}»",
+  "propose.model": "Modelo",
+  "propose.button": "Proponer contrato",
+  "propose.hint": "El LLM local propone campos, etiquetas y listas; tú los revisas.",
+  "propose.loading": "Proponiendo… (puede tardar)",
+  "propose.done": "Propuesta lista ({model}); revísala y prueba la extracción.",
+  "propose.replaceConfirm": "Esto reemplazará los campos actuales por la propuesta. ¿Continuar?",
+  "propose.noModels": "No hay modelos locales descargados; usa `vlm-ocr models fetch`."
 }

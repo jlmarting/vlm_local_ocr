@@ -131,5 +131,12 @@
   "viewer.home": "Home",
   "assign.scalar": "field «{name}»",
   "assign.listStart": "start of «{name}»",
-  "assign.listStop": "end of «{name}»"
+  "assign.listStop": "end of «{name}»",
+  "propose.model": "Model",
+  "propose.button": "Propose contract",
+  "propose.hint": "The local LLM proposes fields, labels and lists; you review them.",
+  "propose.loading": "Proposing… (may take a while)",
+  "propose.done": "Proposal ready ({model}); review it and test extraction.",
+  "propose.replaceConfirm": "This will replace the current fields with the proposal. Continue?",
+  "propose.noModels": "No local models downloaded; use `vlm-ocr models fetch`."
 }

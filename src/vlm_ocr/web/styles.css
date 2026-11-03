@@ -698,3 +698,21 @@ button.danger {
     display: none;
   }
 }
+
+.inline-field {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.inline-field select {
+  max-width: 13rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  background: Canvas;
+  color: CanvasText;
+  font: inherit;
+}

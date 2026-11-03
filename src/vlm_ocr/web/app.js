@@ -74,6 +74,7 @@ function applyI18n() {
   renderFields();
   updateSelection();
   applyTextCollapsed();
+  refreshProposeButton();
   if (state.document) {
     renderRecentsFromState();
   }
@@ -686,6 +687,7 @@ async function upload(file) {
     state.extraction = null;
     state.stopSuggestions = suggestStops(payload.document.blocks);
     $("extract-summary").textContent = "";
+    $("propose-status").textContent = "";
     showResult(null);
     showViewer();
     await showPage(0);
@@ -721,6 +723,7 @@ async function openWorkspace(workspaceId) {
     state.fields = [];
     state.extraction = null;
     state.stopSuggestions = suggestStops(state.document.blocks);
+    $("propose-status").textContent = "";
     showResult(null);
     await loadContract(workspaceId);
     showViewer();
@@ -767,6 +770,7 @@ async function loadContract(workspaceId) {
 }
 
 let recentsCache = [];
+let modelsCache = [];
 
 async function loadRecents() {
   if (!token()) {
@@ -829,6 +833,96 @@ async function deleteWorkspace(workspaceId) {
     setStatus(t("status.workspaceDeleted"));
   } catch (error) {
     showError(error);
+  }
+}
+
+async function loadModels() {
+  if (!token()) {
+    return;
+  }
+  try {
+    const response = await api("/api/models");
+    const payload = await response.json();
+    modelsCache = payload.models || [];
+    const select = $("propose-model");
+    select.innerHTML = "";
+    const present = modelsCache.filter((model) => model.present);
+    for (const model of present) {
+      const option = document.createElement("option");
+      option.value = model.alias;
+      option.textContent = `${model.alias} — ${model.label}`;
+      select.appendChild(option);
+    }
+    if (!present.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = t("propose.noModels");
+      select.appendChild(option);
+    } else {
+      const preferred =
+        present.find((model) => model.default) ||
+        present.find((model) => model.alias === "llama32-3b") ||
+        present[0];
+      select.value = preferred.alias;
+    }
+    refreshProposeButton();
+  } catch (error) {
+    // sin token o servidor no disponible: el health ya lo indica
+  }
+}
+
+function refreshProposeButton() {
+  const button = $("propose");
+  if (!button) {
+    return;
+  }
+  const present = modelsCache.filter((model) => model.present).length;
+  button.disabled = present === 0;
+  button.title = present ? t("propose.hint") : t("propose.noModels");
+}
+
+async function proposeContract() {
+  clearError();
+  if (!state.workspace) {
+    return;
+  }
+  if (state.fields.length && !window.confirm(t("propose.replaceConfirm"))) {
+    return;
+  }
+  const model = $("propose-model").value;
+  if (!model) {
+    showError(t("propose.noModels"));
+    return;
+  }
+  const button = $("propose");
+  button.disabled = true;
+  button.textContent = t("propose.loading");
+  $("propose-status").textContent = t("propose.loading");
+  setStatus(t("propose.loading"));
+  try {
+    const response = await api(
+      `/api/workspaces/${state.workspace.id}/propose`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model }),
+      }
+    );
+    const payload = await response.json();
+    state.fields = payload.fields || [];
+    state.extraction = null;
+    showResult(null);
+    $("extract-summary").textContent = "";
+    renderFields();
+    $("propose-status").textContent = t("propose.done", { model: payload.model });
+    setStatus(t("propose.done", { model: payload.model }));
+  } catch (error) {
+    setStatus(t("status.error"));
+    showError(error);
+    $("propose-status").textContent = "";
+  } finally {
+    button.textContent = t("propose.button");
+    refreshProposeButton();
   }
 }
 
@@ -1614,6 +1708,7 @@ function reset() {
   $("text-panel").innerHTML = "";
   $("fields").innerHTML = "";
   $("extract-summary").textContent = "";
+  $("propose-status").textContent = "";
   showResult(null);
   updateSelection();
   $("viewer").hidden = true;
@@ -1683,6 +1778,7 @@ function wire() {
   $("action-clear").addEventListener("click", clearSelection);
   $("extract").addEventListener("click", extract);
   $("homologate").addEventListener("click", homologate);
+  $("propose").addEventListener("click", proposeContract);
   $("export-schema").addEventListener("click", () => exportCurrent("schema"));
   $("export-result").addEventListener("click", () => exportCurrent("result"));
   $("export-text").addEventListener("click", () => exportCurrent("text"));
@@ -1719,4 +1815,5 @@ wire();
 loadLocale(detectLang()).then(() => {
   health();
   loadRecents();
+  loadModels();
 });

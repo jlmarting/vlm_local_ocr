@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>vlm-local-ocr</title>
-    <link rel="stylesheet" href="styles.css?v=7" />
+    <link rel="stylesheet" href="styles.css?v=8" />
   </head>
   <body>
     <header>
@@ -165,6 +165,22 @@
               <span id="extract-summary" class="summary"></span>
             </div>
 
+            <div class="toolbar propose">
+              <label class="inline-field">
+                <span data-i18n="propose.model">Modelo</span>
+                <select id="propose-model"></select>
+              </label>
+              <button
+                id="propose"
+                type="button"
+                data-i18n="propose.button"
+                data-i18n-title="propose.hint"
+              >
+                Proponer contrato
+              </button>
+              <span id="propose-status" class="summary"></span>
+            </div>
+
             <div class="toolbar exports">
               <button
                 id="export-schema"
@@ -215,6 +231,6 @@
 
       <p id="error" class="error" hidden></p>
     </main>
-    <script src="app.js?v=7"></script>
+    <script src="app.js?v=8"></script>
   </body>
 </html>
