@@ -103,7 +103,12 @@ def test_homologate_reports_saved_template(tmp_path: Path, monkeypatch) -> None:
         report = Path(extra[extra.index("--homologate-report") + 1])
         report.write_text(
             json.dumps(
-                {"saved": True, "blocked": False, "unlocated": []}
+                {
+                    "saved": True,
+                    "blocked": False,
+                    "unlocated": [],
+                    "digest": "abc123",
+                }
             ),
             encoding="utf-8",
         )
@@ -119,7 +124,7 @@ def test_homologate_reports_saved_template(tmp_path: Path, monkeypatch) -> None:
     )
 
     assert response.status_code == 200
-    assert response.json() == {"template_saved": True}
+    assert response.json() == {"template_saved": True, "digest": "abc123"}
 
 
 def test_homologate_reports_blocked_without_saving(tmp_path: Path, monkeypatch) -> None:

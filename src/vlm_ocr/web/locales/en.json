@@ -195,5 +195,18 @@
   "llm.time": "time",
   "llm.load": "load",
   "llm.cancel": "Cancel",
-  "llm.cancelled": "cancelled"
+  "llm.cancelled": "cancelled",
+  "contract.import": "Import contract",
+  "contract.importHint": "Load a JSON Schema exported by the SPA to reuse it on this document.",
+  "contract.importError": "the contract must be a JSON Schema with properties",
+  "contract.importNested": "the editor only supports flat fields and lists at the top level; this contract has nested objects",
+  "contract.imported": "contract imported",
+  "template.title": "Saved templates",
+  "template.refresh": "Refresh",
+  "template.empty": "No saved templates.",
+  "template.delete": "Delete template",
+  "template.deleteConfirm": "Delete this template?",
+  "template.used": "Template used · {digest} · score {score} · coverage {coverage}",
+  "template.saved": "Template saved · {digest}",
+  "template.fields": "{fields} fields · {items} lists"
 }

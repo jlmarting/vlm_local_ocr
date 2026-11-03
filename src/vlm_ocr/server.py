@@ -17,7 +17,7 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, catalog, paths, propose, serve_layout
+from . import __version__, catalog, paths, propose, serve_layout, templates
 from . import workspace as workspace_mod
 from .errors import ContractError, InputError
 from .extract import assign
@@ -237,6 +237,7 @@ def _extract_contract(
         json.dumps(schema, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     document = _document_path(workspace)
+    metrics_path = workspace.root / "results" / "extract.metrics.json"
     code, payload, stderr = _run_cli(
         document,
         [
@@ -248,6 +249,8 @@ def _extract_contract(
             "schema",
             "--no-llm",
             "--with-layout",
+            "--metrics-out",
+            str(metrics_path),
         ],
     )
     if code != 0 or payload is None:
@@ -282,7 +285,12 @@ def _extract_contract(
         },
         last_result={"path": "results/last.json", "updated_at": created_at},
     )
-    return {"workspace": meta.meta, "extraction": extraction}
+    report = _read_report(metrics_path)
+    return {
+        "workspace": meta.meta,
+        "extraction": extraction,
+        "template": report.get("template") or {},
+    }
 
 
 def _homologate(
@@ -323,10 +331,20 @@ def _homologate(
         report = {}
     saved = bool(report.get("saved", False))
     result: dict = {"template_saved": saved}
-    if not saved:
+    if saved:
+        result["digest"] = report.get("digest")
+    else:
         result["blocked"] = bool(report.get("blocked", False))
         result["unlocated"] = list(report.get("unlocated", []))
     return result
+
+
+def _read_report(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def _read_metrics(path: Path) -> dict:
@@ -800,6 +818,43 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
             "remote": ref.is_remote,
             "usage": usage,
         })
+
+    @app.get("/api/templates")
+    def list_templates_endpoint() -> JSONResponse:
+        rows = [
+            {
+                "contract_hash": item.contract_hash,
+                "digest": item.digest,
+                "version": item.version,
+                "updated_at": item.updated_at,
+                "fields_mapped": len(item.map),
+                "items_mapped": len(item.items),
+            }
+            for item in templates.all_templates()
+        ]
+        rows.sort(key=lambda row: row.get("updated_at") or "", reverse=True)
+        return JSONResponse({"templates": rows})
+
+    @app.delete("/api/templates/{digest}", status_code=204)
+    def delete_template_endpoint(digest: str) -> Response:
+        matches = templates.find_templates(digest)
+        if not matches:
+            return JSONResponse(
+                {"error": "not_found", "detail": "no hay plantilla"},
+                status_code=404,
+            )
+        if len(matches) > 1:
+            return JSONResponse(
+                {"error": "ambiguous", "detail": "prefijo ambiguo"},
+                status_code=409,
+            )
+        try:
+            templates.drop_template(matches[0])
+        except OSError as exc:
+            return JSONResponse(
+                {"error": "io", "detail": str(exc)}, status_code=500
+            )
+        return Response(status_code=204)
 
     @app.post("/api/llm/cancel")
     def cancel_llm(body: dict) -> JSONResponse:

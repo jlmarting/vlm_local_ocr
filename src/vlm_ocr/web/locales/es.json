@@ -195,5 +195,18 @@
   "llm.time": "tiempo",
   "llm.load": "carga",
   "llm.cancel": "Cancelar",
-  "llm.cancelled": "cancelado"
+  "llm.cancelled": "cancelado",
+  "contract.import": "Importar contrato",
+  "contract.importHint": "Carga un JSON Schema exportado por la SPA para reutilizarlo en este documento.",
+  "contract.importError": "el contrato debe ser un JSON Schema con properties",
+  "contract.importNested": "el editor solo admite campos planos y listas en el primer nivel; este contrato tiene objetos anidados",
+  "contract.imported": "contrato importado",
+  "template.title": "Plantillas guardadas",
+  "template.refresh": "Actualizar",
+  "template.empty": "No hay plantillas guardadas.",
+  "template.delete": "Borrar plantilla",
+  "template.deleteConfirm": "¿Borrar esta plantilla?",
+  "template.used": "Plantilla usada · {digest} · score {score} · cobertura {coverage}",
+  "template.saved": "Plantilla guardada · {digest}",
+  "template.fields": "{fields} campos · {items} listas"
 }

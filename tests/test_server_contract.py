@@ -147,3 +147,39 @@ def test_contract_endpoint_requires_token(tmp_path: Path) -> None:
 def _only_id(base: Path) -> str:
     index = json.loads((base / "index.json").read_text(encoding="utf-8"))
     return index["workspaces"][0]["id"]
+
+
+def test_contract_endpoint_returns_template_metrics(tmp_path: Path, monkeypatch) -> None:
+    base = _workspace(tmp_path)
+
+    def fake_run(document, extra):
+        metrics = Path(extra[extra.index("--metrics-out") + 1])
+        metrics.write_text(
+            json.dumps(
+                {
+                    "template": {
+                        "found": True,
+                        "digest": "abc",
+                        "score": 0.91,
+                        "coverage": 0.8,
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        return 0, {"data": {"salario_base": 2406.89}}, ""
+
+    monkeypatch.setattr(server, "_run_cli", fake_run)
+    client = _client(base)
+
+    response = client.post(
+        f"/api/workspaces/{_only_id(base)}/contract",
+        headers=HEADERS,
+        json={"schema": SCHEMA},
+    )
+
+    assert response.status_code == 200
+    template = response.json()["template"]
+    assert template["found"] is True
+    assert template["digest"] == "abc"
+    assert template["score"] == 0.91

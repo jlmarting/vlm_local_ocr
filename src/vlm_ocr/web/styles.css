@@ -953,3 +953,35 @@ button.danger {
 .spinner[hidden] {
   display: none;
 }
+
+.templates-panel {
+  margin-top: 0.8rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.templates-panel summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.templates-list {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.template-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.template-row span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

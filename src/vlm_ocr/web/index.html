@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>vlm-local-ocr</title>
-    <link rel="stylesheet" href="styles.css?v=16" />
+    <link rel="stylesheet" href="styles.css?v=17" />
   </head>
   <body>
     <header>
@@ -223,9 +223,37 @@
                 >
                   Añadir lista
                 </button>
+                <button
+                  id="import-contract"
+                  type="button"
+                  data-i18n="contract.import"
+                  data-i18n-title="contract.importHint"
+                >
+                  Importar contrato
+                </button>
+                <input
+                  id="contract-file"
+                  type="file"
+                  accept=".json,application/json"
+                  hidden
+                />
               </div>
               <div id="fields" class="fields"></div>
             </section>
+
+            <details id="templates-panel" class="templates-panel">
+              <summary data-i18n="template.title">Plantillas guardadas</summary>
+              <div class="toolbar">
+                <button
+                  id="templates-refresh"
+                  type="button"
+                  data-i18n="template.refresh"
+                >
+                  Actualizar
+                </button>
+              </div>
+              <div id="templates-list" class="templates-list"></div>
+            </details>
 
             <section class="group">
               <h2 data-i18n="group.extract">Extracción</h2>
@@ -249,6 +277,7 @@
                 </button>
                 <span id="extract-summary" class="summary"></span>
               </div>
+              <p id="template-info" class="field-hint" hidden></p>
             </section>
 
             <section class="group">
@@ -302,6 +331,6 @@
 
       <p id="error" class="error" hidden></p>
     </main>
-    <script src="app.js?v=16"></script>
+    <script src="app.js?v=17"></script>
   </body>
 </html>

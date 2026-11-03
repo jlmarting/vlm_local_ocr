@@ -272,6 +272,8 @@ uv run vlm-ocr serve
 - Panel **«LLM e instrucciones»** colapsable: modelo, instrucciones/prompt, «Proponer contrato» y «Preguntar» en un solo sitio.
 - Modelos remotos (`cloud-deepseek`, `cloud-120b`) visibles en el selector; requieren `OLLAMA_API_KEY` y el documento sale de la máquina (aviso en la UI).
 - Columnas libres con **bandas en la foto** y botón «Usar bloque» para ajustar rangos con asistencia gráfica.
+- **Importar contrato**: carga un JSON Schema exportado para reutilizarlo en un documento nuevo; si el contrato es el mismo, la plantilla homologada se aplica automáticamente.
+- **Plantilla usada** y panel de **plantillas guardadas**: la extracción muestra digest, score y cobertura; el panel permite listar y borrar variantes.
 - Panel «Prompt del LLM»: pregunta al modelo sobre el documento o reutiliza el texto como instrucciones extra al proponer el contrato.
 - Requiere el extra `serve` (`fastapi`, `uvicorn`, `python-multipart`); el CLI base sigue sin dependencias web.
 

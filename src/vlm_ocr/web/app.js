@@ -91,6 +91,7 @@ function applyI18n() {
   updateSelection();
   applyLayout();
   refreshProposeButton();
+  renderTemplates(templatesCache);
   if (state.document) {
     renderRecentsFromState();
   }
@@ -1030,6 +1031,7 @@ async function loadContract(workspaceId) {
 
 let recentsCache = [];
 let modelsCache = [];
+let templatesCache = [];
 
 async function loadRecents() {
   if (!token()) {
@@ -1317,6 +1319,7 @@ function applyProposal(payload) {
   state.extraction = null;
   showResult(null);
   $("extract-summary").textContent = "";
+  showTemplateUsed(null);
   renderFields();
 }
 
@@ -1551,6 +1554,125 @@ function firstListPage(field) {
   const { items, anchors } = listBlockIndices(field);
   const pages = [...items, ...anchors].map((block) => block.page);
   return pages.length ? Math.min(...pages) : null;
+}
+
+function showTemplateUsed(template) {
+  const node = $("template-info");
+  if (!node) {
+    return;
+  }
+  if (template && template.found) {
+    const digest = String(template.digest || "").slice(0, 12) || "—";
+    const score =
+      template.score != null ? Number(template.score).toFixed(2) : "—";
+    const coverage =
+      template.coverage != null
+        ? `${Math.round(Number(template.coverage) * 100)}%`
+        : "—";
+    node.hidden = false;
+    node.textContent = t("template.used", { digest, score, coverage });
+  } else {
+    node.hidden = true;
+    node.textContent = "";
+  }
+}
+
+async function importContract(file) {
+  clearError();
+  try {
+    const text = await file.text();
+    const schema = JSON.parse(text);
+    if (
+      !schema ||
+      typeof schema !== "object" ||
+      !schema.properties ||
+      typeof schema.properties !== "object"
+    ) {
+      throw new Error(t("contract.importError"));
+    }
+    const nested = Object.values(schema.properties).some(
+      (node) => node && typeof node === "object" && node.properties
+    );
+    if (nested) {
+      throw new Error(t("contract.importNested"));
+    }
+    state.fields = parseSchema(schema);
+    if (!state.fields.length) {
+      throw new Error(t("contract.importError"));
+    }
+    state.focusedList = null;
+    state.extraction = null;
+    showResult(null);
+    showTemplateUsed(null);
+    $("extract-summary").textContent = "";
+    renderFields();
+    setStatus(t("contract.imported"));
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function loadTemplates() {
+  if (!token()) {
+    return;
+  }
+  try {
+    const response = await api("/api/templates");
+    const payload = await response.json();
+    templatesCache = payload.templates || [];
+    renderTemplates(templatesCache);
+  } catch (error) {
+    // sin token o servidor no disponible
+  }
+}
+
+function renderTemplates(rows) {
+  const list = $("templates-list");
+  if (!list) {
+    return;
+  }
+  list.innerHTML = "";
+  if (!rows || !rows.length) {
+    const empty = document.createElement("p");
+    empty.className = "field-hint";
+    empty.textContent = t("template.empty");
+    list.appendChild(empty);
+    return;
+  }
+  for (const row of rows) {
+    const item = document.createElement("div");
+    item.className = "template-row";
+    const label = document.createElement("span");
+    const digest = String(row.digest || "").slice(0, 12);
+    label.textContent = `${digest} · v${row.version} · ${t("template.fields", {
+      fields: row.fields_mapped,
+      items: row.items_mapped,
+    })}`;
+    label.title = `contrato ${String(row.contract_hash || "").slice(0, 12)} · ${
+      row.updated_at || ""
+    }`;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "danger";
+    remove.textContent = "×";
+    remove.title = t("template.delete");
+    remove.addEventListener("click", () => dropTemplate(row.digest));
+    item.append(label, remove);
+    list.appendChild(item);
+  }
+}
+
+async function dropTemplate(digest) {
+  if (!window.confirm(t("template.deleteConfirm"))) {
+    return;
+  }
+  try {
+    await api(`/api/templates/${digest}`, { method: "DELETE" });
+    await loadTemplates();
+    setStatus(t("template.delete"));
+  } catch (error) {
+    showError(error);
+  }
 }
 
 function addField() {
@@ -2755,6 +2877,7 @@ async function extract() {
     state.extraction = payload.extraction;
     renderFields();
     $("extract-summary").textContent = summaryText(payload.extraction);
+    showTemplateUsed(payload.template);
     showResult(payload.extraction);
     setStatus(t("status.extractionReady"));
   } catch (error) {
@@ -2780,7 +2903,9 @@ async function homologate() {
     );
     const payload = await response.json();
     if (payload.template_saved) {
-      setStatus(t("status.templateSaved"));
+      const digest = String(payload.digest || "").slice(0, 12) || "—";
+      setStatus(t("template.saved", { digest }));
+      await loadTemplates();
     } else {
       const fields = (payload.unlocated || []).join(", ");
       showError(t("error.noHomologate", { fields: fields ? `: ${fields}` : "" }));
@@ -2900,6 +3025,17 @@ function wire() {
   $("add-field").addEventListener("click", addField);
   $("add-field-block").addEventListener("click", addFieldFromBlock);
   $("add-list").addEventListener("click", addList);
+  $("import-contract").addEventListener("click", () =>
+    $("contract-file").click()
+  );
+  $("contract-file").addEventListener("change", (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      importContract(file);
+    }
+    event.target.value = "";
+  });
+  $("templates-refresh").addEventListener("click", loadTemplates);
   $("action-new-field").addEventListener("click", () => {
     if (state.selectedBlock) {
       addFieldFromBlock();
@@ -2972,4 +3108,5 @@ loadLocale(detectLang()).then(() => {
   health();
   loadRecents();
   loadModels();
+  loadTemplates();
 });

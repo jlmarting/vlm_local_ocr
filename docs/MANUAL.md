@@ -305,6 +305,7 @@ uv run vlm-ocr serve --no-open  # sin abrir navegador
 - «LLM e instrucciones»: panel colapsable con modelo, instrucciones, proponer y preguntar.
 - Modelos remotos listados; requieren `OLLAMA_API_KEY` y envían el documento fuera (aviso).
 - Columnas libres con bandas en la foto y «Usar bloque» para ajustar rangos.
+- «Importar contrato»: carga un schema exportado y reutiliza el contrato (y su plantilla homologada) en un documento nuevo. La extracción avisa «Plantilla usada» con digest, score y cobertura; el panel de plantillas permite listarlas y borrarlas.
 - Panel «Prompt del LLM»: «Preguntar» envía un prompt libre al modelo local; «Proponer con estas instrucciones» las añade a la propuesta de contrato.
 - Requiere el extra `serve`; el CLI base no carga FastAPI.
 
