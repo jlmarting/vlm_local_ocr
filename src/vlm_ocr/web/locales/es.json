@@ -83,7 +83,7 @@
   "list.title": "Lista repetida",
   "list.badge": "lista",
   "list.roles": "Roles de la lista",
-  "list.rolesHint": "Asigna un nombre de propiedad a cada rol. Texto e importe son obligatorios; cantidad y observación, opcionales.",
+  "list.rolesHint": "Asigna un nombre de propiedad a cada rol. «cantidad» toma el número inicial de la línea («2 Water» → 2); si tus líneas empiezan por un código («56 - Q LINE»), déjala vacía.",
   "list.startLabels": "Etiquetas de inicio (opcional)",
   "list.stopLabels": "Etiquetas de fin",
   "list.startHint": "Dónde empieza la lista. Vacío: primera fila con artículo.",
@@ -118,5 +118,9 @@
   "coach.done": "Extracción lista. Si el documento se repite, «Homologar plantilla» guarda la disposición.",
   "list.preview": "Vista previa: {count} líneas de artículo detectadas",
   "list.previewNone": "Vista previa: todavía no se detectan líneas; marca el fin de la lista.",
-  "list.suggestions": "Sugerencias del documento:"
+  "list.suggestions": "Sugerencias del documento:",
+  "list.previewNoPrice": "Hay {count} líneas sin importe: el precio debe ser el número más a la derecha de la línea y algo a su derecha (un flag como «T») puede taparlo.",
+  "list.previewMerged": "Hay una línea fusionada en un solo bloque; la lista quedará pendiente para el LLM.",
+  "list.previewPending": "Hay una fila que no es un artículo; sin rol de observación, la lista quedará pendiente.",
+  "list.previewMore": "y {count} líneas más"
 }

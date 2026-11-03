@@ -581,3 +581,12 @@ button.danger {
     grid-template-columns: 1fr;
   }
 }
+
+.list-preview-wrap {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.list-table td.missing-price {
+  color: #b45309;
+}

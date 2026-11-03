@@ -83,7 +83,7 @@
   "list.title": "Repeated list",
   "list.badge": "list",
   "list.roles": "List roles",
-  "list.rolesHint": "Give each role a property name. Text and amount are required; quantity and observation are optional.",
+  "list.rolesHint": "Give each role a property name. «quantity» takes the leading number of the line («2 Water» → 2); if your lines start with a code («56 - Q LINE»), leave it empty.",
   "list.startLabels": "Start labels (optional)",
   "list.stopLabels": "Stop labels",
   "list.startHint": "Where the list starts. Empty: first item row.",
@@ -118,5 +118,9 @@
   "coach.done": "Extraction ready. If the document repeats, «Save template» stores the layout.",
   "list.preview": "Preview: {count} item lines detected",
   "list.previewNone": "Preview: no item lines detected yet; mark the end of the list.",
-  "list.suggestions": "Suggestions from the document:"
+  "list.suggestions": "Suggestions from the document:",
+  "list.previewNoPrice": "{count} lines have no amount: the price must be the rightmost number of the line and something to its right (a flag like «T») can hide it.",
+  "list.previewMerged": "There is a line merged into a single block; the list will be left pending for the LLM.",
+  "list.previewPending": "There is a row that is not an item; without an observation role the list will be left pending.",
+  "list.previewMore": "and {count} more lines"
 }

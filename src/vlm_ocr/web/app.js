@@ -204,29 +204,81 @@ function documentRows(blocks) {
   return rows;
 }
 
-function itemLikeRow(row) {
+function parseListRow(row, quantityDeclared) {
   const cells = row.blocks.filter((block) => (block.text || "").trim());
-  if (!cells.length) {
-    return false;
-  }
   const texts = cells.filter((block) => !looksLikeNumber(block.text));
   const numbers = cells.filter((block) => looksLikeNumber(block.text));
-  if (!texts.length || !numbers.length) {
-    return false;
+  if (!texts.length) {
+    return { kind: "skip" };
   }
-  return numbers.some((number) =>
-    texts.some((text) => number.box[0] >= text.box[2] - 2)
-  );
+  let priceCell = null;
+  if (numbers.length) {
+    priceCell = numbers.reduce((left, right) =>
+      right.box[0] > left.box[0] ? right : left
+    );
+    const leftEdge = Math.max(...texts.map((block) => block.box[2]));
+    if (priceCell.box[0] < leftEdge - 2) {
+      priceCell = null;
+    }
+  }
+  if (priceCell) {
+    const left = texts.filter(
+      (block) => block.box[2] <= priceCell.box[0] + 2
+    );
+    let product = left
+      .map((block) => block.text.trim())
+      .join(" ")
+      .trim();
+    if (!product) {
+      return { kind: "skip" };
+    }
+    let quantity = null;
+    if (quantityDeclared) {
+      const match = product.match(/^(\d+)\s+(.+)$/);
+      if (match) {
+        quantity = Number(match[1]);
+        product = match[2].trim();
+      }
+    }
+    return { kind: "item", text: product, quantity, price: priceCell.text };
+  }
+  const joined = texts
+    .map((block) => block.text.trim())
+    .join(" ")
+    .trim();
+  if (!joined) {
+    return { kind: "skip" };
+  }
+  if (/^\d+\s+.+\s\d+[.,]\d{2}$/.test(joined)) {
+    return { kind: "merged", text: joined };
+  }
+  if (quantityDeclared) {
+    const match = joined.match(/^(\d+)\s+(.+)$/);
+    if (match) {
+      return {
+        kind: "item",
+        text: match[2].trim(),
+        quantity: Number(match[1]),
+        price: null,
+      };
+    }
+  }
+  return { kind: "extra", text: joined };
 }
 
-function previewRows(field) {
+function previewItems(field) {
   if (!state.document) {
-    return 0;
+    return { items: [], noPrice: 0, merged: false, aborted: false };
   }
   const rows = documentRows(state.document.blocks);
+  const quantityDeclared = Boolean((field.roles || {}).quantity);
+  const observationDeclared = Boolean((field.roles || {}).observation);
   const hasStart = (field.startLabels || []).length > 0;
+  const items = [];
   let counting = false;
-  let count = 0;
+  let noPrice = 0;
+  let merged = false;
+  let aborted = false;
   for (const row of rows) {
     if (!counting) {
       if (hasStart) {
@@ -235,20 +287,45 @@ function previewRows(field) {
         }
         continue;
       }
-      if (itemLikeRow(row)) {
+      const parsed = parseListRow(row, quantityDeclared);
+      if (parsed.kind === "item") {
         counting = true;
-        count += 1;
+        if (parsed.price === null) {
+          noPrice += 1;
+        }
+        items.push(parsed);
       }
       continue;
     }
     if (labelHit(row.blocks, field.stopLabels)) {
       break;
     }
-    if (itemLikeRow(row)) {
-      count += 1;
+    const parsed = parseListRow(row, quantityDeclared);
+    if (parsed.kind === "skip") {
+      continue;
     }
+    if (parsed.kind === "merged") {
+      merged = true;
+      break;
+    }
+    if (parsed.kind === "item") {
+      if (parsed.price === null) {
+        noPrice += 1;
+      }
+      items.push(parsed);
+      continue;
+    }
+    if (observationDeclared && items.length) {
+      const previous = items[items.length - 1];
+      previous.observation = previous.observation
+        ? `${previous.observation} \n${parsed.text}`
+        : parsed.text;
+      continue;
+    }
+    aborted = true;
+    break;
   }
-  return count;
+  return { items, noPrice, merged, aborted };
 }
 
 async function api(path, options = {}) {
@@ -859,6 +936,59 @@ function labelListEditor(titleKey, hintKey, values, onChange, suggestions) {
   return wrap;
 }
 
+function previewTable(field, items) {
+  const columns = [];
+  if (field.roles?.text) {
+    columns.push({ key: "text", label: t("role.text") });
+  }
+  if (field.roles?.quantity) {
+    columns.push({ key: "quantity", label: t("role.quantity") });
+  }
+  if (field.roles?.number_right) {
+    columns.push({ key: "price", label: t("role.number_right") });
+  }
+  if (field.roles?.observation) {
+    columns.push({ key: "observation", label: t("role.observation") });
+  }
+  const wrapper = document.createElement("div");
+  wrapper.className = "list-table-wrap";
+  const table = document.createElement("table");
+  table.className = "list-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const column of columns) {
+    const th = document.createElement("th");
+    th.textContent = column.label;
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  for (const item of items.slice(0, 8)) {
+    const tr = document.createElement("tr");
+    for (const column of columns) {
+      const td = document.createElement("td");
+      const value = item[column.key];
+      td.textContent =
+        value === null || value === undefined ? "—" : String(value);
+      if (column.key === "price" && value === null) {
+        td.className = "missing-price";
+      }
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  wrapper.appendChild(table);
+  if (items.length > 8) {
+    const more = document.createElement("p");
+    more.className = "field-hint";
+    more.textContent = t("list.previewMore", { count: items.length - 8 });
+    wrapper.appendChild(more);
+  }
+  return wrapper;
+}
+
 function listTable(field) {
   const data = state.extraction?.data?.[field.name];
   if (!Array.isArray(data) || !data.length) {
@@ -937,13 +1067,38 @@ function listCard(field, index) {
   rolesHint.className = "field-hint";
   rolesHint.textContent = t("list.rolesHint");
 
-  const preview = document.createElement("p");
-  preview.className = "list-preview";
+  const preview = document.createElement("div");
+  preview.className = "list-preview-wrap";
   const refreshPreview = () => {
-    const count = previewRows(field);
-    preview.textContent =
+    preview.innerHTML = "";
+    const result = previewItems(field);
+    const count = result.items.length;
+    const head = document.createElement("p");
+    head.className = count > 0 ? "list-preview ok" : "list-preview";
+    head.textContent =
       count > 0 ? t("list.preview", { count }) : t("list.previewNone");
-    preview.classList.toggle("ok", count > 0);
+    preview.appendChild(head);
+    const hasResult =
+      state.extraction && state.extraction.matched.includes(field.name);
+    if (result.merged) {
+      const warn = document.createElement("p");
+      warn.className = "field-hint warn";
+      warn.textContent = t("list.previewMerged");
+      preview.appendChild(warn);
+    } else if (result.aborted) {
+      const warn = document.createElement("p");
+      warn.className = "field-hint warn";
+      warn.textContent = t("list.previewPending");
+      preview.appendChild(warn);
+    } else if (result.noPrice > 0) {
+      const warn = document.createElement("p");
+      warn.className = "field-hint warn";
+      warn.textContent = t("list.previewNoPrice", { count: result.noPrice });
+      preview.appendChild(warn);
+    }
+    if (count && !hasResult) {
+      preview.appendChild(previewTable(field, result.items));
+    }
   };
 
   const labels = document.createElement("div");
