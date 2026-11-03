@@ -39,7 +39,7 @@ def _client(base: Path) -> TestClient:
 def test_prompt_returns_model_answer(tmp_path: Path, monkeypatch) -> None:
     base, workspace_id = _workspace(tmp_path)
     monkeypatch.setattr(
-        server, "_local_model", lambda alias: SimpleNamespace(label="llama32-3b")
+        server, "_model_ref", lambda alias: SimpleNamespace(label="llama32-3b", is_remote=False)
     )
     captured: dict = {}
 
@@ -57,7 +57,11 @@ def test_prompt_returns_model_answer(tmp_path: Path, monkeypatch) -> None:
     )
 
     assert response.status_code == 200
-    assert response.json() == {"answer": "El total es 8.40", "model": "llama32-3b"}
+    assert response.json() == {
+        "answer": "El total es 8.40",
+        "model": "llama32-3b",
+        "remote": False,
+    }
     assert captured["task"] == "¿Cuánto es el total?"
     assert "TOTAL 8.40" in captured["text"]
 
@@ -94,9 +98,9 @@ def test_prompt_rejects_remote_model(tmp_path: Path, monkeypatch) -> None:
     base, workspace_id = _workspace(tmp_path)
 
     def fail(alias):
-        raise ContractError("solo se admiten modelos locales")
+        raise ContractError("el modelo cloud requiere OLLAMA_API_KEY en el entorno")
 
-    monkeypatch.setattr(server, "_local_model", fail)
+    monkeypatch.setattr(server, "_model_ref", fail)
     client = _client(base)
 
     response = client.post(
@@ -106,12 +110,13 @@ def test_prompt_rejects_remote_model(tmp_path: Path, monkeypatch) -> None:
     )
 
     assert response.status_code == 422
+    assert "OLLAMA_API_KEY" in response.json()["detail"]
 
 
 def test_prompt_reports_model_failure(tmp_path: Path, monkeypatch) -> None:
     base, workspace_id = _workspace(tmp_path)
     monkeypatch.setattr(
-        server, "_local_model", lambda alias: SimpleNamespace(label="llama32-3b")
+        server, "_model_ref", lambda alias: SimpleNamespace(label="llama32-3b", is_remote=False)
     )
 
     def explode(*args, **kwargs):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import secrets
 import subprocess
@@ -133,32 +134,65 @@ def _process_document(
     }
 
 
-def _local_models() -> list[dict]:
+def _models() -> list[dict]:
     rows: list[dict] = []
     for alias, entry in catalog.load_catalog().items():
-        if entry.kind != "gguf" or entry.prompt_style != "chat":
+        if entry.prompt_style != "chat":
             continue
-        rows.append(
-            {
-                "alias": alias,
-                "label": entry.name or alias,
-                "present": catalog.find_downloaded(entry) is not None,
-                "size_bytes": entry.size_bytes,
-                "license": entry.license,
-                "default": bool(entry.default),
-            }
-        )
-    rows.sort(key=lambda row: (not row["present"], row["alias"]))
+        if entry.kind == "gguf":
+            present = catalog.find_downloaded(entry) is not None
+            rows.append(
+                {
+                    "alias": alias,
+                    "label": entry.name or alias,
+                    "present": present,
+                    "remote": False,
+                    "requires_key": False,
+                    "available": present,
+                    "key_env": None,
+                    "size_bytes": entry.size_bytes,
+                    "license": entry.license,
+                    "default": bool(entry.default),
+                }
+            )
+        elif entry.kind == "ollama":
+            key_env = entry.api_key_env or "OLLAMA_API_KEY"
+            available = (not entry.requires_key) or bool(os.environ.get(key_env))
+            rows.append(
+                {
+                    "alias": alias,
+                    "label": entry.name or alias,
+                    "present": True,
+                    "remote": True,
+                    "requires_key": entry.requires_key,
+                    "available": available,
+                    "key_env": key_env if entry.requires_key else None,
+                    "size_bytes": entry.size_bytes,
+                    "license": entry.license,
+                    "default": bool(entry.default),
+                }
+            )
+    rows.sort(key=lambda row: (row["remote"], not row["available"], row["alias"]))
     return rows
 
 
-def _local_model(alias: str | None) -> catalog.ModelRef:
+def _model_ref(alias: str | None) -> catalog.ModelRef:
     try:
         ref = catalog.resolve(alias) if alias else catalog.default_ref()
     except catalog.CatalogError as exc:
         raise ContractError(str(exc)) from exc
-    if ref is None or ref.is_remote or ref.entry.kind != "gguf":
-        raise ContractError("solo se admiten modelos locales (kind: gguf)")
+    if ref is None:
+        raise ContractError("no hay modelo por defecto disponible")
+    if ref.is_remote:
+        if ref.entry.requires_key:
+            key_env = ref.entry.api_key_env or "OLLAMA_API_KEY"
+            if not os.environ.get(key_env):
+                raise ContractError(
+                    f"el modelo {ref.label} requiere {key_env} en el entorno"
+                )
+        return ref
+    if ref.entry.kind != "gguf":
+        raise ContractError("modelo no soportado")
     if ref.path is None:
         raise ContractError(
             f"el modelo {ref.label} no está descargado: "
@@ -538,7 +572,7 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
             text = str(ocr.get("text") or "")
             if not text.strip():
                 raise ContractError("el documento no tiene texto")
-            ref = _local_model(str(body.get("model") or "").strip() or None)
+            ref = _model_ref(str(body.get("model") or "").strip() or None)
             answer = infer_answer(
                 text,
                 prompt,
@@ -556,11 +590,13 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
                 {"error": "model", "detail": f"el modelo no respondió: {exc}"},
                 status_code=502,
             )
-        return JSONResponse({"answer": answer, "model": ref.label})
+        return JSONResponse(
+            {"answer": answer, "model": ref.label, "remote": ref.is_remote}
+        )
 
     @app.get("/api/models")
     def list_models() -> JSONResponse:
-        return JSONResponse({"models": _local_models()})
+        return JSONResponse({"models": _models()})
 
     @app.post("/api/workspaces/{workspace_id}/propose")
     def propose_contract(workspace_id: str, body: dict) -> JSONResponse:
@@ -583,7 +619,7 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
             instructions = propose.PROPOSAL_INSTRUCTIONS
             if extra:
                 instructions = f"{instructions}\n\nInstrucciones del usuario: {extra}"
-            ref = _local_model(str(body.get("model") or "").strip() or None)
+            ref = _model_ref(str(body.get("model") or "").strip() or None)
             payload = infer_contract(
                 text,
                 propose.PROPOSAL_SCHEMA,
@@ -613,7 +649,11 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
                 },
                 status_code=502,
             )
-        return JSONResponse({"fields": fields, "model": ref.label})
+        return JSONResponse({
+            "fields": fields,
+            "model": ref.label,
+            "remote": ref.is_remote,
+        })
 
     if WEB_DIR.exists():
         app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")

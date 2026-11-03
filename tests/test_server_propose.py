@@ -43,7 +43,7 @@ def _client(base: Path) -> TestClient:
     return TestClient(server.create_app(workspace_dir=base, token=TOKEN))
 
 
-def test_models_lists_only_local_models(tmp_path: Path, monkeypatch) -> None:
+def test_models_lists_local_and_remote(tmp_path: Path, monkeypatch) -> None:
     entries = {
         "llama32-3b": catalog.ModelEntry(
             alias="llama32-3b",
@@ -61,7 +61,12 @@ def test_models_lists_only_local_models(tmp_path: Path, monkeypatch) -> None:
             size_bytes=200,
         ),
         "cloud": catalog.ModelEntry(
-            alias="cloud", name="Cloud", kind="ollama", license="remote"
+            alias="cloud",
+            name="Cloud",
+            kind="ollama",
+            license="remote",
+            requires_key=True,
+            api_key_env="OLLAMA_API_KEY",
         ),
         "nuextract-tiny": catalog.ModelEntry(
             alias="nuextract-tiny",
@@ -77,22 +82,30 @@ def test_models_lists_only_local_models(tmp_path: Path, monkeypatch) -> None:
         "find_downloaded",
         lambda entry: Path("/tmp/model.gguf") if entry.alias == "llama32-3b" else None,
     )
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
     client = _client(tmp_path)
 
     response = client.get("/api/models", headers=HEADERS)
 
     assert response.status_code == 200
     models = response.json()["models"]
-    assert [model["alias"] for model in models] == ["llama32-3b", "qwen05b"]
-    assert models[0]["present"] is True
+    assert [model["alias"] for model in models] == [
+        "llama32-3b",
+        "qwen05b",
+        "cloud",
+    ]
+    assert models[0]["available"] is True
     assert models[0]["default"] is True
-    assert models[1]["present"] is False
+    assert models[1]["available"] is False
+    assert models[2]["remote"] is True
+    assert models[2]["requires_key"] is True
+    assert models[2]["available"] is False
 
 
 def test_propose_maps_and_filters_labels(tmp_path: Path, monkeypatch) -> None:
     base, workspace_id = _workspace(tmp_path)
     monkeypatch.setattr(
-        server, "_local_model", lambda alias: SimpleNamespace(label="llama32-3b")
+        server, "_model_ref", lambda alias: SimpleNamespace(label="llama32-3b", is_remote=False)
     )
     captured: dict = {}
 
@@ -155,9 +168,9 @@ def test_propose_rejects_remote_model(tmp_path: Path, monkeypatch) -> None:
     base, workspace_id = _workspace(tmp_path)
 
     def fail(alias):
-        raise ContractError("solo se admiten modelos locales")
+        raise ContractError("el modelo cloud requiere OLLAMA_API_KEY en el entorno")
 
-    monkeypatch.setattr(server, "_local_model", fail)
+    monkeypatch.setattr(server, "_model_ref", fail)
     client = _client(base)
 
     response = client.post(
@@ -167,13 +180,13 @@ def test_propose_rejects_remote_model(tmp_path: Path, monkeypatch) -> None:
     )
 
     assert response.status_code == 422
-    assert "modelos locales" in response.json()["detail"]
+    assert "OLLAMA_API_KEY" in response.json()["detail"]
 
 
 def test_propose_reports_model_failure(tmp_path: Path, monkeypatch) -> None:
     base, workspace_id = _workspace(tmp_path)
     monkeypatch.setattr(
-        server, "_local_model", lambda alias: SimpleNamespace(label="llama32-3b")
+        server, "_model_ref", lambda alias: SimpleNamespace(label="llama32-3b", is_remote=False)
     )
 
     def explode(*args, **kwargs):
@@ -217,11 +230,19 @@ def test_propose_requires_token(tmp_path: Path) -> None:
     )
 
 
-def test_local_model_rejects_remote(monkeypatch) -> None:
+def test_model_ref_rejects_remote_without_key(monkeypatch) -> None:
     remote = catalog.ModelRef(
-        catalog.ModelEntry(alias="cloud", name="Cloud", kind="ollama", license="x")
+        catalog.ModelEntry(
+            alias="cloud",
+            name="Cloud",
+            kind="ollama",
+            license="x",
+            requires_key=True,
+            api_key_env="OLLAMA_API_KEY",
+        )
     )
     monkeypatch.setattr(server.catalog, "resolve", lambda alias: remote)
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
 
     with pytest.raises(ContractError):
-        server._local_model("cloud")
+        server._model_ref("cloud")
