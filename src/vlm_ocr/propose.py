@@ -14,6 +14,7 @@ PROPOSAL_SCHEMA: dict[str, Any] = {
     "properties": {
         "fields": {
             "type": "array",
+            "maxItems": 30,
             "items": {
                 "type": "object",
                 "properties": {
@@ -28,6 +29,7 @@ PROPOSAL_SCHEMA: dict[str, Any] = {
         },
         "lists": {
             "type": "array",
+            "maxItems": 3,
             "items": {
                 "type": "object",
                 "properties": {
@@ -81,6 +83,7 @@ PROPOSAL_INSTRUCTIONS = (
     "- No propongas las cabeceras de la tabla (Concepto, Unidades, Importe, "
     "Devengado, A deducir, Descripción...) como campos; úsalas solo para elegir "
     "source. "
+    "- Máximo 20 campos y 2 listas; si hay más, prioriza los más importantes. "
     "- No repitas nombres. No inventes etiquetas. Si no hay listas, "
     'devuelve "lists": []. Los nombres van en snake_case, sin acentos.'
 )

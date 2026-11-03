@@ -589,15 +589,21 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
                 propose.PROPOSAL_SCHEMA,
                 "schema",
                 ref,
-                n_ctx=4096,
+                n_ctx=8192,
                 max_ocr_tokens=2000,
                 instructions=instructions,
-                max_output_tokens=1500,
+                max_output_tokens=3000,
             )
             fields = propose.proposal_fields(payload, text)
         except ContractError as exc:
+            detail = str(exc)
+            if "truncada" in detail.lower() or "truncamiento" in detail.lower():
+                detail += (
+                    " · La propuesta es demasiado grande para este modelo: "
+                    "prueba con un documento más corto o un modelo mayor."
+                )
             return JSONResponse(
-                {"error": "contract", "detail": str(exc)}, status_code=422
+                {"error": "contract", "detail": detail}, status_code=422
             )
         except Exception as exc:  # noqa: BLE001
             return JSONResponse(

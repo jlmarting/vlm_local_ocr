@@ -103,6 +103,8 @@ def test_propose_maps_and_filters_labels(tmp_path: Path, monkeypatch) -> None:
             kind=kind,
             model=model,
             instructions=kwargs.get("instructions"),
+            n_ctx=kwargs.get("n_ctx"),
+            max_output_tokens=kwargs.get("max_output_tokens"),
         )
         return {
             "fields": [
@@ -145,6 +147,8 @@ def test_propose_maps_and_filters_labels(tmp_path: Path, monkeypatch) -> None:
     assert "SALARIO BASE | 2.406,89" in captured["text"]
     assert server.propose.PROPOSAL_INSTRUCTIONS in captured["instructions"]
     assert "prioriza la tabla de artículos" in captured["instructions"]
+    assert captured["n_ctx"] == 8192
+    assert captured["max_output_tokens"] == 3000
 
 
 def test_propose_rejects_remote_model(tmp_path: Path, monkeypatch) -> None:

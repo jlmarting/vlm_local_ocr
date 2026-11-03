@@ -63,6 +63,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Fixed
 
+- SPA: «Proponer contrato» amplía el presupuesto a 3000 tokens de salida y 8192 de contexto, acota el schema (30 campos / 3 listas) e instruye un máximo de 20/2; si aun así trunca, el error sugiere reducir el documento o usar un modelo mayor. No se sube a 50k: en CPU sería inviable y no arregla la generación desbocada.
 - SPA: «Proponer contrato» ya no interpreta el evento del clic como instrucciones (`extraInstructions.trim is not a function`); el botón se envuelve y el parámetro se valida.
 - El editor de la SPA envía `"string"` para los campos de tipo texto/fecha (antes `"text"` rompía el JSON Schema) y los errores filtran los `[INFO]` de RapidOCR/ONNX.
 - `--with-layout` usa las cajas reales del texto nativo en PDFs con capa de texto (antes devolvía `[0, 0, 0, 0]`), lo que permite pintar el visor de la SPA.
