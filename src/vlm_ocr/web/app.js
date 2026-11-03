@@ -1577,6 +1577,16 @@ function showTemplateUsed(template) {
   }
 }
 
+function showTemplateSaved(digest) {
+  const node = $("template-info");
+  if (!node) {
+    return;
+  }
+  const short = String(digest || "").slice(0, 12) || "—";
+  node.hidden = false;
+  node.textContent = t("template.saved", { digest: short });
+}
+
 async function importContract(file) {
   clearError();
   try {
@@ -2905,6 +2915,11 @@ async function homologate() {
     if (payload.template_saved) {
       const digest = String(payload.digest || "").slice(0, 12) || "—";
       setStatus(t("template.saved", { digest }));
+      showTemplateSaved(payload.digest);
+      const panel = $("templates-panel");
+      if (panel) {
+        panel.open = true;
+      }
       await loadTemplates();
     } else {
       const fields = (payload.unlocated || []).join(", ");
