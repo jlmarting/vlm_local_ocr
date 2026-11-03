@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>vlm-local-ocr</title>
-    <link rel="stylesheet" href="styles.css?v=6" />
+    <link rel="stylesheet" href="styles.css?v=7" />
   </head>
   <body>
     <header>
@@ -16,190 +16,205 @@
       </select>
     </header>
     <main>
-      <section id="recents" class="recents" hidden>
-        <h2 data-i18n="recents.title">Recientes</h2>
-        <div id="recents-list" class="recents-list"></div>
-      </section>
+      <section id="home">
+        <section id="recents" class="recents" hidden>
+          <h2 data-i18n="recents.title">Recientes</h2>
+          <div id="recents-list" class="recents-list"></div>
+        </section>
 
-      <section id="dropzone" class="dropzone">
-        <p data-i18n="dropzone.text">Arrastra un PDF o una imagen aquí</p>
-        <label class="button">
-          <span data-i18n="dropzone.choose">Elegir archivo</span>
-          <input
-            id="file"
-            type="file"
-            accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp,.txt"
-            hidden
-          />
-        </label>
+        <section id="dropzone" class="dropzone">
+          <p data-i18n="dropzone.text">Arrastra un PDF o una imagen aquí</p>
+          <label class="button">
+            <span data-i18n="dropzone.choose">Elegir archivo</span>
+            <input
+              id="file"
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp,.txt"
+              hidden
+            />
+          </label>
+        </section>
       </section>
 
       <section id="viewer" hidden>
-        <div class="toolbar">
+        <div class="work-toolbar">
           <button id="prev" type="button" data-i18n-title="viewer.prev">‹</button>
           <span id="page-label">1 / 1</span>
           <button id="next" type="button" data-i18n-title="viewer.next">›</button>
+          <span class="legend">
+            <i class="dot selected"></i>
+            <span data-i18n="legend.selected">seleccionado</span>
+            <i class="dot assigned"></i>
+            <span data-i18n="legend.assigned">asignado</span>
+          </span>
           <span class="spacer"></span>
-          <button id="new" type="button" class="secondary" data-i18n="viewer.new">
-            Nuevo documento
+          <button id="toggle-text" type="button" data-i18n="viewer.hideText">
+            Ocultar texto
           </button>
-        </div>
-        <div class="content">
-          <div id="page-wrap" class="page-wrap">
-            <img id="page-image" alt="Página del documento" />
-            <div id="boxes" class="boxes"></div>
-          </div>
-          <aside id="text-panel" class="text-panel"></aside>
+          <button id="new" type="button" data-i18n="viewer.home">Inicio</button>
         </div>
 
-        <section id="contract" class="contract">
-          <div class="toolbar">
-            <h2 data-i18n="contract.title">Contrato</h2>
-            <button
-              id="add-field"
-              type="button"
-              data-i18n="contract.addField"
-              data-i18n-title="contract.addFieldHint"
-            >
-              Añadir campo
-            </button>
-            <button
-              id="add-field-block"
-              type="button"
-              data-i18n="contract.addFieldBlock"
-              data-i18n-title="contract.addFieldBlockHint"
-            >
-              Campo desde el bloque
-            </button>
-            <button
-              id="add-list"
-              type="button"
-              data-i18n="contract.addList"
-              data-i18n-title="contract.addListHint"
-            >
-              Añadir lista
-            </button>
-            <button
-              id="extract"
-              type="button"
-              class="primary"
-              data-i18n="contract.extract"
-              data-i18n-title="contract.extractHint"
-            >
-              Probar extracción
-            </button>
-            <button
-              id="homologate"
-              type="button"
-              data-i18n="contract.homologate"
-              data-i18n-title="contract.homologateHint"
-            >
-              Homologar plantilla
-            </button>
-            <span id="extract-summary" class="summary"></span>
-          </div>
-          <div class="toolbar exports">
-            <button
-              id="export-schema"
-              type="button"
-              data-i18n="contract.exportSchema"
-              data-i18n-title="contract.exportSchemaHint"
-            >
-              Exportar schema
-            </button>
-            <button
-              id="export-result"
-              type="button"
-              data-i18n="contract.exportResult"
-              data-i18n-title="contract.exportResultHint"
-            >
-              Exportar resultado
-            </button>
-            <button
-              id="export-text"
-              type="button"
-              data-i18n="contract.exportText"
-              data-i18n-title="contract.exportTextHint"
-            >
-              Exportar texto
-            </button>
-          </div>
+        <div id="work" class="work">
+          <section class="work-page">
+            <div id="page-wrap" class="page-wrap">
+              <img id="page-image" alt="Página del documento" />
+              <div id="boxes" class="boxes"></div>
+            </div>
+          </section>
 
-          <div class="help">
-            <p class="help-title" data-i18n="contract.helpTitle">Cómo funciona</p>
-            <ol>
-              <li data-i18n="contract.help1"></li>
-              <li data-i18n="contract.help2"></li>
-              <li data-i18n="contract.help3"></li>
-              <li data-i18n="contract.help4"></li>
-              <li data-i18n="contract.helpLists"></li>
-            </ol>
-          </div>
+          <aside
+            id="text-panel"
+            class="work-text"
+            data-i18n-title="viewer.textTitle"
+          ></aside>
 
-          <p id="coach" class="coach" hidden></p>
+          <section id="contract" class="work-ops">
+            <p id="coach" class="coach" hidden></p>
 
-          <div id="selection" class="selection-bar">
-            <span id="selection-text" class="selection-text" data-i18n="field.noSelection">
-              Ningún bloque seleccionado
-            </span>
-            <span class="selection-actions">
+            <div id="selection" class="selection-bar">
+              <span
+                id="selection-text"
+                class="selection-text"
+                data-i18n="field.noSelection"
+              >
+                Ningún bloque seleccionado
+              </span>
+              <span class="selection-actions">
+                <button
+                  id="action-new-field"
+                  type="button"
+                  data-i18n="action.newField"
+                  data-i18n-title="contract.addFieldBlockHint"
+                >
+                  Crear campo desde el bloque
+                </button>
+                <select id="action-list-target" hidden aria-label="Lista"></select>
+                <button
+                  id="action-list-start"
+                  type="button"
+                  data-i18n="action.listStart"
+                  data-i18n-title="action.listStartHint"
+                >
+                  Inicio de lista
+                </button>
+                <button
+                  id="action-list-stop"
+                  type="button"
+                  data-i18n="action.listStop"
+                  data-i18n-title="action.listStopHint"
+                >
+                  Fin de lista
+                </button>
+                <button
+                  id="action-clear"
+                  type="button"
+                  class="danger"
+                  data-i18n-title="action.clear"
+                >
+                  ×
+                </button>
+              </span>
+            </div>
+
+            <div class="toolbar">
+              <h2 data-i18n="contract.title">Contrato</h2>
               <button
-                id="action-new-field"
+                id="add-field"
                 type="button"
-                data-i18n="action.newField"
+                data-i18n="contract.addField"
+                data-i18n-title="contract.addFieldHint"
+              >
+                Añadir campo
+              </button>
+              <button
+                id="add-field-block"
+                type="button"
+                data-i18n="contract.addFieldBlock"
                 data-i18n-title="contract.addFieldBlockHint"
               >
-                Crear campo desde el bloque
-              </button>
-              <select id="action-list-target" hidden aria-label="Lista"></select>
-              <button
-                id="action-list-start"
-                type="button"
-                data-i18n="action.listStart"
-                data-i18n-title="action.listStartHint"
-              >
-                Inicio de lista
+                Campo desde el bloque
               </button>
               <button
-                id="action-list-stop"
+                id="add-list"
                 type="button"
-                data-i18n="action.listStop"
-                data-i18n-title="action.listStopHint"
+                data-i18n="contract.addList"
+                data-i18n-title="contract.addListHint"
               >
-                Fin de lista
+                Añadir lista
+              </button>
+            </div>
+
+            <div class="toolbar">
+              <button
+                id="extract"
+                type="button"
+                class="primary"
+                data-i18n="contract.extract"
+                data-i18n-title="contract.extractHint"
+              >
+                Probar extracción
               </button>
               <button
-                id="action-clear"
+                id="homologate"
                 type="button"
-                class="danger"
-                data-i18n-title="action.clear"
+                data-i18n="contract.homologate"
+                data-i18n-title="contract.homologateHint"
               >
-                ×
+                Homologar plantilla
               </button>
-            </span>
-          </div>
+              <span id="extract-summary" class="summary"></span>
+            </div>
 
-          <div id="fields" class="fields"></div>
+            <div class="toolbar exports">
+              <button
+                id="export-schema"
+                type="button"
+                data-i18n="contract.exportSchema"
+                data-i18n-title="contract.exportSchemaHint"
+              >
+                Exportar schema
+              </button>
+              <button
+                id="export-result"
+                type="button"
+                data-i18n="contract.exportResult"
+                data-i18n-title="contract.exportResultHint"
+              >
+                Exportar resultado
+              </button>
+              <button
+                id="export-text"
+                type="button"
+                data-i18n="contract.exportText"
+                data-i18n-title="contract.exportTextHint"
+              >
+                Exportar texto
+              </button>
+            </div>
 
-          <details id="result-panel" class="result-panel" hidden>
-            <summary data-i18n="contract.result">Resultado JSON</summary>
-            <pre id="result-json"></pre>
-          </details>
+            <details class="help">
+              <summary data-i18n="contract.helpTitle">Cómo funciona</summary>
+              <ol>
+                <li data-i18n="contract.help1"></li>
+                <li data-i18n="contract.help2"></li>
+                <li data-i18n="contract.help3"></li>
+                <li data-i18n="contract.help4"></li>
+                <li data-i18n="contract.helpLists"></li>
+              </ol>
+            </details>
 
-          <datalist id="sources">
-            <option value="unidades"></option>
-            <option value="importe"></option>
-            <option value="devengado"></option>
-            <option value="a_deducir"></option>
-            <option value="base"></option>
-            <option value="porcentaje"></option>
-            <option value="cuota"></option>
-          </datalist>
-        </section>
+            <div id="fields" class="fields"></div>
+
+            <details id="result-panel" class="result-panel" hidden>
+              <summary data-i18n="contract.result">Resultado JSON</summary>
+              <pre id="result-json"></pre>
+            </details>
+          </section>
+        </div>
       </section>
 
       <p id="error" class="error" hidden></p>
     </main>
-    <script src="app.js?v=6"></script>
+    <script src="app.js?v=7"></script>
   </body>
 </html>

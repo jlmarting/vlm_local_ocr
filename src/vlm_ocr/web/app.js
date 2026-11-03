@@ -73,6 +73,7 @@ function applyI18n() {
   }
   renderFields();
   updateSelection();
+  applyTextCollapsed();
   if (state.document) {
     renderRecentsFromState();
   }
@@ -464,14 +465,82 @@ function updateSelection() {
 function clearSelection() {
   state.selected = null;
   state.selectedBlock = null;
-  for (const element of state.boxes.values()) {
-    element.classList.remove("selected");
-  }
-  for (const element of $("text-panel").children) {
-    element.classList.remove("selected");
-  }
   updateSelection();
   renderFields();
+}
+
+function assignedMap() {
+  const assigned = new Map();
+  const add = (label, reason) => {
+    const key = normLabel(label || "");
+    if (!key) {
+      return;
+    }
+    const reasons = assigned.get(key) || new Set();
+    reasons.add(reason);
+    assigned.set(key, reasons);
+  };
+  for (const field of state.fields) {
+    if (field.kind === "list") {
+      for (const label of field.startLabels || []) {
+        add(label, t("assign.listStart", { name: field.name }));
+      }
+      for (const label of field.stopLabels || []) {
+        add(label, t("assign.listStop", { name: field.name }));
+      }
+    } else {
+      for (const label of field.labels || []) {
+        add(label, t("assign.scalar", { name: field.name }));
+      }
+    }
+  }
+  return assigned;
+}
+
+function updateBlockStates() {
+  if (!state.document) {
+    return;
+  }
+  const assigned = assignedMap();
+  const blocks = pageBlocks(state.document.pages[state.page]);
+  for (const [index, element] of state.boxes.entries()) {
+    const block = blocks[index];
+    if (!block) {
+      continue;
+    }
+    const reasons = assigned.get(normLabel(block.text));
+    element.classList.toggle("selected", state.selected === index);
+    element.classList.toggle("assigned", Boolean(reasons));
+    element.title = reasons
+      ? `${block.text} · ${[...reasons].join(", ")}`
+      : block.text;
+  }
+  for (const item of $("text-panel").children) {
+    const index = Number(item.dataset.index);
+    const block = blocks[index];
+    if (!block) {
+      continue;
+    }
+    const reasons = assigned.get(normLabel(block.text));
+    item.classList.toggle("selected", state.selected === index);
+    item.classList.toggle("assigned", Boolean(reasons));
+  }
+}
+
+function applyTextCollapsed() {
+  const collapsed = localStorage.getItem("vlm-text-collapsed") === "1";
+  $("work").classList.toggle("text-collapsed", collapsed);
+  const button = $("toggle-text");
+  if (button) {
+    button.textContent = t(collapsed ? "viewer.showText" : "viewer.hideText");
+  }
+}
+
+function toggleText() {
+  const collapsed = localStorage.getItem("vlm-text-collapsed") === "1";
+  localStorage.setItem("vlm-text-collapsed", collapsed ? "0" : "1");
+  applyTextCollapsed();
+  syncOverlay();
 }
 
 function updateCoach() {
@@ -532,6 +601,7 @@ function drawBoxes(page) {
     container.appendChild(element);
     state.boxes.set(index, element);
   });
+  updateBlockStates();
 }
 
 function renderText(page) {
@@ -546,17 +616,13 @@ function renderText(page) {
     item.addEventListener("click", () => selectBlock(index));
     panel.appendChild(item);
   });
+  updateBlockStates();
 }
 
 function selectBlock(index) {
   state.selected = index;
   state.selectedBlock = pageBlocks(state.document.pages[state.page])[index] || null;
-  for (const [key, element] of state.boxes.entries()) {
-    element.classList.toggle("selected", key === index);
-  }
-  for (const element of $("text-panel").children) {
-    element.classList.toggle("selected", Number(element.dataset.index) === index);
-  }
+  updateBlockStates();
   const box = state.boxes.get(index);
   if (box) {
     box.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -600,9 +666,9 @@ async function showPage(index) {
 }
 
 function showViewer() {
-  $("dropzone").hidden = true;
-  $("recents").hidden = true;
+  $("home").hidden = true;
   $("viewer").hidden = false;
+  applyTextCollapsed();
 }
 
 async function upload(file) {
@@ -1112,6 +1178,7 @@ function listCard(field, index) {
         field.startLabels = next;
         refreshPreview();
         updateCoach();
+        updateBlockStates();
       }
     )
   );
@@ -1127,6 +1194,7 @@ function listCard(field, index) {
         field.stopLabels = next;
         refreshPreview();
         updateCoach();
+        updateBlockStates();
       },
       suggestions
     )
@@ -1208,6 +1276,7 @@ function fieldCard(field, index) {
       .map((value) => value.trim())
       .filter(Boolean);
     updateCoach();
+    updateBlockStates();
   });
   body.appendChild(
     labelNode(t("field.labelsLabel"), labels, t("field.labelsHint"))
@@ -1307,6 +1376,7 @@ function renderFields() {
   });
   updateSelection();
   updateCoach();
+  updateBlockStates();
 }
 
 function parseSchema(schema) {
@@ -1547,7 +1617,7 @@ function reset() {
   showResult(null);
   updateSelection();
   $("viewer").hidden = true;
-  $("dropzone").hidden = false;
+  $("home").hidden = false;
   $("file").value = "";
   setStatus(t("status.ready"));
   loadRecents();
@@ -1577,6 +1647,7 @@ function wire() {
   $("prev").addEventListener("click", () => showPage(state.page - 1));
   $("next").addEventListener("click", () => showPage(state.page + 1));
   $("new").addEventListener("click", reset);
+  $("toggle-text").addEventListener("click", toggleText);
   $("add-field").addEventListener("click", addField);
   $("add-field-block").addEventListener("click", addFieldFromBlock);
   $("add-list").addEventListener("click", addList);

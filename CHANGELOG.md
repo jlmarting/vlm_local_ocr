@@ -32,6 +32,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Changed
 
+- SPA: vista de trabajo a tres columnas en escritorio — ticket a la izquierda, texto reconocido plegable al lado y operativa fija a la derecha; los bloques se colorean por estado (azul seleccionado, verde asignado) con leyenda y tooltip; la pantalla de inicio (recientes y arrastre) queda fuera del área de trabajo.
 - SPA: flujo guiado de contratos — barra de acciones sobre el bloque seleccionado (crear campo, inicio/fin de lista), guía de siguiente paso, sugerencias de etiquetas de fin detectadas del documento y vista previa de las líneas de artículo antes de extraer. La vista previa muestra cómo se leerá cada línea (producto, cantidad, importe) con avisos de líneas sin importe, fusionadas o pendientes, y documenta la convención de «cantidad» (número inicial de la línea).
 - UI de la SPA: las cajas del visor siguen la imagen real al redimensionar (medición con `getBoundingClientRect` y `ResizeObserver`, sin borde que desplace el overlay); editor de contrato con guía de pasos, banner de selección, «Campo desde el bloque», campos con etiquetas y ayudas, columna desplegable con opción libre, validación de nombres y panel de resultado JSON.
 - Rutas por plataforma para plantillas, catálogo de usuario y modelos descargados: `%LOCALAPPDATA%`/`%APPDATA%` en Windows, `~/Library/Application Support` en macOS y XDG en Linux. Si el directorio antiguo (XDG) existe con contenido y el nuevo está vacío, se prefiere el antiguo; las rutas explícitas siguen mandando.

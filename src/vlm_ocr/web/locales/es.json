@@ -122,5 +122,14 @@
   "list.previewNoPrice": "Hay {count} líneas sin importe: el precio debe ser el número más a la derecha de la línea y algo a su derecha (un flag como «T») puede taparlo.",
   "list.previewMerged": "Hay una línea fusionada en un solo bloque; la lista quedará pendiente para el LLM.",
   "list.previewPending": "Hay una fila que no es un artículo; sin rol de observación, la lista quedará pendiente.",
-  "list.previewMore": "y {count} líneas más"
+  "list.previewMore": "y {count} líneas más",
+  "legend.selected": "seleccionado",
+  "legend.assigned": "asignado",
+  "viewer.hideText": "Ocultar texto",
+  "viewer.showText": "Mostrar texto",
+  "viewer.textTitle": "Texto reconocido",
+  "viewer.home": "Inicio",
+  "assign.scalar": "campo «{name}»",
+  "assign.listStart": "inicio de «{name}»",
+  "assign.listStop": "fin de «{name}»"
 }
