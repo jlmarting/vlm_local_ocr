@@ -937,6 +937,9 @@ async function upload(file) {
     state.document = payload.document;
     state.pageUrls = new Map();
     state.fields = [];
+    if (payload.match && payload.match.contract) {
+      state.fields = parseSchema(payload.match.contract);
+    }
     state.focusedList = null;
     state.extraction = null;
     state.zoom = 1;
@@ -947,6 +950,11 @@ async function upload(file) {
     showResult(null);
     showViewer();
     await showPage(0);
+    if (payload.match) {
+      showTemplateDetected(payload.match);
+    } else {
+      showTemplateUsed(null);
+    }
     $("status").textContent = `${payload.document.filename} · ${payload.document.pages.length}`;
     await loadRecents();
   } catch (error) {
@@ -1585,6 +1593,22 @@ function showTemplateSaved(digest) {
   const short = String(digest || "").slice(0, 12) || "—";
   node.hidden = false;
   node.textContent = t("template.saved", { digest: short });
+}
+
+function showTemplateDetected(match) {
+  const node = $("template-info");
+  if (!node || !match || !match.template) {
+    return;
+  }
+  const digest = String(match.template.digest || "").slice(0, 12) || "—";
+  const score =
+    match.template.score != null
+      ? Number(match.template.score).toFixed(2)
+      : "—";
+  node.hidden = false;
+  node.textContent = match.contract
+    ? t("template.detected", { digest, score })
+    : t("template.detectedNoContract", { digest, score });
 }
 
 async function importContract(file) {

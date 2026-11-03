@@ -208,5 +208,7 @@
   "template.deleteConfirm": "¿Borrar esta plantilla?",
   "template.used": "Plantilla usada · {digest} · score {score} · cobertura {coverage}",
   "template.saved": "Plantilla guardada · {digest}",
-  "template.fields": "{fields} campos · {items} listas"
+  "template.fields": "{fields} campos · {items} listas",
+  "template.detected": "Plantilla detectada · {digest} · score {score}; contrato cargado.",
+  "template.detectedNoContract": "Plantilla detectada · {digest} · score {score}; no se encontró el contrato, importa el schema."
 }

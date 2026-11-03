@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
+from vlm_ocr import server
 from vlm_ocr.server import create_app
 
 TOKEN = "secreto"
@@ -22,7 +23,10 @@ def _text_pdf(path: Path) -> Path:
 
 
 @pytest.mark.integration
-def test_upload_native_pdf_returns_text_blocks_and_page_image(tmp_path: Path) -> None:
+def test_upload_native_pdf_returns_text_blocks_and_page_image(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(server, "_match_template", lambda *args, **kwargs: None)
     source = _text_pdf(tmp_path / "factura.pdf")
     app = create_app(workspace_dir=tmp_path / "workspaces", token=TOKEN)
     client = TestClient(app)

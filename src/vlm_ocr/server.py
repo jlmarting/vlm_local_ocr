@@ -66,6 +66,65 @@ def _run_cli(document: Path, extra: list[str]) -> tuple[int, dict | None, str]:
     return 0, payload if isinstance(payload, dict) else None, stderr
 
 
+def _contract_for_hash(contract_hash: str, workspace_dir: Path) -> dict | None:
+    path = (
+        templates.template_dir()
+        / contract_hash
+        / "contracts"
+        / "contract.schema.json"
+    )
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return data
+    except (OSError, json.JSONDecodeError):
+        pass
+    for row in workspace_mod.list_workspaces(workspace_dir):
+        try:
+            schema = json.loads(
+                (
+                    Path(workspace_dir)
+                    / row["id"]
+                    / "contracts"
+                    / "contract.schema.json"
+                ).read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError, KeyError):
+            continue
+        if isinstance(schema, dict) and templates.contract_hash(schema) == contract_hash:
+            return schema
+    return None
+
+
+def _match_template(blocks: list[LayoutBlock], workspace_dir: Path) -> dict | None:
+    try:
+        scored = [
+            (templates.score_template(blocks, template), template)
+            for template in templates.all_templates()
+        ]
+    except Exception:  # noqa: BLE001
+        return None
+    scored = [item for item in scored if item[0] > 0]
+    if not scored:
+        return None
+    scored.sort(key=lambda item: item[0], reverse=True)
+    score, best = scored[0]
+    if score < templates.MIN_SCORE:
+        return None
+    if len(scored) > 1 and score - scored[1][0] < 0.05:
+        return None
+    contract = _contract_for_hash(best.contract_hash, workspace_dir)
+    return {
+        "template": {
+            "digest": best.digest,
+            "score": score,
+            "version": best.version,
+            "contract_hash": best.contract_hash,
+        },
+        "contract": contract,
+    }
+
+
 def _process_document(
     base: Path, workspace: workspace_mod.Workspace
 ) -> dict:
@@ -91,6 +150,16 @@ def _process_document(
         )
     )
     text = payload.get("text", "")
+    layout_blocks = [
+        LayoutBlock(
+            page=int(block["page"]),
+            text=str(block["text"]),
+            confidence=0.0,
+            box=tuple(float(value) for value in block["box"]),
+        )
+        for block in blocks
+    ]
+    match = _match_template(layout_blocks, base)
     ocr = {
         "text": text,
         "blocks": blocks,
@@ -115,6 +184,7 @@ def _process_document(
     )
     return {
         "workspace": meta.meta,
+        "match": match,
         "document": {
             "filename": workspace.meta["document"]["filename"],
             "format": workspace.meta["document"]["format"],
@@ -300,6 +370,14 @@ def _homologate(
         raise ContractError("el contrato debe ser un objeto JSON")
     schema_path = workspace.root / "contracts" / "contract.schema.json"
     schema_path.write_text(
+        json.dumps(schema, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    contract_hash = templates.contract_hash(schema)
+    contract_dir = (
+        templates.template_dir() / contract_hash / "contracts"
+    )
+    contract_dir.mkdir(parents=True, exist_ok=True)
+    (contract_dir / "contract.schema.json").write_text(
         json.dumps(schema, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     report_path = workspace.root / "results" / "homologate.json"

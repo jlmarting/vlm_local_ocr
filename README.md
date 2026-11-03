@@ -274,6 +274,7 @@ uv run vlm-ocr serve
 - Columnas libres con **bandas en la foto** y botón «Usar bloque» para ajustar rangos con asistencia gráfica.
 - **Importar contrato**: carga un JSON Schema exportado para reutilizarlo en un documento nuevo; si el contrato es el mismo, la plantilla homologada se aplica automáticamente.
 - **Plantilla usada** y panel de **plantillas guardadas**: la extracción muestra digest, score y cobertura; el panel permite listar y borrar variantes.
+- **Detección al cargar**: la huella del documento se compara con las plantillas guardadas; si coincide (score ≥ 0,85 y margen sobre la segunda), se carga el contrato automáticamente y se avisa «Plantilla detectada». Al homologar se guarda una copia del contrato junto a la plantilla; las plantillas antiguas se resuelven buscando el contrato en los workspaces.
 - Panel «Prompt del LLM»: pregunta al modelo sobre el documento o reutiliza el texto como instrucciones extra al proponer el contrato.
 - Requiere el extra `serve` (`fastapi`, `uvicorn`, `python-multipart`); el CLI base sigue sin dependencias web.
 

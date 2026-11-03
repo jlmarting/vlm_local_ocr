@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -95,3 +96,77 @@ def test_templates_require_token() -> None:
     client = _client()
 
     assert client.get("/api/templates").status_code == 401
+
+
+def test_match_template_with_contract_copy(tmp_path: Path, monkeypatch) -> None:
+    template_dir = tmp_path / "templates"
+    contract_dir = template_dir / "hash1" / "contracts"
+    contract_dir.mkdir(parents=True)
+    schema = {"type": "object", "properties": {"total": {"type": "number"}}}
+    (contract_dir / "contract.schema.json").write_text(
+        json.dumps(schema), encoding="utf-8"
+    )
+    template = SimpleNamespace(
+        contract_hash="hash1", digest="digest1", version=2
+    )
+    monkeypatch.setattr(server.templates, "template_dir", lambda: template_dir)
+    monkeypatch.setattr(server.templates, "all_templates", lambda: [template])
+    monkeypatch.setattr(
+        server.templates, "score_template", lambda blocks, item: 0.9
+    )
+
+    match = server._match_template([], tmp_path / "ws")
+
+    assert match is not None
+    assert match["template"]["digest"] == "digest1"
+    assert match["template"]["score"] == 0.9
+    assert match["contract"] == schema
+
+
+def test_match_template_below_threshold(tmp_path: Path, monkeypatch) -> None:
+    template = SimpleNamespace(
+        contract_hash="hash1", digest="digest1", version=1
+    )
+    monkeypatch.setattr(server.templates, "all_templates", lambda: [template])
+    monkeypatch.setattr(
+        server.templates, "score_template", lambda blocks, item: 0.5
+    )
+
+    assert server._match_template([], tmp_path / "ws") is None
+
+
+def test_match_template_ambiguous(tmp_path: Path, monkeypatch) -> None:
+    first = SimpleNamespace(contract_hash="h1", digest="d1", version=1)
+    second = SimpleNamespace(contract_hash="h2", digest="d2", version=1)
+    monkeypatch.setattr(server.templates, "all_templates", lambda: [first, second])
+    monkeypatch.setattr(
+        server.templates,
+        "score_template",
+        lambda blocks, item: 0.9 if item is first else 0.88,
+    )
+
+    assert server._match_template([], tmp_path / "ws") is None
+
+
+def test_match_template_workspace_fallback(tmp_path: Path, monkeypatch) -> None:
+    from vlm_ocr.workspace import create_workspace
+
+    workspace = create_workspace(tmp_path / "ws", b"x", "doc.pdf")
+    schema = {"type": "object", "properties": {"total": {"type": "number"}}}
+    (workspace.root / "contracts" / "contract.schema.json").write_text(
+        json.dumps(schema), encoding="utf-8"
+    )
+    contract_hash = server.templates.contract_hash(schema)
+    template = SimpleNamespace(
+        contract_hash=contract_hash, digest="digest1", version=1
+    )
+    monkeypatch.setattr(server.templates, "template_dir", lambda: tmp_path / "empty")
+    monkeypatch.setattr(server.templates, "all_templates", lambda: [template])
+    monkeypatch.setattr(
+        server.templates, "score_template", lambda blocks, item: 0.95
+    )
+
+    match = server._match_template([], tmp_path / "ws")
+
+    assert match is not None
+    assert match["contract"] == schema
