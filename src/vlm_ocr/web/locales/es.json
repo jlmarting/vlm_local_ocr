@@ -149,5 +149,8 @@
   "prompt.propose": "Proponer con estas instrucciones",
   "prompt.loading": "Pensando… (puede tardar)",
   "prompt.done": "Respuesta de {model}",
-  "prompt.empty": "escribe un prompt"
+  "prompt.empty": "escribe un prompt",
+  "legend.list": "lista",
+  "list.showInPhoto": "Ver en la foto",
+  "list.hideInPhoto": "Ocultar de la foto"
 }

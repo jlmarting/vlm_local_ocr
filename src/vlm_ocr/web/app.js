@@ -9,6 +9,7 @@ const state = {
   fields: [],
   extraction: null,
   stopSuggestions: [],
+  focusedList: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -503,6 +504,10 @@ function updateBlockStates() {
     return;
   }
   const assigned = assignedMap();
+  const focused =
+    state.focusedList !== null ? state.fields[state.focusedList] : null;
+  const list =
+    focused && focused.kind === "list" ? listBlockIndices(focused) : null;
   const blocks = pageBlocks(state.document.pages[state.page]);
   for (const [index, element] of state.boxes.entries()) {
     const block = blocks[index];
@@ -512,6 +517,11 @@ function updateBlockStates() {
     const reasons = assigned.get(normLabel(block.text));
     element.classList.toggle("selected", state.selected === index);
     element.classList.toggle("assigned", Boolean(reasons));
+    element.classList.toggle("in-list", Boolean(list && list.items.has(block)));
+    element.classList.toggle(
+      "list-anchor",
+      Boolean(list && list.anchors.has(block))
+    );
     element.title = reasons
       ? `${block.text} · ${[...reasons].join(", ")}`
       : block.text;
@@ -525,6 +535,11 @@ function updateBlockStates() {
     const reasons = assigned.get(normLabel(block.text));
     item.classList.toggle("selected", state.selected === index);
     item.classList.toggle("assigned", Boolean(reasons));
+    item.classList.toggle("in-list", Boolean(list && list.items.has(block)));
+    item.classList.toggle(
+      "list-anchor",
+      Boolean(list && list.anchors.has(block))
+    );
   }
 }
 
@@ -764,6 +779,7 @@ async function upload(file) {
     state.document = payload.document;
     state.pageUrls = new Map();
     state.fields = [];
+    state.focusedList = null;
     state.extraction = null;
     state.stopSuggestions = suggestStops(payload.document.blocks);
     $("extract-summary").textContent = "";
@@ -802,6 +818,7 @@ async function openWorkspace(workspaceId) {
     };
     state.pageUrls = new Map();
     state.fields = [];
+    state.focusedList = null;
     state.extraction = null;
     state.stopSuggestions = suggestStops(state.document.blocks);
     $("propose-status").textContent = "";
@@ -832,6 +849,7 @@ async function loadContract(workspaceId) {
     );
     const schema = await schemaResponse.json();
     state.fields = parseSchema(schema);
+    state.focusedList = null;
   } catch (error) {
     state.fields = [];
   }
@@ -1083,6 +1101,64 @@ function clearPrompt() {
   if (status) {
     status.textContent = "";
   }
+}
+
+function removeField(index) {
+  if (state.focusedList === index) {
+    state.focusedList = null;
+  } else if (state.focusedList !== null && state.focusedList > index) {
+    state.focusedList -= 1;
+  }
+  state.fields.splice(index, 1);
+  renderFields();
+}
+
+function listBlockIndices(field) {
+  const items = new Set();
+  const anchors = new Set();
+  if (!state.document) {
+    return { items, anchors };
+  }
+  const rows = documentRows(state.document.blocks);
+  const hasStart = (field.startLabels || []).length > 0;
+  let counting = false;
+  for (const row of rows) {
+    if (!counting) {
+      if (hasStart) {
+        if (labelHit(row.blocks, field.startLabels)) {
+          counting = true;
+          for (const block of row.blocks) {
+            anchors.add(block);
+          }
+        }
+        continue;
+      }
+      const parsed = parseListRow(row, Boolean(field.roles?.quantity));
+      if (parsed.kind === "item") {
+        counting = true;
+        for (const block of row.blocks) {
+          items.add(block);
+        }
+      }
+      continue;
+    }
+    if (labelHit(row.blocks, field.stopLabels)) {
+      for (const block of row.blocks) {
+        anchors.add(block);
+      }
+      break;
+    }
+    for (const block of row.blocks) {
+      items.add(block);
+    }
+  }
+  return { items, anchors };
+}
+
+function firstListPage(field) {
+  const { items, anchors } = listBlockIndices(field);
+  const pages = [...items, ...anchors].map((block) => block.page);
+  return pages.length ? Math.min(...pages) : null;
 }
 
 function addField() {
@@ -1369,8 +1445,7 @@ function listCard(field, index) {
   remove.textContent = "×";
   remove.title = t("list.remove");
   remove.addEventListener("click", () => {
-    state.fields.splice(index, 1);
-    renderFields();
+    removeField(index);
   });
   head.appendChild(remove);
 
@@ -1462,6 +1537,28 @@ function listCard(field, index) {
 
   const actions = document.createElement("div");
   actions.className = "field-actions";
+  const focus = document.createElement("button");
+  focus.type = "button";
+  focus.textContent = t(
+    state.focusedList === index ? "list.hideInPhoto" : "list.showInPhoto"
+  );
+  focus.addEventListener("click", () => {
+    if (state.focusedList === index) {
+      state.focusedList = null;
+      updateBlockStates();
+      renderFields();
+      return;
+    }
+    state.focusedList = index;
+    const page = firstListPage(field);
+    if (page !== null && page !== state.page) {
+      showPage(page);
+    } else {
+      updateBlockStates();
+      renderFields();
+    }
+  });
+  actions.appendChild(focus);
   const status = fieldStatus(field);
   if (status) {
     const node = document.createElement("span");
@@ -1512,8 +1609,7 @@ function fieldCard(field, index) {
   remove.textContent = "×";
   remove.title = t("field.remove");
   remove.addEventListener("click", () => {
-    state.fields.splice(index, 1);
-    renderFields();
+    removeField(index);
   });
   head.appendChild(remove);
 
@@ -1859,6 +1955,7 @@ function reset() {
   state.selected = null;
   state.selectedBlock = null;
   state.fields = [];
+  state.focusedList = null;
   state.extraction = null;
   state.stopSuggestions = [];
   $("coach").hidden = true;
