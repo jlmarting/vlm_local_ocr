@@ -19,7 +19,6 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__, catalog, paths, propose, serve_layout
 from . import workspace as workspace_mod
-from .contract import infer_answer, infer_contract
 from .errors import ContractError, InputError
 from .extract import assign
 from .types import LayoutBlock
@@ -28,6 +27,8 @@ WEB_DIR = Path(__file__).parent / "web"
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+_LLM_LOCK = threading.Lock()
+_LLM_JOBS: dict[str, dict] = {}
 
 
 def _clean_stderr(text: str) -> str:
@@ -328,6 +329,80 @@ def _homologate(
     return result
 
 
+def _read_metrics(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    llm = data.get("llm") or {}
+    total = data.get("total") or {}
+    return {
+        "time_ms": (
+            llm.get("time_ms") if llm.get("time_ms") is not None else total.get("time_ms")
+        ),
+        "load_time_ms": llm.get("load_time_ms"),
+        "attempts": llm.get("attempts"),
+        "prompt_tokens": llm.get("prompt_tokens"),
+        "completion_tokens": llm.get("completion_tokens"),
+        "total_tokens": llm.get("total_tokens"),
+        "tokens_per_second": llm.get("tokens_per_second"),
+        "finish_reason": llm.get("finish_reason"),
+    }
+
+
+def _run_llm_cli(
+    command: list[str],
+    stdin_text: str,
+    job_id: object,
+    metrics_path: Path,
+) -> tuple[int, str, str, dict]:
+    key = str(job_id or "").strip() or None
+    job = None
+    if key:
+        job = {"cancelled": False, "process": None}
+        with _LLM_LOCK:
+            _LLM_JOBS[key] = job
+    try:
+        with _LLM_LOCK:
+            if job is not None and job["cancelled"]:
+                return 499, "", "cancelado", _read_metrics(metrics_path)
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=str(Path(__file__).resolve().parents[2]),
+        )
+        if job is not None:
+            with _LLM_LOCK:
+                job["process"] = process
+                cancelled = job["cancelled"]
+            if cancelled:
+                process.terminate()
+        try:
+            out, err = process.communicate(stdin_text, timeout=600)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            out, err = process.communicate()
+            return 504, out or "", "tiempo de espera agotado", _read_metrics(
+                metrics_path
+            )
+        usage = _read_metrics(metrics_path)
+        if job is not None:
+            with _LLM_LOCK:
+                cancelled = job["cancelled"]
+            if cancelled:
+                return 499, out, err, usage
+        return process.returncode, out, err, usage
+    finally:
+        if key:
+            with _LLM_LOCK:
+                _LLM_JOBS.pop(key, None)
+
+
 def create_app(workspace_dir: Path, token: str) -> FastAPI:
     app = FastAPI(title="vlm-local-ocr", version=__version__)
     app.state.workspace_dir = Path(workspace_dir)
@@ -573,18 +648,36 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
             if not text.strip():
                 raise ContractError("el documento no tiene texto")
             ref = _model_ref(str(body.get("model") or "").strip() or None)
-            usage: dict = {}
-            started = time.perf_counter()
-            answer = infer_answer(
-                text,
+            metrics_path = workspace.root / "results" / "prompt.metrics.json"
+            metrics_path.parent.mkdir(parents=True, exist_ok=True)
+            command = [
+                sys.executable,
+                "-m",
+                "vlm_ocr",
+                "-",
+                "--input-format",
+                "txt",
+                "--format",
+                "json",
+                "--prompt",
                 prompt,
-                ref,
-                n_ctx=4096,
-                max_ocr_tokens=2000,
-                max_output_tokens=1200,
-                usage_out=usage,
+                "--model",
+                ref.label,
+                "--metrics-out",
+                str(metrics_path),
+            ]
+            code, out, err, usage = _run_llm_cli(
+                command, text, body.get("job_id"), metrics_path
             )
-            usage["time_ms"] = round((time.perf_counter() - started) * 1000, 1)
+            if code == 499:
+                raise ContractError("consulta cancelada")
+            if code != 0:
+                raise ContractError(_clean_stderr(err) or "el modelo no respondió")
+            try:
+                payload = json.loads(out)
+            except json.JSONDecodeError as exc:
+                raise ContractError("el CLI no devolvió JSON") from exc
+            answer = str(payload.get("answer") or "")
         except ContractError as exc:
             return JSONResponse(
                 {"error": "contract", "detail": str(exc)}, status_code=422
@@ -623,26 +716,65 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
             if not text.strip():
                 raise ContractError("el documento no tiene texto para proponer")
             extra = str(body.get("instructions") or "").strip()
-            if len(extra) > 4000:
-                raise ContractError("las instrucciones superan 4000 caracteres")
             instructions = propose.PROPOSAL_INSTRUCTIONS
             if extra:
                 instructions = f"{instructions}\n\nInstrucciones del usuario: {extra}"
+            if len(instructions) > 4000:
+                raise ContractError("las instrucciones superan 4000 caracteres")
             ref = _model_ref(str(body.get("model") or "").strip() or None)
-            usage: dict = {}
-            started = time.perf_counter()
-            payload = infer_contract(
-                text,
-                propose.PROPOSAL_SCHEMA,
-                "schema",
-                ref,
-                n_ctx=8192,
-                max_ocr_tokens=2000,
-                instructions=instructions,
-                max_output_tokens=3000,
-                usage_out=usage,
+            schema_path = workspace.root / "contracts" / "proposal.schema.json"
+            schema_path.write_text(
+                json.dumps(propose.PROPOSAL_SCHEMA, ensure_ascii=False),
+                encoding="utf-8",
             )
-            usage["time_ms"] = round((time.perf_counter() - started) * 1000, 1)
+            instructions_path = (
+                workspace.root / "contracts" / "proposal.instructions.md"
+            )
+            instructions_path.write_text(instructions, encoding="utf-8")
+            metrics_path = workspace.root / "results" / "propose.metrics.json"
+            metrics_path.parent.mkdir(parents=True, exist_ok=True)
+            command = [
+                sys.executable,
+                "-m",
+                "vlm_ocr",
+                "-",
+                "--input-format",
+                "txt",
+                "--format",
+                "json",
+                "--contract",
+                str(schema_path),
+                "--contract-kind",
+                "schema",
+                "--no-template",
+                "--text-format",
+                "rows",
+                "--model",
+                ref.label,
+                "--instructions",
+                str(instructions_path),
+                "--metrics-out",
+                str(metrics_path),
+            ]
+            code, out, err, usage = _run_llm_cli(
+                command, text, body.get("job_id"), metrics_path
+            )
+            if code == 499:
+                raise ContractError("propuesta cancelada")
+            if code != 0:
+                detail = _clean_stderr(err) or "el modelo no pudo proponer"
+                if "truncada" in detail.lower() or "truncamiento" in detail.lower():
+                    detail += (
+                        " · La propuesta es demasiado grande para este modelo: "
+                        "prueba con un documento más corto o un modelo mayor."
+                    )
+                raise ContractError(detail)
+            try:
+                payload = json.loads(out)
+            except json.JSONDecodeError as exc:
+                raise ContractError("el CLI no devolvió JSON") from exc
+            if isinstance(payload, dict) and isinstance(payload.get("data"), dict):
+                payload = payload["data"]
             fields = propose.proposal_fields(payload, text)
         except ContractError as exc:
             detail = str(exc)
@@ -668,6 +800,27 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
             "remote": ref.is_remote,
             "usage": usage,
         })
+
+    @app.post("/api/llm/cancel")
+    def cancel_llm(body: dict) -> JSONResponse:
+        job_id = str(body.get("job_id") or "").strip()
+        if not job_id:
+            return JSONResponse(
+                {"error": "contract", "detail": "falta job_id"},
+                status_code=422,
+            )
+        with _LLM_LOCK:
+            job = _LLM_JOBS.get(job_id)
+            if job is None:
+                return JSONResponse({"cancelled": False})
+            job["cancelled"] = True
+            process = job["process"]
+        if process is not None:
+            try:
+                process.terminate()
+            except OSError:
+                pass
+        return JSONResponse({"cancelled": True})
 
     if WEB_DIR.exists():
         app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")

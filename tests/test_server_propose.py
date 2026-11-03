@@ -109,29 +109,28 @@ def test_propose_maps_and_filters_labels(tmp_path: Path, monkeypatch) -> None:
     )
     captured: dict = {}
 
-    def fake_infer(text, contract, kind, model, **kwargs):
-        captured.update(
-            text=text,
-            contract=contract,
-            kind=kind,
-            model=model,
-            instructions=kwargs.get("instructions"),
-            n_ctx=kwargs.get("n_ctx"),
-            max_output_tokens=kwargs.get("max_output_tokens"),
-        )
-        return {
-            "fields": [
+    def fake_llm(command, stdin_text, job_id, metrics_path):
+        captured.update(command=command, stdin=stdin_text, job_id=job_id)
+        return (
+            0,
+            json.dumps(
                 {
-                    "name": "Salario Base",
-                    "type": "number",
-                    "labels": ["SALARIO BASE", "INVENTADO"],
-                    "source": "devengado",
+                    "fields": [
+                        {
+                            "name": "Salario Base",
+                            "type": "number",
+                            "labels": ["SALARIO BASE", "INVENTADO"],
+                            "source": "devengado",
+                        }
+                    ],
+                    "lists": [],
                 }
-            ],
-            "lists": [],
-        }
+            ),
+            "",
+            {"time_ms": 12.3},
+        )
 
-    monkeypatch.setattr(server, "infer_contract", fake_infer)
+    monkeypatch.setattr(server, "_run_llm_cli", fake_llm)
     client = _client(base)
 
     response = client.post(
@@ -156,13 +155,11 @@ def test_propose_maps_and_filters_labels(tmp_path: Path, monkeypatch) -> None:
             "source": "devengado",
         }
     ]
-    assert captured["contract"] is server.propose.PROPOSAL_SCHEMA
-    assert captured["kind"] == "schema"
-    assert "SALARIO BASE | 2.406,89" in captured["text"]
-    assert server.propose.PROPOSAL_INSTRUCTIONS in captured["instructions"]
-    assert "prioriza la tabla de artículos" in captured["instructions"]
-    assert captured["n_ctx"] == 8192
-    assert captured["max_output_tokens"] == 3000
+    assert "--contract" in captured["command"]
+    assert "--text-format" in captured["command"]
+    assert "--instructions" in captured["command"]
+    assert "SALARIO BASE | 2.406,89" in captured["stdin"]
+    assert payload["usage"]["time_ms"] == 12.3
 
 
 def test_propose_rejects_remote_model(tmp_path: Path, monkeypatch) -> None:
@@ -189,11 +186,11 @@ def test_propose_reports_model_failure(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
         server, "_model_ref", lambda alias: SimpleNamespace(label="llama32-3b", is_remote=False)
     )
-
-    def explode(*args, **kwargs):
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(server, "infer_contract", explode)
+    monkeypatch.setattr(
+        server,
+        "_run_llm_cli",
+        lambda command, stdin_text, job_id, metrics_path: (1, "", "boom", {}),
+    )
     client = _client(base)
 
     response = client.post(
@@ -202,8 +199,69 @@ def test_propose_reports_model_failure(tmp_path: Path, monkeypatch) -> None:
         json={"model": "llama32-3b"},
     )
 
-    assert response.status_code == 502
+    assert response.status_code == 422
     assert "boom" in response.json()["detail"]
+
+
+def test_propose_truncation_adds_hint(tmp_path: Path, monkeypatch) -> None:
+    base, workspace_id = _workspace(tmp_path)
+    monkeypatch.setattr(
+        server, "_model_ref", lambda alias: SimpleNamespace(label="llama32-3b", is_remote=False)
+    )
+    monkeypatch.setattr(
+        server,
+        "_run_llm_cli",
+        lambda command, stdin_text, job_id, metrics_path: (
+            2,
+            "",
+            "respuesta truncada por límite de tokens (3000 de 3000)",
+            {},
+        ),
+    )
+    client = _client(base)
+
+    response = client.post(
+        f"/api/workspaces/{workspace_id}/propose",
+        headers=HEADERS,
+        json={"model": "llama32-3b"},
+    )
+
+    assert response.status_code == 422
+    assert "demasiado grande" in response.json()["detail"]
+
+
+def test_cancel_llm_terminates_job(tmp_path: Path) -> None:
+    class FakeProcess:
+        def __init__(self):
+            self.terminated = False
+
+        def terminate(self):
+            self.terminated = True
+
+    process = FakeProcess()
+    server._LLM_JOBS["job1"] = {"cancelled": False, "process": process}
+    client = _client(tmp_path)
+    try:
+        response = client.post(
+            "/api/llm/cancel", headers=HEADERS, json={"job_id": "job1"}
+        )
+        assert response.status_code == 200
+        assert response.json() == {"cancelled": True}
+        assert server._LLM_JOBS["job1"]["cancelled"] is True
+        assert process.terminated is True
+    finally:
+        server._LLM_JOBS.pop("job1", None)
+
+
+def test_cancel_unknown_job(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/llm/cancel", headers=HEADERS, json={"job_id": "no-existe"}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"cancelled": False}
 
 
 def test_propose_missing_workspace(tmp_path: Path) -> None:

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>vlm-local-ocr</title>
-    <link rel="stylesheet" href="styles.css?v=15" />
+    <link rel="stylesheet" href="styles.css?v=16" />
   </head>
   <body>
     <header>
@@ -98,6 +98,7 @@
                   <span data-i18n="propose.model">Modelo</span>
                   <select id="propose-model"></select>
                 </label>
+                <span id="llm-spinner" class="spinner" hidden aria-hidden="true"></span>
                 <span id="llm-status" class="summary"></span>
               </div>
               <p id="model-warning" class="field-hint warn" hidden></p>
@@ -133,6 +134,15 @@
                   data-i18n-title="llm.analyzeHint"
                 >
                   Proponer con análisis
+                </button>
+                <button
+                  id="llm-cancel"
+                  type="button"
+                  class="danger"
+                  data-i18n="llm.cancel"
+                  hidden
+                >
+                  Cancelar
                 </button>
               </div>
               <p id="llm-metrics" class="field-hint" hidden></p>
@@ -292,6 +302,6 @@
 
       <p id="error" class="error" hidden></p>
     </main>
-    <script src="app.js?v=15"></script>
+    <script src="app.js?v=16"></script>
   </body>
 </html>

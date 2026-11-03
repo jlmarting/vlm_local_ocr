@@ -11,6 +11,8 @@ const state = {
   stopSuggestions: [],
   focusedList: null,
   zoom: 1,
+  llmJob: null,
+  llmController: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -1221,17 +1223,67 @@ function setLlmBusy(busy) {
       node.disabled = busy;
     }
   }
+  const spinner = $("llm-spinner");
+  if (spinner) {
+    spinner.hidden = !busy;
+  }
+  const cancel = $("llm-cancel");
+  if (cancel) {
+    cancel.hidden = !busy;
+  }
   if (!busy) {
+    state.llmJob = null;
+    state.llmController = null;
     refreshProposeButton();
   }
 }
 
+function newJobId() {
+  if (window.crypto && typeof window.crypto.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function isAbortError(error) {
+  return Boolean(
+    error &&
+      (error.name === "AbortError" || String(error).toLowerCase().includes("abort"))
+  );
+}
+
+async function cancelLlm() {
+  const job = state.llmJob;
+  if (!job) {
+    return;
+  }
+  state.llmController?.abort();
+  try {
+    await api("/api/llm/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_id: job }),
+    });
+  } catch (error) {
+    // La petición en curso puede haberse abortado ya.
+  }
+  $("llm-status").textContent = t("llm.cancelled");
+  setStatus(t("llm.cancelled"));
+  showMetrics([]);
+  setLlmBusy(false);
+}
+
 async function requestPrompt(prompt, model) {
+  const jobId = newJobId();
+  const controller = new AbortController();
+  state.llmJob = jobId;
+  state.llmController = controller;
   const started = performance.now();
   const response = await api(`/api/workspaces/${state.workspace.id}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, model }),
+    body: JSON.stringify({ prompt, model, job_id: jobId }),
+    signal: controller.signal,
   });
   const payload = await response.json();
   payload.elapsed_ms = Math.round(performance.now() - started);
@@ -1239,7 +1291,11 @@ async function requestPrompt(prompt, model) {
 }
 
 async function requestPropose(instructions, model) {
-  const body = { model };
+  const jobId = newJobId();
+  const controller = new AbortController();
+  state.llmJob = jobId;
+  state.llmController = controller;
+  const body = { model, job_id: jobId };
   if (instructions && instructions.trim()) {
     body.instructions = instructions.trim();
   }
@@ -1248,6 +1304,7 @@ async function requestPropose(instructions, model) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal: controller.signal,
   });
   const payload = await response.json();
   payload.elapsed_ms = Math.round(performance.now() - started);
@@ -1302,6 +1359,10 @@ async function proposeContract(extraInstructions = "") {
     setStatus(t("propose.done", { model: payload.model }));
     showMetrics(usageParts(payload.usage, t("llm.time")));
   } catch (error) {
+    if (isAbortError(error)) {
+      $("llm-status").textContent = t("llm.cancelled");
+      return;
+    }
     setStatus(t("status.error"));
     showError(error);
     $("llm-status").textContent = "";
@@ -1341,6 +1402,10 @@ async function runPrompt() {
     setStatus(t("prompt.done", { model: payload.model }));
     showMetrics(usageParts(payload.usage, t("llm.time")));
   } catch (error) {
+    if (isAbortError(error)) {
+      $("llm-status").textContent = t("llm.cancelled");
+      return;
+    }
     setStatus(t("status.error"));
     showError(error);
     $("llm-status").textContent = "";
@@ -1387,6 +1452,10 @@ async function proposeWithAnalysis() {
       ...usageParts(proposal.usage, t("llm.proposeTime")),
     ]);
   } catch (error) {
+    if (isAbortError(error)) {
+      $("llm-status").textContent = t("llm.cancelled");
+      return;
+    }
     setStatus(t("status.error"));
     showError(error);
     $("llm-status").textContent = "";
@@ -2813,6 +2882,7 @@ function wire() {
   $("prompt-run").addEventListener("click", runPrompt);
   $("prompt-use").addEventListener("click", useAnswerAsInstructions);
   $("propose-analyze").addEventListener("click", proposeWithAnalysis);
+  $("llm-cancel").addEventListener("click", cancelLlm);
   $("propose-model").addEventListener("change", () => {
     refreshProposeButton();
     updateModelWarning();

@@ -43,11 +43,16 @@ def test_prompt_returns_model_answer(tmp_path: Path, monkeypatch) -> None:
     )
     captured: dict = {}
 
-    def fake_answer(text, task, model, **kwargs):
-        captured.update(text=text, task=task, model=model)
-        return "El total es 8.40"
+    def fake_llm(command, stdin_text, job_id, metrics_path):
+        captured.update(command=command, stdin=stdin_text, job_id=job_id)
+        return (
+            0,
+            json.dumps({"text": "TOTAL 8.40", "answer": "El total es 8.40"}),
+            "",
+            {"time_ms": 7.5},
+        )
 
-    monkeypatch.setattr(server, "infer_answer", fake_answer)
+    monkeypatch.setattr(server, "_run_llm_cli", fake_llm)
     client = _client(base)
 
     response = client.post(
@@ -61,9 +66,10 @@ def test_prompt_returns_model_answer(tmp_path: Path, monkeypatch) -> None:
     assert payload["answer"] == "El total es 8.40"
     assert payload["model"] == "llama32-3b"
     assert payload["remote"] is False
-    assert payload["usage"]["time_ms"] >= 0
-    assert captured["task"] == "¿Cuánto es el total?"
-    assert "TOTAL 8.40" in captured["text"]
+    assert payload["usage"]["time_ms"] == 7.5
+    assert "--prompt" in captured["command"]
+    assert "¿Cuánto es el total?" in captured["command"]
+    assert "TOTAL 8.40" in captured["stdin"]
 
 
 def test_prompt_requires_text(tmp_path: Path, monkeypatch) -> None:
@@ -119,10 +125,11 @@ def test_prompt_reports_model_failure(tmp_path: Path, monkeypatch) -> None:
         server, "_model_ref", lambda alias: SimpleNamespace(label="llama32-3b", is_remote=False)
     )
 
-    def explode(*args, **kwargs):
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(server, "infer_answer", explode)
+    monkeypatch.setattr(
+        server,
+        "_run_llm_cli",
+        lambda command, stdin_text, job_id, metrics_path: (1, "", "boom", {}),
+    )
     client = _client(base)
 
     response = client.post(
@@ -131,7 +138,7 @@ def test_prompt_reports_model_failure(tmp_path: Path, monkeypatch) -> None:
         json={"prompt": "hola", "model": "llama32-3b"},
     )
 
-    assert response.status_code == 502
+    assert response.status_code == 422
     assert "boom" in response.json()["detail"]
 
 

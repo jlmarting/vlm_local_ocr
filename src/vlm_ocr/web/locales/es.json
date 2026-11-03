@@ -193,5 +193,7 @@
   "llm.analysisTime": "análisis",
   "llm.proposeTime": "propuesta",
   "llm.time": "tiempo",
-  "llm.load": "carga"
+  "llm.load": "carga",
+  "llm.cancel": "Cancelar",
+  "llm.cancelled": "cancelado"
 }

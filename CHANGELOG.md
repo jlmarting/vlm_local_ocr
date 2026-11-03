@@ -9,6 +9,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- SPA (experimental): spinner animado y botón «Cancelar» en las operaciones LLM. `propose`/`prompt` corren el CLI en subproceso con `job_id`; `POST /api/llm/cancel` mata el proceso (cancelación real).
 - SPA (experimental): tiempos de ejecución del LLM (total, carga, tokens y tok/s) en el panel; «Proponer con análisis» (análisis previo → instrucciones → propuesta) y «Usar respuesta» para reutilizar la respuesta de «Preguntar». Los endpoints `propose`/`prompt` devuelven `usage`.
 - SPA (experimental): pantalla en dos paneles al 50% (documento | operativa), zoom del documento con cajas alineadas, panel «LLM e instrucciones» colapsable, modelos remotos visibles (requieren `OLLAMA_API_KEY` y avisan de privacidad), bandas gráficas de columnas y «Usar bloque» para ajustar rangos.
 - `GET /api/models` incluye modelos remotos (`remote`, `available`, `key_env`); `propose`/`prompt` aceptan remotos si la clave está en el entorno.

@@ -299,6 +299,7 @@ uv run vlm-ocr serve --no-open  # sin abrir navegador
 - Listas repetidas: «Añadir lista» declara `x-item-columns` una vez (roles de texto, cantidad, importe y observación) y etiquetas de fin; el extractor recorre todas las filas.
 - Listas con columnas libres (experimental): «Detectar columnas» desde la cabecera; nombre, tipo y rango x editables; vista previa y schema con columnas.
 - «Proponer contrato» (experimental): el LLM local propone campos, etiquetas, columnas y listas sobre el texto ya extraído; la propuesta se aplica al editor y el usuario la revisa. Solo modelos locales; `llama32-3b` recomendado.
+- Spinner y **Cancelar** en el panel LLM: las llamadas corren en subproceso y el botón termina el proceso (no solo la espera).
 - Tiempos del LLM: `usage` del servidor (total, carga, tokens, tok/s) visible en el panel. «Proponer con análisis» usa un análisis previo como instrucciones; «Usar respuesta» reutiliza la respuesta de «Preguntar».
 - Dos paneles al 50% (documento | operativa) con asa central persistente; zoom del documento, texto plegable y todo dentro del alto de la ventana.
 - «LLM e instrucciones»: panel colapsable con modelo, instrucciones, proponer y preguntar.
