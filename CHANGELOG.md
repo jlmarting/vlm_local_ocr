@@ -14,6 +14,8 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 > La SPA (`serve`, visor, listas y «Proponer contrato») es **experimental** y está sujeta a cambios; el CLI base es estable.
 
 - SPA (experimental): «Proponer contrato» con un LLM local — propone campos, etiquetas, columnas y listas a partir del texto extraído, con validación, filtro de literalidad y revisión humana obligatoria. Modelos locales (`llama32-3b` recomendado). Endpoints `GET /api/models` y `POST /api/workspaces/{id}/propose`.
+- SPA (experimental): listas con columnas libres — «Detectar columnas» desde la cabecera, nombre/tipo/rango editables, vista previa y schema con `x-item-columns` en formato de columna.
+- `x-item-columns` acepta columnas libres `{x0, x1, type, required}` (rangos 0–1 relativos a la región de la lista) además de los roles legacy; extracción por columna (`extract_columns`) y serialización en plantillas.
 - SPA (experimental): al enfocar una lista, sus cajas (inicio, fin y líneas) se resaltan en naranja y el botón «Ver en la foto» lleva a la página implicada.
 - SPA (experimental): editor de listas repetidas (`x-item-columns`): roles texto/cantidad/importe/observación, etiquetas de inicio y fin, tabla de artículos y reconstrucción desde el contrato guardado. El extractor aplica los roles a todas las filas; no se selecciona artículo por artículo.
 - Servidor local `vlm-ocr serve` (experimental) (extra `[serve]`: `fastapi`, `uvicorn`, `python-multipart`): SPA bilingüe ES/EN para arrastrar documentos, ver texto y cajas, construir contratos anotados, extraer en determinista, exportar schema/resultado/texto y homologar plantillas. Escucha solo en loopback con token efímero; workspaces persistentes con recientes.

@@ -225,6 +225,22 @@ Ejemplo: `examples/contrato-ticket.schema.json`. Homologación: la plantilla gua
 la stoplist y el inicio (`ItemMap`); una extracción buena se repite sin LLM y el digest incluye
 la zona de items. `--homologate-report` muestra el mapa `items` aprendido.
 
+#### Columnas libres (tablas)
+
+`x-item-columns` también acepta objetos por propiedad, para tablas que no son tickets:
+
+```json
+"fecha":    {"x0": 0.00, "x1": 0.16, "type": "date"},
+"concepto": {"x0": 0.16, "x1": 0.52, "type": "text"},
+"importe":  {"x0": 0.52, "x1": 0.80, "type": "number"}
+```
+
+- `x0`/`x1`: proporciones (0–1) del ancho de la región de la lista (filas de datos).
+- `type`: `text`, `number`, `integer` o `date`; `required` opcional.
+- Requieren `x-item-labels` (la cabecera); la lista empieza después de esa fila.
+- La extracción agrupa filas y asigna cada celda por el centro x normalizado; coacciona por tipo.
+- Los roles legacy y las columnas libres no se mezclan en el mismo array.
+
 ### Plantillas homologadas (variantes)
 
 El contrato identifica la **tipología**; cada disposición estructural distinta de esa tipología es una **variante**. `--homologate` aprende el mapa de una extracción válida (`campo → etiqueta + columna`) y lo guarda en `<datos>/vlm-local-ocr/templates/<hash-contrato>/` (`--templates-dir` lo cambia). La huella solo mira las filas que mapean a campos y las cabeceras, con zonas horizontales relativas: membretes, observaciones y tags no cuentan. **No se guardan valores**; los campos no literales se excluyen y quedan `unlocated`.
@@ -281,6 +297,7 @@ uv run vlm-ocr serve --no-open  # sin abrir navegador
 - Flujo: arrastrar documento → texto + cajas → añadir campos → asignar bloques → probar extracción determinista → exportar schema/resultado/texto → homologar plantilla.
 - Extracción determinista por defecto (sin LLM); «Proponer contrato» usa un modelo local ya descargado. UI bilingüe ES/EN.
 - Listas repetidas: «Añadir lista» declara `x-item-columns` una vez (roles de texto, cantidad, importe y observación) y etiquetas de fin; el extractor recorre todas las filas.
+- Listas con columnas libres (experimental): «Detectar columnas» desde la cabecera; nombre, tipo y rango x editables; vista previa y schema con columnas.
 - «Proponer contrato» (experimental): el LLM local propone campos, etiquetas, columnas y listas sobre el texto ya extraído; la propuesta se aplica al editor y el usuario la revisa. Solo modelos locales; `llama32-3b` recomendado.
 - Asas de arrastre para redimensionar ticket/texto/operativa y botón «Ocultar ticket»; los anchos se guardan en `localStorage`.
 - Panel «Prompt del LLM»: «Preguntar» envía un prompt libre al modelo local; «Proponer con estas instrucciones» las añade a la propuesta de contrato.

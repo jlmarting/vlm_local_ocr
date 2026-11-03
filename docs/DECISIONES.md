@@ -102,6 +102,12 @@ env, tmp_home)`, no una VM.
 **Descartada.** Métricas mezcladas en stdout: rompe `vlm-ocr doc.pdf | jq .` y todo pipeline de
 verdad. La regla «stdout es el producto, stderr es el taller» no se negocia.
 
+## 12. Columnas libres en listas (`x-item-columns` como rol u objeto)
+
+**Contexto.** Los roles de ticket (`text`/`quantity`/`number_right`/`observation`) no representan tablas con columnas propias (fecha, concepto, importe, saldo).
+**Decisión.** `x-item-columns` acepta el rol legacy o un objeto `{x0, x1, type, required}` con rangos 0–1 relativos a la región de la lista (filas de datos). Las columnas libres requieren `x-item-labels` (cabecera); la extracción asigna cada celda por el centro x normalizado y coacciona por tipo. No se mezclan roles y columnas en el mismo array.
+**Descartada.** Rangos absolutos en píxeles (frágiles a escala y márgenes) y una anotación nueva (`x-item-table`) que fragmentaría el formato; el objeto en la misma clave mantiene compatibilidad.
+
 ---
 
 **Cómo se añade una decisión.** Cuando una ronda cierre una decisión de arquitectura que no sea

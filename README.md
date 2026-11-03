@@ -264,6 +264,7 @@ uv run vlm-ocr serve
 - La extracción por defecto es determinista (sin LLM); «Proponer contrato» usa un modelo local ya descargado y nunca descarga pesos. La UI es bilingüe ES/EN.
 - Limitación conocida: una página escaneada con una capa de texto mínima mezcla coordenadas nativas y OCR. El MVP la resolverá con `origin` por bloque; el spike cubre páginas puras.
 - Listas repetidas: «Añadir lista» declara un array con roles (texto, cantidad, importe, observación) y etiquetas de fin (`TOTAL`, `IVA`…). El extractor aplica los roles a todas las filas; no se selecciona artículo por artículo.
+- Listas con columnas libres (experimental): «Detectar columnas» crea una columna por cabecera con nombre, tipo y rango x editables; los contratos legacy con roles siguen funcionando.
 - «Proponer contrato» (experimental): un modelo local redacta una propuesta de campos, etiquetas, columnas y listas a partir del texto extraído; rellena el editor para que la revises. Recomendado `llama32-3b`; en CPU puede tardar un minuto. Solo modelos locales.
 - Área de trabajo redimensionable: asas entre ticket/texto y texto/operativa, y botón «Ocultar ticket» para plegar el documento; los anchos se recuerdan en el navegador.
 - Panel «Prompt del LLM»: pregunta al modelo sobre el documento o reutiliza el texto como instrucciones extra al proponer el contrato.
@@ -316,6 +317,23 @@ uv run vlm-ocr ticket.webp --format json \
 - `verify` comprueba cada precio literal; el total sigue siendo un campo aparte y no se calcula.
 - La plantilla/homologación aprende también el mapa de líneas: una extracción buena (LLM o
   determinista) se repite después con 0 tokens.
+
+### Columnas libres (tablas)
+
+Además de los roles de ticket, `x-item-columns` acepta columnas con nombre y tipo libres:
+
+```json
+"fecha":    {"x0": 0.00, "x1": 0.16, "type": "date"},
+"concepto": {"x0": 0.16, "x1": 0.52, "type": "text"},
+"importe":  {"x0": 0.52, "x1": 0.80, "type": "number"},
+"saldo":    {"x0": 0.80, "x1": 1.00, "type": "number"}
+```
+
+- `x0`/`x1` son proporciones (0–1) del ancho de la **región de la lista** (las filas de datos).
+- `type`: `text`, `number`, `integer` o `date`; `required` opcional.
+- Las columnas libres requieren `x-item-labels` (la cabecera) para saltarla.
+- Los roles legacy (`text`/`quantity`/`number_right`/`observation`) siguen funcionando; no se mezclan en el mismo array.
+- La SPA las genera con «Detectar columnas» y permite editar nombre, tipo y rango.
 
 ## Plantillas homologadas (variantes)
 
