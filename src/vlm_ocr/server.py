@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__, catalog, paths, propose, serve_layout
 from . import workspace as workspace_mod
-from .contract import infer_contract
+from .contract import infer_answer, infer_contract
 from .errors import ContractError, InputError
 from .extract import assign
 from .types import LayoutBlock
@@ -512,6 +512,52 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
             )
         return JSONResponse(result)
 
+    @app.post("/api/workspaces/{workspace_id}/prompt")
+    def prompt_workspace(workspace_id: str, body: dict) -> JSONResponse:
+        try:
+            workspace = workspace_mod.get_workspace(
+                app.state.workspace_dir, workspace_id
+            )
+        except InputError as exc:
+            return JSONResponse(
+                {"error": "not_found", "detail": str(exc)}, status_code=404
+            )
+        prompt = str(body.get("prompt") or "").strip()
+        if not prompt:
+            return JSONResponse(
+                {"error": "contract", "detail": "falta el prompt"},
+                status_code=422,
+            )
+        if len(prompt) > 4000:
+            return JSONResponse(
+                {"error": "contract", "detail": "el prompt supera 4000 caracteres"},
+                status_code=422,
+            )
+        try:
+            ocr = _read_ocr(workspace)
+            text = str(ocr.get("text") or "")
+            if not text.strip():
+                raise ContractError("el documento no tiene texto")
+            ref = _local_model(str(body.get("model") or "").strip() or None)
+            answer = infer_answer(
+                text,
+                prompt,
+                ref,
+                n_ctx=4096,
+                max_ocr_tokens=2000,
+                max_output_tokens=1200,
+            )
+        except ContractError as exc:
+            return JSONResponse(
+                {"error": "contract", "detail": str(exc)}, status_code=422
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                {"error": "model", "detail": f"el modelo no respondió: {exc}"},
+                status_code=502,
+            )
+        return JSONResponse({"answer": answer, "model": ref.label})
+
     @app.get("/api/models")
     def list_models() -> JSONResponse:
         return JSONResponse({"models": _local_models()})
@@ -531,6 +577,12 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
             text = propose.rows_text_from_ocr(ocr)
             if not text.strip():
                 raise ContractError("el documento no tiene texto para proponer")
+            extra = str(body.get("instructions") or "").strip()
+            if len(extra) > 4000:
+                raise ContractError("las instrucciones superan 4000 caracteres")
+            instructions = propose.PROPOSAL_INSTRUCTIONS
+            if extra:
+                instructions = f"{instructions}\n\nInstrucciones del usuario: {extra}"
             ref = _local_model(str(body.get("model") or "").strip() or None)
             payload = infer_contract(
                 text,
@@ -539,7 +591,7 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
                 ref,
                 n_ctx=4096,
                 max_ocr_tokens=2000,
-                instructions=propose.PROPOSAL_INSTRUCTIONS,
+                instructions=instructions,
                 max_output_tokens=1500,
             )
             fields = propose.proposal_fields(payload, text)

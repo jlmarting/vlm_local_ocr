@@ -97,7 +97,13 @@ def test_propose_maps_and_filters_labels(tmp_path: Path, monkeypatch) -> None:
     captured: dict = {}
 
     def fake_infer(text, contract, kind, model, **kwargs):
-        captured.update(text=text, contract=contract, kind=kind, model=model)
+        captured.update(
+            text=text,
+            contract=contract,
+            kind=kind,
+            model=model,
+            instructions=kwargs.get("instructions"),
+        )
         return {
             "fields": [
                 {
@@ -116,7 +122,10 @@ def test_propose_maps_and_filters_labels(tmp_path: Path, monkeypatch) -> None:
     response = client.post(
         f"/api/workspaces/{workspace_id}/propose",
         headers=HEADERS,
-        json={"model": "llama32-3b"},
+        json={
+            "model": "llama32-3b",
+            "instructions": "prioriza la tabla de artículos",
+        },
     )
 
     assert response.status_code == 200
@@ -134,6 +143,8 @@ def test_propose_maps_and_filters_labels(tmp_path: Path, monkeypatch) -> None:
     assert captured["contract"] is server.propose.PROPOSAL_SCHEMA
     assert captured["kind"] == "schema"
     assert "SALARIO BASE | 2.406,89" in captured["text"]
+    assert server.propose.PROPOSAL_INSTRUCTIONS in captured["instructions"]
+    assert "prioriza la tabla de artículos" in captured["instructions"]
 
 
 def test_propose_rejects_remote_model(tmp_path: Path, monkeypatch) -> None:
