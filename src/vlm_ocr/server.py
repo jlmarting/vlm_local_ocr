@@ -16,8 +16,9 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, paths, serve_layout
+from . import __version__, catalog, paths, propose, serve_layout
 from . import workspace as workspace_mod
+from .contract import infer_contract
 from .errors import ContractError, InputError
 from .extract import assign
 from .types import LayoutBlock
@@ -130,6 +131,40 @@ def _process_document(
             "text": text,
         },
     }
+
+
+def _local_models() -> list[dict]:
+    rows: list[dict] = []
+    for alias, entry in catalog.load_catalog().items():
+        if entry.kind != "gguf" or entry.prompt_style != "chat":
+            continue
+        rows.append(
+            {
+                "alias": alias,
+                "label": entry.name or alias,
+                "present": catalog.find_downloaded(entry) is not None,
+                "size_bytes": entry.size_bytes,
+                "license": entry.license,
+                "default": bool(entry.default),
+            }
+        )
+    rows.sort(key=lambda row: (not row["present"], row["alias"]))
+    return rows
+
+
+def _local_model(alias: str | None) -> catalog.ModelRef:
+    try:
+        ref = catalog.resolve(alias) if alias else catalog.default_ref()
+    except catalog.CatalogError as exc:
+        raise ContractError(str(exc)) from exc
+    if ref is None or ref.is_remote or ref.entry.kind != "gguf":
+        raise ContractError("solo se admiten modelos locales (kind: gguf)")
+    if ref.path is None:
+        raise ContractError(
+            f"el modelo {ref.label} no está descargado: "
+            f"vlm-ocr models fetch {ref.label}"
+        )
+    return ref
 
 
 def _read_ocr(workspace: workspace_mod.Workspace) -> dict:
@@ -476,6 +511,51 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
                 {"error": "contract", "detail": str(exc)}, status_code=422
             )
         return JSONResponse(result)
+
+    @app.get("/api/models")
+    def list_models() -> JSONResponse:
+        return JSONResponse({"models": _local_models()})
+
+    @app.post("/api/workspaces/{workspace_id}/propose")
+    def propose_contract(workspace_id: str, body: dict) -> JSONResponse:
+        try:
+            workspace = workspace_mod.get_workspace(
+                app.state.workspace_dir, workspace_id
+            )
+        except InputError as exc:
+            return JSONResponse(
+                {"error": "not_found", "detail": str(exc)}, status_code=404
+            )
+        try:
+            ocr = _read_ocr(workspace)
+            text = propose.rows_text_from_ocr(ocr)
+            if not text.strip():
+                raise ContractError("el documento no tiene texto para proponer")
+            ref = _local_model(str(body.get("model") or "").strip() or None)
+            payload = infer_contract(
+                text,
+                propose.PROPOSAL_SCHEMA,
+                "schema",
+                ref,
+                n_ctx=4096,
+                max_ocr_tokens=2000,
+                instructions=propose.PROPOSAL_INSTRUCTIONS,
+                max_output_tokens=1500,
+            )
+            fields = propose.proposal_fields(payload, text)
+        except ContractError as exc:
+            return JSONResponse(
+                {"error": "contract", "detail": str(exc)}, status_code=422
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                {
+                    "error": "model",
+                    "detail": f"el modelo no pudo proponer: {exc}",
+                },
+                status_code=502,
+            )
+        return JSONResponse({"fields": fields, "model": ref.label})
 
     if WEB_DIR.exists():
         app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
