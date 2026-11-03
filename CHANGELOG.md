@@ -9,6 +9,8 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- SPA (experimental): área de trabajo redimensionable con asas persistentes y ticket plegable; panel de prompt del LLM para preguntar sobre el documento o proponer con instrucciones extra.
+
 > La SPA (`serve`, visor, listas y «Proponer contrato») es **experimental** y está sujeta a cambios; el CLI base es estable.
 
 - SPA (experimental): «Proponer contrato» con un LLM local — propone campos, etiquetas, columnas y listas a partir del texto extraído, con validación, filtro de literalidad y revisión humana obligatoria. Modelos locales (`llama32-3b` recomendado). Endpoints `GET /api/models` y `POST /api/workspaces/{id}/propose`.

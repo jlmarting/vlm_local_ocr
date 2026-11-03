@@ -282,6 +282,8 @@ uv run vlm-ocr serve --no-open  # sin abrir navegador
 - Extracción determinista por defecto (sin LLM); «Proponer contrato» usa un modelo local ya descargado. UI bilingüe ES/EN.
 - Listas repetidas: «Añadir lista» declara `x-item-columns` una vez (roles de texto, cantidad, importe y observación) y etiquetas de fin; el extractor recorre todas las filas.
 - «Proponer contrato» (experimental): el LLM local propone campos, etiquetas, columnas y listas sobre el texto ya extraído; la propuesta se aplica al editor y el usuario la revisa. Solo modelos locales; `llama32-3b` recomendado.
+- Asas de arrastre para redimensionar ticket/texto/operativa y botón «Ocultar ticket»; los anchos se guardan en `localStorage`.
+- Panel «Prompt del LLM»: «Preguntar» envía un prompt libre al modelo local; «Proponer con estas instrucciones» las añade a la propuesta de contrato.
 - Requiere el extra `serve`; el CLI base no carga FastAPI.
 
 ## 5. Contratos

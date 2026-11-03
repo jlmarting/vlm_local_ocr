@@ -59,6 +59,8 @@ Para tickets o facturas con líneas, usa «Añadir lista»: defines los roles un
 
 Si no quieres empezar de cero, pulsa «Proponer contrato»: un modelo local propone los campos, etiquetas, columnas y listas; revísalos y ajústalos antes de extraer. `llama32-3b` es la opción recomendada.
 
+Ajusta el espacio con las asas entre columnas y pliega el ticket con «Ocultar ticket». Si quieres preguntar algo al modelo, abre «Prompt del LLM»; también puedes usar ese texto como instrucciones extra al proponer.
+
 ### «Quiero el texto de un PDF/imagen y nada más»
 
 ```bash
