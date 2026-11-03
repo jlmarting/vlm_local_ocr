@@ -138,5 +138,16 @@
   "propose.loading": "Proponiendo… (puede tardar)",
   "propose.done": "Propuesta lista ({model}); revísala y prueba la extracción.",
   "propose.replaceConfirm": "Esto reemplazará los campos actuales por la propuesta. ¿Continuar?",
-  "propose.noModels": "No hay modelos locales descargados; usa `vlm-ocr models fetch`."
+  "propose.noModels": "No hay modelos locales descargados; usa `vlm-ocr models fetch`.",
+  "viewer.hideTicket": "Ocultar ticket",
+  "viewer.showTicket": "Mostrar ticket",
+  "layout.resize": "Arrastra para redimensionar; doble clic para restablecer",
+  "prompt.title": "Prompt del LLM",
+  "prompt.hint": "Pregunta al modelo sobre el documento o usa el texto como instrucciones extra al proponer.",
+  "prompt.placeholder": "Escribe una pregunta o instrucción…",
+  "prompt.ask": "Preguntar",
+  "prompt.propose": "Proponer con estas instrucciones",
+  "prompt.loading": "Pensando… (puede tardar)",
+  "prompt.done": "Respuesta de {model}",
+  "prompt.empty": "escribe un prompt"
 }

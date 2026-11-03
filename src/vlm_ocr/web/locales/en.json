@@ -138,5 +138,16 @@
   "propose.loading": "Proposing… (may take a while)",
   "propose.done": "Proposal ready ({model}); review it and test extraction.",
   "propose.replaceConfirm": "This will replace the current fields with the proposal. Continue?",
-  "propose.noModels": "No local models downloaded; use `vlm-ocr models fetch`."
+  "propose.noModels": "No local models downloaded; use `vlm-ocr models fetch`.",
+  "viewer.hideTicket": "Hide ticket",
+  "viewer.showTicket": "Show ticket",
+  "layout.resize": "Drag to resize; double-click to reset",
+  "prompt.title": "LLM prompt",
+  "prompt.hint": "Ask the model about the document or use the text as extra instructions when proposing.",
+  "prompt.placeholder": "Write a question or instruction…",
+  "prompt.ask": "Ask",
+  "prompt.propose": "Propose with these instructions",
+  "prompt.loading": "Thinking… (may take a while)",
+  "prompt.done": "Answer from {model}",
+  "prompt.empty": "write a prompt"
 }

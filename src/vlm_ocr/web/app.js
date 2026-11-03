@@ -73,7 +73,7 @@ function applyI18n() {
   }
   renderFields();
   updateSelection();
-  applyTextCollapsed();
+  applyLayout();
   refreshProposeButton();
   if (state.document) {
     renderRecentsFromState();
@@ -528,19 +528,99 @@ function updateBlockStates() {
   }
 }
 
-function applyTextCollapsed() {
-  const collapsed = localStorage.getItem("vlm-text-collapsed") === "1";
-  $("work").classList.toggle("text-collapsed", collapsed);
-  const button = $("toggle-text");
-  if (button) {
-    button.textContent = t(collapsed ? "viewer.showText" : "viewer.hideText");
+function storedPx(key, fallback) {
+  const value = Number(localStorage.getItem(key));
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function applyLayout() {
+  const work = $("work");
+  if (!work) {
+    return;
   }
+  work.style.setProperty("--text-w", `${storedPx("vlm-text-w", 320)}px`);
+  work.style.setProperty("--ops-w", `${storedPx("vlm-ops-w", 432)}px`);
+  const textCollapsed = localStorage.getItem("vlm-text-collapsed") === "1";
+  const pageCollapsed = localStorage.getItem("vlm-page-collapsed") === "1";
+  work.classList.toggle("text-collapsed", textCollapsed);
+  work.classList.toggle("page-collapsed", pageCollapsed);
+  const textButton = $("toggle-text");
+  if (textButton) {
+    textButton.textContent = t(
+      textCollapsed ? "viewer.showText" : "viewer.hideText"
+    );
+  }
+  const pageButton = $("toggle-page");
+  if (pageButton) {
+    pageButton.textContent = t(
+      pageCollapsed ? "viewer.showTicket" : "viewer.hideTicket"
+    );
+  }
+}
+
+const MIN_TEXT = 180;
+const MAX_TEXT = 640;
+const MIN_OPS = 288;
+const MAX_OPS = 800;
+const MIN_PAGE = 240;
+
+function startResize(event, kind) {
+  if (event.button !== undefined && event.button !== 0) {
+    return;
+  }
+  event.preventDefault();
+  const work = $("work");
+  const textVisible = !work.classList.contains("text-collapsed");
+  const pageVisible = !work.classList.contains("page-collapsed");
+  const textWidth = parseFloat(work.style.getPropertyValue("--text-w")) || 320;
+  const opsWidth = parseFloat(work.style.getPropertyValue("--ops-w")) || 432;
+  const move = (moveEvent) => {
+    const rect = work.getBoundingClientRect();
+    if (kind === "text") {
+      const available =
+        rect.width - opsWidth - 5 - (pageVisible ? MIN_PAGE : 0);
+      const width = Math.min(
+        MAX_TEXT,
+        available,
+        Math.max(MIN_TEXT, rect.right - opsWidth - 5 - moveEvent.clientX)
+      );
+      work.style.setProperty("--text-w", `${Math.round(width)}px`);
+    } else {
+      const available =
+        rect.width -
+        (textVisible ? textWidth + 5 : 0) -
+        (pageVisible ? MIN_PAGE : 0);
+      const width = Math.min(
+        MAX_OPS,
+        available,
+        Math.max(MIN_OPS, rect.right - moveEvent.clientX - 5)
+      );
+      work.style.setProperty("--ops-w", `${Math.round(width)}px`);
+    }
+    syncOverlay();
+  };
+  const stop = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", stop);
+    localStorage.setItem("vlm-text-w", work.style.getPropertyValue("--text-w"));
+    localStorage.setItem("vlm-ops-w", work.style.getPropertyValue("--ops-w"));
+    syncOverlay();
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", stop, { once: true });
+}
+
+function togglePage() {
+  const collapsed = localStorage.getItem("vlm-page-collapsed") === "1";
+  localStorage.setItem("vlm-page-collapsed", collapsed ? "0" : "1");
+  applyLayout();
+  syncOverlay();
 }
 
 function toggleText() {
   const collapsed = localStorage.getItem("vlm-text-collapsed") === "1";
   localStorage.setItem("vlm-text-collapsed", collapsed ? "0" : "1");
-  applyTextCollapsed();
+  applyLayout();
   syncOverlay();
 }
 
@@ -669,7 +749,7 @@ async function showPage(index) {
 function showViewer() {
   $("home").hidden = true;
   $("viewer").hidden = false;
-  applyTextCollapsed();
+  applyLayout();
 }
 
 async function upload(file) {
@@ -688,6 +768,7 @@ async function upload(file) {
     state.stopSuggestions = suggestStops(payload.document.blocks);
     $("extract-summary").textContent = "";
     $("propose-status").textContent = "";
+    clearPrompt();
     showResult(null);
     showViewer();
     await showPage(0);
@@ -724,6 +805,7 @@ async function openWorkspace(workspaceId) {
     state.extraction = null;
     state.stopSuggestions = suggestStops(state.document.blocks);
     $("propose-status").textContent = "";
+    clearPrompt();
     showResult(null);
     await loadContract(workspaceId);
     showViewer();
@@ -877,11 +959,18 @@ function refreshProposeButton() {
     return;
   }
   const present = modelsCache.filter((model) => model.present).length;
-  button.disabled = present === 0;
-  button.title = present ? t("propose.hint") : t("propose.noModels");
+  const missing = present === 0;
+  button.disabled = missing;
+  button.title = missing ? t("propose.noModels") : t("propose.hint");
+  for (const id of ["prompt-run", "prompt-propose"]) {
+    const node = $(id);
+    if (node) {
+      node.disabled = missing;
+    }
+  }
 }
 
-async function proposeContract() {
+async function proposeContract(extraInstructions = "") {
   clearError();
   if (!state.workspace) {
     return;
@@ -900,12 +989,16 @@ async function proposeContract() {
   $("propose-status").textContent = t("propose.loading");
   setStatus(t("propose.loading"));
   try {
+    const body = { model };
+    if (extraInstructions.trim()) {
+      body.instructions = extraInstructions.trim();
+    }
     const response = await api(
       `/api/workspaces/${state.workspace.id}/propose`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model }),
+        body: JSON.stringify(body),
       }
     );
     const payload = await response.json();
@@ -923,6 +1016,70 @@ async function proposeContract() {
   } finally {
     button.textContent = t("propose.button");
     refreshProposeButton();
+  }
+}
+
+async function runPrompt() {
+  clearError();
+  if (!state.workspace) {
+    return;
+  }
+  const prompt = $("prompt-text").value.trim();
+  if (!prompt) {
+    showError(t("prompt.empty"));
+    return;
+  }
+  const model = $("propose-model").value;
+  if (!model) {
+    showError(t("propose.noModels"));
+    return;
+  }
+  const button = $("prompt-run");
+  button.disabled = true;
+  $("prompt-status").textContent = t("prompt.loading");
+  $("prompt-answer").hidden = true;
+  setStatus(t("prompt.loading"));
+  try {
+    const response = await api(
+      `/api/workspaces/${state.workspace.id}/prompt`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, model }),
+      }
+    );
+    const payload = await response.json();
+    $("prompt-answer").hidden = false;
+    $("prompt-answer").textContent = payload.answer;
+    $("prompt-status").textContent = t("prompt.done", { model: payload.model });
+    setStatus(t("prompt.done", { model: payload.model }));
+  } catch (error) {
+    setStatus(t("status.error"));
+    showError(error);
+    $("prompt-status").textContent = "";
+  } finally {
+    button.disabled = false;
+    refreshProposeButton();
+  }
+}
+
+function proposeWithInstructions() {
+  proposeContract($("prompt-text").value.trim());
+}
+
+function clearPrompt() {
+  const text = $("prompt-text");
+  if (text) {
+    text.value = "";
+  }
+  const answer = $("prompt-answer");
+  if (answer) {
+    answer.hidden = true;
+    answer.textContent = "";
+  }
+  const status = $("prompt-status");
+  if (status) {
+    status.textContent = "";
   }
 }
 
@@ -1709,6 +1866,7 @@ function reset() {
   $("fields").innerHTML = "";
   $("extract-summary").textContent = "";
   $("propose-status").textContent = "";
+  clearPrompt();
   showResult(null);
   updateSelection();
   $("viewer").hidden = true;
@@ -1742,7 +1900,28 @@ function wire() {
   $("prev").addEventListener("click", () => showPage(state.page - 1));
   $("next").addEventListener("click", () => showPage(state.page + 1));
   $("new").addEventListener("click", reset);
+  $("toggle-page").addEventListener("click", togglePage);
   $("toggle-text").addEventListener("click", toggleText);
+  $("prompt-run").addEventListener("click", runPrompt);
+  $("prompt-propose").addEventListener("click", proposeWithInstructions);
+  const resizePageText = $("resize-page-text");
+  resizePageText.addEventListener("pointerdown", (event) =>
+    startResize(event, "text")
+  );
+  resizePageText.addEventListener("dblclick", () => {
+    localStorage.removeItem("vlm-text-w");
+    applyLayout();
+    syncOverlay();
+  });
+  const resizeTextOps = $("resize-text-ops");
+  resizeTextOps.addEventListener("pointerdown", (event) =>
+    startResize(event, "ops")
+  );
+  resizeTextOps.addEventListener("dblclick", () => {
+    localStorage.removeItem("vlm-ops-w");
+    applyLayout();
+    syncOverlay();
+  });
   $("add-field").addEventListener("click", addField);
   $("add-field-block").addEventListener("click", addFieldFromBlock);
   $("add-list").addEventListener("click", addList);

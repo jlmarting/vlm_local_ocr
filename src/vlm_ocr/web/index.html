@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>vlm-local-ocr</title>
-    <link rel="stylesheet" href="styles.css?v=8" />
+    <link rel="stylesheet" href="styles.css?v=9" />
   </head>
   <body>
     <header>
@@ -48,6 +48,9 @@
             <span data-i18n="legend.assigned">asignado</span>
           </span>
           <span class="spacer"></span>
+          <button id="toggle-page" type="button" data-i18n="viewer.hideTicket">
+            Ocultar ticket
+          </button>
           <button id="toggle-text" type="button" data-i18n="viewer.hideText">
             Ocultar texto
           </button>
@@ -62,11 +65,27 @@
             </div>
           </section>
 
+          <div
+            id="resize-page-text"
+            class="resizer"
+            role="separator"
+            aria-orientation="vertical"
+            data-i18n-title="layout.resize"
+          ></div>
+
           <aside
             id="text-panel"
             class="work-text"
             data-i18n-title="viewer.textTitle"
           ></aside>
+
+          <div
+            id="resize-text-ops"
+            class="resizer"
+            role="separator"
+            aria-orientation="vertical"
+            data-i18n-title="layout.resize"
+          ></div>
 
           <section id="contract" class="work-ops">
             <p id="coach" class="coach" hidden></p>
@@ -181,6 +200,26 @@
               <span id="propose-status" class="summary"></span>
             </div>
 
+            <details id="prompt-panel" class="prompt-panel">
+              <summary data-i18n="prompt.title">Prompt del LLM</summary>
+              <p class="field-hint" data-i18n="prompt.hint"></p>
+              <textarea
+                id="prompt-text"
+                rows="3"
+                data-i18n-placeholder="prompt.placeholder"
+              ></textarea>
+              <div class="toolbar">
+                <button id="prompt-run" type="button" data-i18n="prompt.ask">
+                  Preguntar
+                </button>
+                <button id="prompt-propose" type="button" data-i18n="prompt.propose">
+                  Proponer con estas instrucciones
+                </button>
+                <span id="prompt-status" class="summary"></span>
+              </div>
+              <pre id="prompt-answer" class="prompt-answer" hidden></pre>
+            </details>
+
             <div class="toolbar exports">
               <button
                 id="export-schema"
@@ -231,6 +270,6 @@
 
       <p id="error" class="error" hidden></p>
     </main>
-    <script src="app.js?v=8"></script>
+    <script src="app.js?v=9"></script>
   </body>
 </html>
