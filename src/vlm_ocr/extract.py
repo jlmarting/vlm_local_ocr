@@ -7,6 +7,7 @@ from typing import Any
 
 from .annotations import (
     SOURCE_ALIASES,
+    ColumnSpec,
     FieldHint,
     ItemHint,
     field_map,
@@ -92,8 +93,101 @@ def _item_values(
     return values
 
 
+def _coerce_column(text: str, kind: str) -> Any:
+    if not text:
+        return None
+    if kind in ("number", "integer"):
+        number = parse_number(text)
+        if number is None:
+            return None
+        if kind == "integer":
+            return int(number) if float(number).is_integer() else None
+        return number
+    return text
+
+
+def extract_columns(blocks: list[LayoutBlock], hint: ItemHint) -> ItemExtraction:
+    """Extrae una lista por columnas libres (x0/x1 relativos a la región)."""
+    rows = group_rows(_expand_piped([block for block in blocks if block.text.strip()]))
+    start_index: int | None = None
+    for index, row in enumerate(rows):
+        if any(
+            _has_prefix(block.text, hint.start_labels)
+            for block in _text_cells(row)
+        ):
+            start_index = index + 1
+            break
+    if start_index is None:
+        return ItemExtraction(None, 0, 0)
+
+    data_rows: list[list[LayoutBlock]] = []
+    for row in rows[start_index:]:
+        if any(
+            _has_prefix(block.text, hint.stop_labels)
+            for block in _text_cells(row)
+        ):
+            break
+        if any(block.text.strip() for block in row):
+            data_rows.append(row)
+    if not data_rows:
+        return ItemExtraction(None, 0, 0)
+
+    region = [
+        block
+        for row in data_rows
+        for block in row
+        if block.box[2] > block.box[0]
+    ]
+    if not region:
+        return ItemExtraction(None, 0, 0)
+    x0 = min(block.box[0] for block in region)
+    x1 = max(block.box[2] for block in region)
+    width = x1 - x0
+    if width <= 0:
+        return ItemExtraction(None, 0, 0)
+
+    columns = [
+        (prop, spec)
+        for prop, spec in hint.columns.items()
+        if isinstance(spec, ColumnSpec)
+    ]
+    items: list[dict] = []
+    candidates = 0
+    parsed = 0
+    for row in data_rows:
+        cells = [
+            block
+            for block in row
+            if block.text.strip() and block.box[2] > block.box[0]
+        ]
+        if not cells:
+            continue
+        candidates += 1
+        values: dict[str, Any] = {}
+        for prop, spec in columns:
+            picked = [
+                block
+                for block in cells
+                if spec.x0
+                <= ((block.box[0] + block.box[2]) / 2 - x0) / width
+                <= spec.x1
+            ]
+            picked.sort(key=lambda block: block.box[0])
+            text = " ".join(block.text.strip() for block in picked).strip()
+            values[prop] = _coerce_column(text, spec.type)
+        if any(value is not None for value in values.values()):
+            parsed += 1
+        items.append(values)
+
+    if candidates == 0 or parsed / candidates < 0.75:
+        return ItemExtraction(None, candidates, parsed)
+    return ItemExtraction(items, candidates, parsed)
+
+
 def extract_items(blocks: list[LayoutBlock], hint: ItemHint) -> ItemExtraction:
     """Extrae un array de líneas repetidas: item + observaciones + stop."""
+    if hint.mode == "columns":
+        return extract_columns(blocks, hint)
     rows = group_rows(_expand_piped([block for block in blocks if block.text.strip()]))
     quantity_declared = "quantity" in hint.columns.values()
     start = 0

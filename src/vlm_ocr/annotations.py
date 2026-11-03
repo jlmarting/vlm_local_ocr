@@ -34,16 +34,57 @@ class FieldHint:
 
 
 ITEM_ROLES = {"text", "quantity", "number_right", "observation"}
+COLUMN_TYPES = {"text", "number", "integer", "date"}
+
+
+@dataclass(frozen=True)
+class ColumnSpec:
+    """Una columna libre de una lista: rango x relativo a la región y tipo."""
+
+    x0: float
+    x1: float
+    type: str = "text"
+    required: bool = True
+
+
+def column_to_dict(value: str | ColumnSpec) -> str | dict:
+    """Serializa un rol legacy o una columna libre a JSON."""
+    if isinstance(value, str):
+        return value
+    return {
+        "x0": value.x0,
+        "x1": value.x1,
+        "type": value.type,
+        "required": value.required,
+    }
+
+
+def column_from_dict(value: str | dict) -> str | ColumnSpec:
+    """Reconstruye un rol legacy o una columna libre desde JSON."""
+    if isinstance(value, str):
+        return value
+    return ColumnSpec(
+        x0=float(value["x0"]),
+        x1=float(value["x1"]),
+        type=str(value.get("type", "text")),
+        required=bool(value.get("required", True)),
+    )
 
 
 @dataclass(frozen=True)
 class ItemHint:
-    """Un array repetido con los roles geométricos de sus propiedades."""
+    """Un array repetido con roles legacy o columnas libres."""
 
     path: str
-    columns: dict[str, str]
+    columns: dict[str, str | ColumnSpec]
     stop_labels: tuple[str, ...]
     start_labels: tuple[str, ...]
+
+    @property
+    def mode(self) -> str:
+        return "columns" if any(
+            isinstance(value, ColumnSpec) for value in self.columns.values()
+        ) else "legacy"
 
 
 def normalize_label(text: str) -> str:
@@ -114,20 +155,42 @@ def _item_hint(node: dict, path: str) -> ItemHint:
     if not isinstance(properties, dict):
         raise ContractError(f"{path}: el array necesita items.properties")
 
-    columns: dict[str, str] = {}
+    columns: dict[str, str | ColumnSpec] = {}
     seen_roles: set[str] = set()
-    for prop, role in raw_columns.items():
+    has_columns = False
+    has_legacy = False
+    for prop, value in raw_columns.items():
         if not isinstance(prop, str) or prop not in properties:
             raise ContractError(f"{path}: propiedad desconocida en x-item-columns: {prop!r}")
-        if not isinstance(role, str) or role not in ITEM_ROLES:
-            raise ContractError(f"{path}: rol desconocido en x-item-columns: {role!r}")
-        if role in seen_roles:
-            raise ContractError(f"{path}: rol duplicado en x-item-columns: {role!r}")
-        seen_roles.add(role)
-        columns[prop] = role
-    for required in ("text", "number_right"):
-        if required not in seen_roles:
-            raise ContractError(f"{path}: x-item-columns necesita un rol {required}")
+        if isinstance(value, str):
+            if value not in ITEM_ROLES:
+                raise ContractError(f"{path}: rol desconocido en x-item-columns: {value!r}")
+            if value in seen_roles:
+                raise ContractError(f"{path}: rol duplicado en x-item-columns: {value!r}")
+            seen_roles.add(value)
+            columns[prop] = value
+            has_legacy = True
+        elif isinstance(value, dict):
+            columns[prop] = _column_spec(value, path, prop)
+            has_columns = True
+        else:
+            raise ContractError(
+                f"{path}: x-item-columns.{prop} debe ser un rol o un objeto de columna"
+            )
+    if has_columns and has_legacy:
+        raise ContractError(
+            f"{path}: no mezcles roles legacy y columnas libres en x-item-columns"
+        )
+    if has_columns:
+        if not raw_start:
+            raise ContractError(
+                f"{path}: las columnas libres requieren x-item-labels "
+                "(la cabecera o el inicio de la tabla)"
+            )
+    else:
+        for required in ("text", "number_right"):
+            if required not in seen_roles:
+                raise ContractError(f"{path}: x-item-columns necesita un rol {required}")
 
     return ItemHint(
         path=path,
@@ -135,6 +198,35 @@ def _item_hint(node: dict, path: str) -> ItemHint:
         stop_labels=tuple(str(label) for label in raw_stop),
         start_labels=tuple(str(label) for label in raw_start),
     )
+
+
+def _column_spec(value: dict, path: str, prop: str) -> ColumnSpec:
+    allowed = {"x0", "x1", "type", "required"}
+    unknown = set(value) - allowed
+    if unknown:
+        raise ContractError(
+            f"{path}: claves desconocidas en la columna {prop!r}: {sorted(unknown)}"
+        )
+    x0 = value.get("x0")
+    x1 = value.get("x1")
+    if not isinstance(x0, (int, float)) or not isinstance(x1, (int, float)):
+        raise ContractError(f"{path}: la columna {prop!r} necesita x0 y x1 numéricos")
+    x0, x1 = float(x0), float(x1)
+    if not (0 <= x0 < x1 <= 1):
+        raise ContractError(
+            f"{path}: la columna {prop!r} necesita 0 <= x0 < x1 <= 1"
+        )
+    kind = value.get("type", "text")
+    if kind not in COLUMN_TYPES:
+        raise ContractError(
+            f"{path}: tipo desconocido en la columna {prop!r}: {kind!r}"
+        )
+    required = value.get("required", True)
+    if not isinstance(required, bool):
+        raise ContractError(
+            f"{path}: required de la columna {prop!r} debe ser booleano"
+        )
+    return ColumnSpec(x0=x0, x1=x1, type=kind, required=required)
 
 
 def _walk_items(schema: Any, path: str = ""):

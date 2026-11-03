@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from . import catalog, extract, homologate, inputs, metrics, templates, verify
-from .annotations import field_map, has_annotations, item_hints
+from .annotations import column_to_dict, field_map, has_annotations, item_hints
 from .bench import run_bench
 from .contract import (
     ContractError,
@@ -1055,7 +1055,10 @@ def main(argv: list[str] | None = None) -> int:
                                 },
                                 "items": {
                                     path: {
-                                        "columns": dict(item.columns),
+                                        "columns": {
+                                            prop: column_to_dict(value)
+                                            for prop, value in item.columns.items()
+                                        },
                                         "stop_labels": list(item.stop_labels),
                                         "start_labels": list(item.start_labels),
                                     }

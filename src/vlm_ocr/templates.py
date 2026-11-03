@@ -13,6 +13,9 @@ from typing import Any
 from . import paths
 from .annotations import (
     SOURCE_ALIASES,
+    ColumnSpec,
+    column_from_dict,
+    column_to_dict,
     leaf_paths_for,
     leaf_types_for,
     normalize_label,
@@ -58,9 +61,9 @@ class FieldMap:
 
 @dataclass(frozen=True)
 class ItemMap:
-    """Cómo se localiza un array repetido: roles por propiedad y stop/inicio."""
+    """Cómo se localiza un array repetido: roles o columnas libres."""
 
-    columns: dict[str, str]
+    columns: dict[str, str | ColumnSpec]
     stop_labels: tuple[str, ...]
     start_labels: tuple[str, ...]
 
@@ -216,7 +219,10 @@ def template_to_dict(template: Template) -> dict[str, Any]:
         "map": {path: _field_map_to_dict(item) for path, item in template.map.items()},
         "items": {
             path: {
-                "columns": dict(item.columns),
+                "columns": {
+                    prop: column_to_dict(value)
+                    for prop, value in item.columns.items()
+                },
                 "stop_labels": list(item.stop_labels),
                 "start_labels": list(item.start_labels),
             }
@@ -253,8 +259,8 @@ def template_from_dict(value: dict[str, Any]) -> Template:
         items={
             str(path): ItemMap(
                 columns={
-                    str(prop): str(role)
-                    for prop, role in item.get("columns", {}).items()
+                    str(prop): column_from_dict(value)
+                    for prop, value in item.get("columns", {}).items()
                 },
                 stop_labels=tuple(str(label) for label in item.get("stop_labels", [])),
                 start_labels=tuple(
@@ -507,7 +513,9 @@ def hint_from_template(template: Template, contract: dict, kind: str = "schema")
         contract_node = _contract_node(contract, path)
         if hint_node is None or contract_node is None:
             continue
-        hint_node["x-item-columns"] = dict(item.columns)
+        hint_node["x-item-columns"] = {
+            prop: column_to_dict(value) for prop, value in item.columns.items()
+        }
         hint_node["x-stop-labels"] = list(item.stop_labels)
         if item.start_labels:
             hint_node["x-item-labels"] = list(item.start_labels)
