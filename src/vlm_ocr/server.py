@@ -573,6 +573,8 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
             if not text.strip():
                 raise ContractError("el documento no tiene texto")
             ref = _model_ref(str(body.get("model") or "").strip() or None)
+            usage: dict = {}
+            started = time.perf_counter()
             answer = infer_answer(
                 text,
                 prompt,
@@ -580,7 +582,9 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
                 n_ctx=4096,
                 max_ocr_tokens=2000,
                 max_output_tokens=1200,
+                usage_out=usage,
             )
+            usage["time_ms"] = round((time.perf_counter() - started) * 1000, 1)
         except ContractError as exc:
             return JSONResponse(
                 {"error": "contract", "detail": str(exc)}, status_code=422
@@ -591,7 +595,12 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
                 status_code=502,
             )
         return JSONResponse(
-            {"answer": answer, "model": ref.label, "remote": ref.is_remote}
+            {
+                "answer": answer,
+                "model": ref.label,
+                "remote": ref.is_remote,
+                "usage": usage,
+            }
         )
 
     @app.get("/api/models")
@@ -620,6 +629,8 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
             if extra:
                 instructions = f"{instructions}\n\nInstrucciones del usuario: {extra}"
             ref = _model_ref(str(body.get("model") or "").strip() or None)
+            usage: dict = {}
+            started = time.perf_counter()
             payload = infer_contract(
                 text,
                 propose.PROPOSAL_SCHEMA,
@@ -629,7 +640,9 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
                 max_ocr_tokens=2000,
                 instructions=instructions,
                 max_output_tokens=3000,
+                usage_out=usage,
             )
+            usage["time_ms"] = round((time.perf_counter() - started) * 1000, 1)
             fields = propose.proposal_fields(payload, text)
         except ContractError as exc:
             detail = str(exc)
@@ -653,6 +666,7 @@ def create_app(workspace_dir: Path, token: str) -> FastAPI:
             "fields": fields,
             "model": ref.label,
             "remote": ref.is_remote,
+            "usage": usage,
         })
 
     if WEB_DIR.exists():

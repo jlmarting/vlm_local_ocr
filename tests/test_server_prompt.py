@@ -57,11 +57,11 @@ def test_prompt_returns_model_answer(tmp_path: Path, monkeypatch) -> None:
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "answer": "El total es 8.40",
-        "model": "llama32-3b",
-        "remote": False,
-    }
+    payload = response.json()
+    assert payload["answer"] == "El total es 8.40"
+    assert payload["model"] == "llama32-3b"
+    assert payload["remote"] is False
+    assert payload["usage"]["time_ms"] >= 0
     assert captured["task"] == "¿Cuánto es el total?"
     assert "TOTAL 8.40" in captured["text"]
 

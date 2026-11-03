@@ -266,6 +266,7 @@ uv run vlm-ocr serve
 - Listas repetidas: «Añadir lista» declara un array con roles (texto, cantidad, importe, observación) y etiquetas de fin (`TOTAL`, `IVA`…). El extractor aplica los roles a todas las filas; no se selecciona artículo por artículo.
 - Listas con columnas libres (experimental): «Detectar columnas» crea una columna por cabecera con nombre, tipo y rango x editables; los contratos legacy con roles siguen funcionando.
 - «Proponer contrato» (experimental): un modelo local redacta una propuesta de campos, etiquetas, columnas y listas a partir del texto extraído; rellena el editor para que la revises. Recomendado `llama32-3b`; en CPU puede tardar un minuto. Solo modelos locales.
+- Tiempos del LLM: cada operación muestra tiempo total, carga, tokens y velocidad. «Proponer con análisis» ejecuta un análisis previo y lo usa como instrucciones; «Usar respuesta» copia la respuesta al cuadro de instrucciones. El análisis con modelos 3B puede ser flojo; con un modelo mayor o cloud suele ir mejor.
 - Pantalla de trabajo en dos paneles al 50%: documento a la izquierda (con zoom y texto plegable) y operativa a la derecha con scroll propio. El asa central permite ajustar el reparto y se recuerda.
 - Panel **«LLM e instrucciones»** colapsable: modelo, instrucciones/prompt, «Proponer contrato» y «Preguntar» en un solo sitio.
 - Modelos remotos (`cloud-deepseek`, `cloud-120b`) visibles en el selector; requieren `OLLAMA_API_KEY` y el documento sale de la máquina (aviso en la UI).

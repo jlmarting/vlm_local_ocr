@@ -182,5 +182,16 @@
   "group.contract": "Contrato",
   "group.extract": "Extracción",
   "group.export": "Exportar",
-  "list.columnUseBlock": "Usar bloque"
+  "list.columnUseBlock": "Usar bloque",
+  "llm.useAnswer": "Usar respuesta",
+  "llm.analyze": "Proponer con análisis",
+  "llm.analyzeHint": "Analiza primero el documento con el modelo y usa el análisis como instrucciones para proponer.",
+  "llm.analysisPrompt": "Analiza el documento y describe de forma concisa: campos escalares (etiqueta literal y columna de tabla si aplica) y listas repetidas (columnas y etiquetas de inicio/fin). No inventes datos.",
+  "llm.analysisPrefix": "Análisis previo del documento:",
+  "llm.analysisLoading": "Analizando… (puede tardar)",
+  "llm.proposingAfterAnalysis": "Proponiendo con el análisis…",
+  "llm.analysisTime": "análisis",
+  "llm.proposeTime": "propuesta",
+  "llm.time": "tiempo",
+  "llm.load": "carga"
 }

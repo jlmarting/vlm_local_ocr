@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>vlm-local-ocr</title>
-    <link rel="stylesheet" href="styles.css?v=14" />
+    <link rel="stylesheet" href="styles.css?v=15" />
   </head>
   <body>
     <header>
@@ -111,6 +111,14 @@
                   Preguntar
                 </button>
                 <button
+                  id="prompt-use"
+                  type="button"
+                  data-i18n="llm.useAnswer"
+                  hidden
+                >
+                  Usar respuesta
+                </button>
+                <button
                   id="propose"
                   type="button"
                   data-i18n="propose.button"
@@ -118,7 +126,16 @@
                 >
                   Proponer contrato
                 </button>
+                <button
+                  id="propose-analyze"
+                  type="button"
+                  data-i18n="llm.analyze"
+                  data-i18n-title="llm.analyzeHint"
+                >
+                  Proponer con análisis
+                </button>
               </div>
+              <p id="llm-metrics" class="field-hint" hidden></p>
               <pre id="prompt-answer" class="prompt-answer" hidden></pre>
             </details>
 
@@ -275,6 +292,6 @@
 
       <p id="error" class="error" hidden></p>
     </main>
-    <script src="app.js?v=14"></script>
+    <script src="app.js?v=15"></script>
   </body>
 </html>

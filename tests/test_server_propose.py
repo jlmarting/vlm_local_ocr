@@ -146,6 +146,7 @@ def test_propose_maps_and_filters_labels(tmp_path: Path, monkeypatch) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["model"] == "llama32-3b"
+    assert payload["usage"]["time_ms"] >= 0
     assert payload["fields"] == [
         {
             "kind": "scalar",

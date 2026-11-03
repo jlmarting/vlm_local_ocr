@@ -182,5 +182,16 @@
   "group.contract": "Contract",
   "group.extract": "Extraction",
   "group.export": "Export",
-  "list.columnUseBlock": "Use block"
+  "list.columnUseBlock": "Use block",
+  "llm.useAnswer": "Use answer",
+  "llm.analyze": "Propose with analysis",
+  "llm.analyzeHint": "Analyze the document with the model first and use the analysis as instructions to propose.",
+  "llm.analysisPrompt": "Analyze the document and concisely describe: scalar fields (literal label and table column if applicable) and repeated lists (columns and start/end labels). Do not invent data.",
+  "llm.analysisPrefix": "Previous document analysis:",
+  "llm.analysisLoading": "Analyzing… (may take a while)",
+  "llm.proposingAfterAnalysis": "Proposing with the analysis…",
+  "llm.analysisTime": "analysis",
+  "llm.proposeTime": "proposal",
+  "llm.time": "time",
+  "llm.load": "load"
 }

@@ -1176,6 +1176,106 @@ function updateModelWarning() {
   }
 }
 
+function formatSeconds(ms) {
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
+function usageParts(usage, label) {
+  if (!usage) {
+    return [];
+  }
+  const parts = [];
+  if (usage.time_ms != null) {
+    parts.push(`${label}: ${formatSeconds(usage.time_ms)}`);
+  }
+  if (usage.load_time_ms != null) {
+    parts.push(`${t("llm.load")}: ${formatSeconds(usage.load_time_ms)}`);
+  }
+  if (usage.total_tokens != null) {
+    parts.push(`${usage.total_tokens} tok`);
+  }
+  if (usage.tokens_per_second != null) {
+    parts.push(`${usage.tokens_per_second} tok/s`);
+  }
+  return parts;
+}
+
+function showMetrics(parts) {
+  const node = $("llm-metrics");
+  if (!node) {
+    return;
+  }
+  if (!parts || !parts.length) {
+    node.hidden = true;
+    node.textContent = "";
+    return;
+  }
+  node.hidden = false;
+  node.textContent = parts.join(" · ");
+}
+
+function setLlmBusy(busy) {
+  for (const id of ["propose", "propose-analyze", "prompt-run"]) {
+    const node = $(id);
+    if (node) {
+      node.disabled = busy;
+    }
+  }
+  if (!busy) {
+    refreshProposeButton();
+  }
+}
+
+async function requestPrompt(prompt, model) {
+  const started = performance.now();
+  const response = await api(`/api/workspaces/${state.workspace.id}/prompt`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, model }),
+  });
+  const payload = await response.json();
+  payload.elapsed_ms = Math.round(performance.now() - started);
+  return payload;
+}
+
+async function requestPropose(instructions, model) {
+  const body = { model };
+  if (instructions && instructions.trim()) {
+    body.instructions = instructions.trim();
+  }
+  const started = performance.now();
+  const response = await api(`/api/workspaces/${state.workspace.id}/propose`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json();
+  payload.elapsed_ms = Math.round(performance.now() - started);
+  return payload;
+}
+
+function applyProposal(payload) {
+  state.fields = payload.fields || [];
+  state.focusedList = null;
+  state.extraction = null;
+  showResult(null);
+  $("extract-summary").textContent = "";
+  renderFields();
+}
+
+function showAnswer(text) {
+  const answer = $("prompt-answer");
+  if (!answer) {
+    return;
+  }
+  answer.hidden = false;
+  answer.textContent = text;
+  const use = $("prompt-use");
+  if (use) {
+    use.hidden = false;
+  }
+}
+
 async function proposeContract(extraInstructions = "") {
   const extra =
     typeof extraInstructions === "string" ? extraInstructions.trim() : "";
@@ -1186,44 +1286,27 @@ async function proposeContract(extraInstructions = "") {
   if (state.fields.length && !window.confirm(t("propose.replaceConfirm"))) {
     return;
   }
-  const model = $("propose-model").value;
-  if (!model) {
+  const model = selectedModel();
+  if (!model || !model.available) {
     showError(t("propose.noModels"));
     return;
   }
-  const button = $("propose");
-  button.disabled = true;
-  button.textContent = t("propose.loading");
+  setLlmBusy(true);
   $("llm-status").textContent = t("propose.loading");
+  showMetrics([]);
   setStatus(t("propose.loading"));
   try {
-    const body = { model };
-    if (extra) {
-      body.instructions = extra;
-    }
-    const response = await api(
-      `/api/workspaces/${state.workspace.id}/propose`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }
-    );
-    const payload = await response.json();
-    state.fields = payload.fields || [];
-    state.extraction = null;
-    showResult(null);
-    $("extract-summary").textContent = "";
-    renderFields();
+    const payload = await requestPropose(extra, model.alias);
+    applyProposal(payload);
     $("llm-status").textContent = t("propose.done", { model: payload.model });
     setStatus(t("propose.done", { model: payload.model }));
+    showMetrics(usageParts(payload.usage, t("llm.time")));
   } catch (error) {
     setStatus(t("status.error"));
     showError(error);
     $("llm-status").textContent = "";
   } finally {
-    button.textContent = t("propose.button");
-    refreshProposeButton();
+    setLlmBusy(false);
   }
 }
 
@@ -1237,38 +1320,89 @@ async function runPrompt() {
     showError(t("prompt.empty"));
     return;
   }
-  const model = $("propose-model").value;
-  if (!model) {
+  const model = selectedModel();
+  if (!model || !model.available) {
     showError(t("propose.noModels"));
     return;
   }
-  const button = $("prompt-run");
-  button.disabled = true;
+  setLlmBusy(true);
   $("llm-status").textContent = t("prompt.loading");
   $("prompt-answer").hidden = true;
+  const use = $("prompt-use");
+  if (use) {
+    use.hidden = true;
+  }
+  showMetrics([]);
   setStatus(t("prompt.loading"));
   try {
-    const response = await api(
-      `/api/workspaces/${state.workspace.id}/prompt`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, model }),
-      }
-    );
-    const payload = await response.json();
-    $("prompt-answer").hidden = false;
-    $("prompt-answer").textContent = payload.answer;
+    const payload = await requestPrompt(prompt, model.alias);
+    showAnswer(payload.answer);
     $("llm-status").textContent = t("prompt.done", { model: payload.model });
     setStatus(t("prompt.done", { model: payload.model }));
+    showMetrics(usageParts(payload.usage, t("llm.time")));
   } catch (error) {
     setStatus(t("status.error"));
     showError(error);
     $("llm-status").textContent = "";
   } finally {
-    button.disabled = false;
-    refreshProposeButton();
+    setLlmBusy(false);
   }
+}
+
+async function proposeWithAnalysis() {
+  clearError();
+  if (!state.workspace) {
+    return;
+  }
+  if (state.fields.length && !window.confirm(t("propose.replaceConfirm"))) {
+    return;
+  }
+  const model = selectedModel();
+  if (!model || !model.available) {
+    showError(t("propose.noModels"));
+    return;
+  }
+  const user = $("prompt-text").value.trim();
+  setLlmBusy(true);
+  $("llm-status").textContent = t("llm.analysisLoading");
+  $("prompt-answer").hidden = true;
+  const use = $("prompt-use");
+  if (use) {
+    use.hidden = true;
+  }
+  showMetrics([]);
+  setStatus(t("llm.analysisLoading"));
+  try {
+    const analysis = await requestPrompt(t("llm.analysisPrompt"), model.alias);
+    showAnswer(analysis.answer);
+    $("llm-status").textContent = t("llm.proposingAfterAnalysis");
+    setStatus(t("llm.proposingAfterAnalysis"));
+    const instructions = `${t("llm.analysisPrefix")}\n${analysis.answer}\n\n${user}`;
+    const proposal = await requestPropose(instructions, model.alias);
+    applyProposal(proposal);
+    $("llm-status").textContent = t("propose.done", { model: proposal.model });
+    setStatus(t("propose.done", { model: proposal.model }));
+    showMetrics([
+      ...usageParts(analysis.usage, t("llm.analysisTime")),
+      ...usageParts(proposal.usage, t("llm.proposeTime")),
+    ]);
+  } catch (error) {
+    setStatus(t("status.error"));
+    showError(error);
+    $("llm-status").textContent = "";
+  } finally {
+    setLlmBusy(false);
+  }
+}
+
+function useAnswerAsInstructions() {
+  const answer = $("prompt-answer");
+  const text = $("prompt-text");
+  if (!answer || !text) {
+    return;
+  }
+  text.value = answer.textContent || "";
+  text.focus();
 }
 
 function clearPrompt() {
@@ -1281,10 +1415,15 @@ function clearPrompt() {
     answer.hidden = true;
     answer.textContent = "";
   }
+  const use = $("prompt-use");
+  if (use) {
+    use.hidden = true;
+  }
   const status = $("llm-status");
   if (status) {
     status.textContent = "";
   }
+  showMetrics([]);
 }
 
 function removeField(index) {
@@ -2672,6 +2811,8 @@ function wire() {
   $("toggle-page").addEventListener("click", togglePage);
   $("toggle-text").addEventListener("click", toggleText);
   $("prompt-run").addEventListener("click", runPrompt);
+  $("prompt-use").addEventListener("click", useAnswerAsInstructions);
+  $("propose-analyze").addEventListener("click", proposeWithAnalysis);
   $("propose-model").addEventListener("change", () => {
     refreshProposeButton();
     updateModelWarning();
