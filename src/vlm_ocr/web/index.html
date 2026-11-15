@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>vlm-local-ocr</title>
-    <link rel="stylesheet" href="styles.css?v=19" />
+    <link rel="stylesheet" href="styles.css?v=20" />
   </head>
   <body>
     <header>
@@ -47,26 +47,32 @@
             <span data-i18n="legend.list">lista</span>
           </span>
           <span class="spacer"></span>
-          <button id="toggle-page" type="button" data-i18n="viewer.hideDocument">
+          <button id="toggle-page" type="button" class="ghost" data-i18n="viewer.hideDocument">
             Ocultar documento
           </button>
-          <button id="new" type="button" data-i18n="viewer.home">Inicio</button>
+          <button id="new" type="button" class="ghost" data-i18n="viewer.home">Inicio</button>
         </div>
 
         <div id="work" class="work">
           <section class="work-page">
             <div class="panel-toolbar">
-              <button id="prev" type="button" data-i18n-title="viewer.prev">‹</button>
-              <span id="page-label">1 / 1</span>
-              <button id="next" type="button" data-i18n-title="viewer.next">›</button>
+              <span class="tool-group">
+                <button id="prev" type="button" class="ghost" data-i18n-title="viewer.prev">‹</button>
+                <span id="page-label">1 / 1</span>
+                <button id="next" type="button" class="ghost" data-i18n-title="viewer.next">›</button>
+              </span>
               <span class="spacer"></span>
-              <button id="zoom-out" type="button" data-i18n-title="viewer.zoomOut">−</button>
-              <span id="zoom-label" class="zoom-label">100%</span>
-              <button id="zoom-in" type="button" data-i18n-title="viewer.zoomIn">+</button>
-              <button id="zoom-reset" type="button" data-i18n="viewer.zoomReset">1:1</button>
-              <button id="toggle-text" type="button" data-i18n="viewer.hideText">
-                Ocultar texto
-              </button>
+              <span class="tool-group">
+                <button id="zoom-out" type="button" class="ghost" data-i18n-title="viewer.zoomOut">−</button>
+                <span id="zoom-label" class="zoom-label">100%</span>
+                <button id="zoom-in" type="button" class="ghost" data-i18n-title="viewer.zoomIn">+</button>
+                <button id="zoom-reset" type="button" class="ghost" data-i18n="viewer.zoomReset">1:1</button>
+              </span>
+              <span class="tool-group">
+                <button id="toggle-text" type="button" class="ghost" data-i18n="viewer.hideText">
+                  Ocultar texto
+                </button>
+              </span>
             </div>
             <div class="page-view">
               <div id="page-wrap" class="page-wrap">
@@ -91,64 +97,6 @@
           ></div>
 
           <section id="contract" class="work-ops">
-            <details id="llm-panel" class="llm-panel" open>
-              <summary data-i18n="llm.title">LLM e instrucciones</summary>
-              <div class="toolbar">
-                <label class="inline-field">
-                  <span data-i18n="propose.model">Modelo</span>
-                  <select id="propose-model"></select>
-                </label>
-                <span id="llm-spinner" class="spinner" hidden aria-hidden="true"></span>
-                <span id="llm-status" class="summary"></span>
-              </div>
-              <p id="model-warning" class="field-hint warn" hidden></p>
-              <textarea
-                id="prompt-text"
-                rows="3"
-                data-i18n-placeholder="llm.placeholder"
-              ></textarea>
-              <div class="toolbar">
-                <button id="prompt-run" type="button" data-i18n="prompt.ask">
-                  Preguntar
-                </button>
-                <button
-                  id="prompt-use"
-                  type="button"
-                  data-i18n="llm.useAnswer"
-                  hidden
-                >
-                  Usar respuesta
-                </button>
-                <button
-                  id="propose"
-                  type="button"
-                  data-i18n="propose.button"
-                  data-i18n-title="propose.hint"
-                >
-                  Proponer contrato
-                </button>
-                <button
-                  id="propose-analyze"
-                  type="button"
-                  data-i18n="llm.analyze"
-                  data-i18n-title="llm.analyzeHint"
-                >
-                  Proponer con análisis
-                </button>
-                <button
-                  id="llm-cancel"
-                  type="button"
-                  class="danger"
-                  data-i18n="llm.cancel"
-                  hidden
-                >
-                  Cancelar
-                </button>
-              </div>
-              <p id="llm-metrics" class="field-hint" hidden></p>
-              <pre id="prompt-answer" class="prompt-answer" hidden></pre>
-            </details>
-
             <p id="coach" class="coach" hidden></p>
 
             <div id="selection" class="selection-bar">
@@ -196,119 +144,209 @@
               </span>
             </div>
 
-            <section class="group">
-              <h2 data-i18n="group.contract">Contrato</h2>
-              <div class="toolbar">
-                <button
-                  id="add-field"
-                  type="button"
-                  data-i18n="contract.addField"
-                  data-i18n-title="contract.addFieldHint"
-                >
-                  Añadir campo
-                </button>
-                <button
-                  id="add-field-block"
-                  type="button"
-                  data-i18n="contract.addFieldBlock"
-                  data-i18n-title="contract.addFieldBlockHint"
-                >
-                  Campo desde el bloque
-                </button>
-                <button
-                  id="add-list"
-                  type="button"
-                  data-i18n="contract.addList"
-                  data-i18n-title="contract.addListHint"
-                >
-                  Añadir lista
-                </button>
-                <button
-                  id="import-contract"
-                  type="button"
-                  data-i18n="contract.import"
-                  data-i18n-title="contract.importHint"
-                >
-                  Importar contrato
-                </button>
-                <input
-                  id="contract-file"
-                  type="file"
-                  accept=".json,application/json"
-                  hidden
-                />
-              </div>
-              <div id="fields" class="fields"></div>
-            </section>
+            <details id="step-contract" class="step" open>
+              <summary>
+                <span class="step-num" aria-hidden="true">1</span>
+                <span data-i18n="steps.contract">Contrato</span>
+              </summary>
+              <div class="step-body">
+                <div class="toolbar">
+                  <button
+                    id="add-field"
+                    type="button"
+                    class="secondary"
+                    data-i18n="contract.addField"
+                    data-i18n-title="contract.addFieldHint"
+                  >
+                    Añadir campo
+                  </button>
+                  <button
+                    id="add-list"
+                    type="button"
+                    class="secondary"
+                    data-i18n="contract.addList"
+                    data-i18n-title="contract.addListHint"
+                  >
+                    Añadir lista
+                  </button>
+                  <button
+                    id="import-contract"
+                    type="button"
+                    class="ghost"
+                    data-i18n="contract.import"
+                    data-i18n-title="contract.importHint"
+                  >
+                    Importar contrato
+                  </button>
+                  <button
+                    id="add-field-block"
+                    type="button"
+                    hidden
+                    data-i18n="contract.addFieldBlock"
+                    data-i18n-title="contract.addFieldBlockHint"
+                  >
+                    Campo desde el bloque
+                  </button>
+                  <input
+                    id="contract-file"
+                    type="file"
+                    accept=".json,application/json"
+                    hidden
+                  />
+                </div>
+                <div id="fields" class="fields"></div>
 
-            <details id="templates-panel" class="templates-panel">
-              <summary data-i18n="template.title">Plantillas guardadas</summary>
-              <div class="toolbar">
-                <button
-                  id="templates-refresh"
-                  type="button"
-                  data-i18n="template.refresh"
-                >
-                  Actualizar
-                </button>
+                <details id="llm-panel" class="llm-panel">
+                  <summary data-i18n="steps.llm">Asistente LLM (opcional)</summary>
+                  <div class="toolbar">
+                    <label class="inline-field">
+                      <span data-i18n="propose.model">Modelo</span>
+                      <select id="propose-model"></select>
+                    </label>
+                    <span id="llm-spinner" class="spinner" hidden aria-hidden="true"></span>
+                    <span id="llm-status" class="summary"></span>
+                  </div>
+                  <p id="model-warning" class="field-hint warn" hidden></p>
+                  <textarea
+                    id="prompt-text"
+                    rows="3"
+                    data-i18n-placeholder="llm.placeholder"
+                  ></textarea>
+                  <div class="toolbar">
+                    <button
+                      id="propose"
+                      type="button"
+                      class="secondary"
+                      data-i18n="propose.button"
+                      data-i18n-title="propose.hint"
+                    >
+                      Proponer contrato
+                    </button>
+                    <button
+                      id="propose-analyze"
+                      type="button"
+                      class="secondary"
+                      data-i18n="llm.analyze"
+                      data-i18n-title="llm.analyzeHint"
+                    >
+                      Proponer con análisis
+                    </button>
+                    <button id="prompt-run" type="button" class="ghost" data-i18n="prompt.ask">
+                      Preguntar
+                    </button>
+                    <button
+                      id="prompt-use"
+                      type="button"
+                      class="ghost"
+                      data-i18n="llm.useAnswer"
+                      hidden
+                    >
+                      Usar respuesta
+                    </button>
+                    <button
+                      id="llm-cancel"
+                      type="button"
+                      class="danger"
+                      data-i18n="llm.cancel"
+                      hidden
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                  <p id="llm-metrics" class="field-hint" hidden></p>
+                  <pre id="prompt-answer" class="prompt-answer" hidden></pre>
+                </details>
               </div>
-              <div id="templates-list" class="templates-list"></div>
             </details>
 
-            <section class="group">
-              <h2 data-i18n="group.extract">Extracción</h2>
-              <div class="toolbar">
-                <button
-                  id="extract"
-                  type="button"
-                  class="primary"
-                  data-i18n="contract.extract"
-                  data-i18n-title="contract.extractHint"
-                >
-                  Probar extracción
-                </button>
-                <button
-                  id="homologate"
-                  type="button"
-                  data-i18n="contract.homologate"
-                  data-i18n-title="contract.homologateHint"
-                >
-                  Homologar plantilla
-                </button>
-                <span id="extract-summary" class="summary"></span>
-              </div>
-              <p id="template-info" class="field-hint" hidden></p>
-            </section>
+            <details id="step-extract" class="step">
+              <summary>
+                <span class="step-num" aria-hidden="true">2</span>
+                <span data-i18n="steps.extract">Extraer y validar</span>
+              </summary>
+              <div class="step-body">
+                <div class="toolbar">
+                  <button
+                    id="extract"
+                    type="button"
+                    class="primary"
+                    data-i18n="contract.extract"
+                    data-i18n-title="contract.extractHint"
+                  >
+                    Probar extracción
+                  </button>
+                  <button
+                    id="homologate"
+                    type="button"
+                    class="secondary"
+                    data-i18n="contract.homologate"
+                    data-i18n-title="contract.homologateHint"
+                  >
+                    Homologar plantilla
+                  </button>
+                  <span id="extract-summary" class="summary"></span>
+                </div>
+                <p id="template-info" class="field-hint template-badge" hidden></p>
 
-            <section class="group">
-              <h2 data-i18n="group.export">Exportar</h2>
-              <div class="toolbar">
-                <button
-                  id="export-schema"
-                  type="button"
-                  data-i18n="contract.exportSchema"
-                  data-i18n-title="contract.exportSchemaHint"
-                >
-                  Exportar schema
-                </button>
-                <button
-                  id="export-result"
-                  type="button"
-                  data-i18n="contract.exportResult"
-                  data-i18n-title="contract.exportResultHint"
-                >
-                  Exportar resultado
-                </button>
-                <button
-                  id="export-text"
-                  type="button"
-                  data-i18n="contract.exportText"
-                  data-i18n-title="contract.exportTextHint"
-                >
-                  Exportar texto
-                </button>
+                <details id="result-panel" class="result-panel" hidden>
+                  <summary data-i18n="contract.result">Resultado JSON</summary>
+                  <pre id="result-json"></pre>
+                </details>
+
+                <details id="templates-panel" class="templates-panel">
+                  <summary data-i18n="template.title">Plantillas guardadas</summary>
+                  <div class="toolbar">
+                    <button
+                      id="templates-refresh"
+                      type="button"
+                      class="ghost"
+                      data-i18n="template.refresh"
+                    >
+                      Actualizar
+                    </button>
+                  </div>
+                  <div id="templates-list" class="templates-list"></div>
+                </details>
               </div>
-            </section>
+            </details>
+
+            <details id="step-export" class="step">
+              <summary>
+                <span class="step-num" aria-hidden="true">3</span>
+                <span data-i18n="steps.export">Exportar</span>
+              </summary>
+              <div class="step-body">
+                <div class="toolbar">
+                  <button
+                    id="export-schema"
+                    type="button"
+                    class="secondary"
+                    data-i18n="contract.exportSchema"
+                    data-i18n-title="contract.exportSchemaHint"
+                  >
+                    Exportar schema
+                  </button>
+                  <button
+                    id="export-result"
+                    type="button"
+                    class="secondary"
+                    data-i18n="contract.exportResult"
+                    data-i18n-title="contract.exportResultHint"
+                  >
+                    Exportar resultado
+                  </button>
+                  <button
+                    id="export-text"
+                    type="button"
+                    class="secondary"
+                    data-i18n="contract.exportText"
+                    data-i18n-title="contract.exportTextHint"
+                  >
+                    Exportar texto
+                  </button>
+                </div>
+              </div>
+            </details>
 
             <details class="help">
               <summary data-i18n="contract.helpTitle">Cómo funciona</summary>
@@ -320,17 +358,12 @@
                 <li data-i18n="contract.helpLists"></li>
               </ol>
             </details>
-
-            <details id="result-panel" class="result-panel" hidden>
-              <summary data-i18n="contract.result">Resultado JSON</summary>
-              <pre id="result-json"></pre>
-            </details>
           </section>
         </div>
       </section>
 
       <p id="error" class="error" hidden></p>
     </main>
-    <script src="app.js?v=19"></script>
+    <script src="app.js?v=20"></script>
   </body>
 </html>

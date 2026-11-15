@@ -2870,6 +2870,13 @@ function buildSchema() {
   };
 }
 
+function openStepOf(panel) {
+  const step = panel.closest("details.step");
+  if (step) {
+    step.open = true;
+  }
+}
+
 function showResult(extraction) {
   const panel = $("result-panel");
   const pre = $("result-json");
@@ -2884,6 +2891,7 @@ function showResult(extraction) {
   }
   panel.hidden = false;
   panel.open = true;
+  openStepOf(panel);
   pre.textContent = JSON.stringify(extraction.data, null, 2);
 }
 
@@ -2943,6 +2951,7 @@ async function homologate() {
       const panel = $("templates-panel");
       if (panel) {
         panel.open = true;
+        openStepOf(panel);
       }
       await loadTemplates();
     } else {
