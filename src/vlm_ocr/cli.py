@@ -418,6 +418,9 @@ def _models_parser() -> argparse.ArgumentParser:
     benchmarking.add_argument("--n-ctx", type=int, default=4096)
     benchmarking.add_argument("--max-tokens", type=int, default=1200)
     benchmarking.add_argument("--no-grammar", action="store_true")
+    benchmarking.add_argument(
+        "--vision", action="store_true", help="transcribe el documento con un modelo de visión"
+    )
     benchmarking.add_argument("--out", type=Path)
     return parser
 
@@ -442,6 +445,7 @@ def _models_main(argv: list[str]) -> int:
                 n_ctx=args.n_ctx,
                 max_tokens=args.max_tokens,
                 grammar=not args.no_grammar,
+                vision=args.vision,
             )
             line = json.dumps(record, ensure_ascii=False)
             print(line)
