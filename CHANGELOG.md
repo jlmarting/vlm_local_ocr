@@ -25,6 +25,10 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - SPA (experimental): al enfocar una lista, sus cajas (inicio, fin y líneas) se resaltan en naranja y el botón «Ver en la foto» lleva a la página implicada.
 - SPA (experimental): editor de listas repetidas (`x-item-columns`): roles texto/cantidad/importe/observación, etiquetas de inicio y fin, tabla de artículos y reconstrucción desde el contrato guardado. El extractor aplica los roles a todas las filas; no se selecciona artículo por artículo.
 - Servidor local `vlm-ocr serve` (experimental) (extra `[serve]`: `fastapi`, `uvicorn`, `python-multipart`): SPA bilingüe ES/EN para arrastrar documentos, ver texto y cajas, construir contratos anotados, extraer en determinista, exportar schema/resultado/texto y homologar plantillas. Escucha solo en loopback con token efímero; workspaces persistentes con recientes.
+
+- Modelos Liquid en el catálogo: `lfm3-1.7b` (texto, 256K de contexto), `lfm2-350m-extract` (extracción) y `lfm3-vl-2b` (visión). Los modelos multimodales declaran su `mmproj` y `models fetch` verifica modelo y proyector por sha256.
+- `--vision`: un modelo VL transcribe las páginas rasterizadas (sustituye a RapidOCR) y el pipeline de contrato/verificación/homologación no cambia. Páginas con texto nativo no pasan por el modelo; sin `--model` no hay visión por defecto. `models bench --vision` compara las dos vías.
+- Licencia LFM Open License v1.0 en `licenses/` y en `NOTICE`.
 - Listas repetidas en tickets: `x-item-columns`, `x-stop-labels` obligatorio, `cantidad`, observaciones unidas con espacio + salto de línea, extractor determinista, stop de pagos, fallback al LLM y verificación de precios. Plantillas/homologación por línea (`ItemMap`) con 0 tokens. Ejemplo: `examples/contrato-ticket.schema.json`.
 - Modo `--prompt` con LLM sin contrato: tarea libre sobre el texto, excluyente con `--contract`, modelo explícito y salida md (respuesta) o json (`text` + `answer`); sin gramática ni verificación literal.
 - Texto plano como documento: ficheros `.txt` y `--input-format txt|text` por stdin. Se decodifica en UTF-8 estricto (BOM tolerado), no pasa por OCR y cada línea no vacía es un bloque; vacío o no UTF-8 es error.
@@ -46,6 +50,8 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Changed
 
+- `llama-cpp-python>=0.3.38`: la 0.3.36 no conoce la arquitectura `lfm3` ni el handler multimodal `MTMDChatHandler`.
+- `think: false` también en modelos locales: apaga el razonamiento de las plantillas que exponen `enable_thinking` (LFM3). Sin eso, LFM3 responde con cadena de pensamiento y el JSON sale con placeholders o vacío.
 - SPA (experimental): panel de operaciones reorganizado en tres pasos plegables — ① Contrato (campos, listas, importar y asistente LLM plegado por defecto), ② Extraer y validar (extracción, homologación, plantilla detectada, resultado y plantillas guardadas) y ③ Exportar. La barra de selección queda fija como contexto y el botón duplicado «Campo desde el bloque» desaparece del grupo Contrato (la acción vive en la barra de selección). Los pasos se abren solos cuando el resultado o las plantillas se muestran por programa. Nuevas claves `steps.*` en ES/EN; sin cambios de endpoints ni de lógica de extracción.
 - SPA (experimental): sistema visual con tokens (`--surface`, `--accent`, radios y sombras) y modo oscuro por `prefers-color-scheme`; jerarquía de botones (primario/secundario/discreto/peligro), foco visible, tarjetas de paso y de campo, badge de plantilla y toolbar del visor agrupada en paginación, zoom y texto.
 - SPA: `[hidden]` vuelve a mandar sobre los `display` de componente, de modo que el visor no se pinta en la pantalla de inicio.
@@ -103,6 +109,10 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - OCR y sidecar delimitados como datos no confiables frente a prompt injection.
 
 ### Added
+
+
+### Changed
+
 
 - CLI `vlm-ocr` con salida Markdown (defecto) y JSON.
 - Ingesta de PDFs e imágenes: los PDFs con capa de texto se leen sin OCR; los escaneados se rasterizan a 200 DPI.

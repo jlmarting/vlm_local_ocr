@@ -99,3 +99,28 @@ def test_complete_uses_completion_for_raw(monkeypatch, tmp_path: Path) -> None:
     assert calls[0]["prompt"] == "<|input|>"
     assert "messages" not in calls[0]
     assert "response_format" not in calls[0]
+
+
+def test_disable_thinking_injects_template_flag() -> None:
+    seen: list[dict] = []
+
+    def handler(**kwargs):
+        seen.append(kwargs)
+        return "ok"
+
+    wrapped = llmrun._disable_thinking(handler)
+
+    assert wrapped(llama=None, messages=[]) == "ok"
+    assert seen[0]["enable_thinking"] is False
+
+
+def test_disable_thinking_keeps_explicit_value() -> None:
+    seen: list[dict] = []
+
+    def handler(**kwargs):
+        seen.append(kwargs)
+        return "ok"
+
+    llmrun._disable_thinking(handler)(enable_thinking=True)
+
+    assert seen[0]["enable_thinking"] is True

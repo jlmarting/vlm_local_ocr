@@ -114,6 +114,24 @@ verdad. La regla «stdout es el producto, stderr es el taller» no se negocia.
 **Decisión.** `/api/models` lista también los remotos con `remote`, `available` y `key_env`; se pueden usar si `OLLAMA_API_KEY` está en el entorno del servidor. La UI avisa de que el documento sale de la máquina y nunca selecciona un remoto por defecto.
 **Descartada.** Ocultarlos (el usuario pidió verlos) y usarlos por defecto (rompe la promesa local del proyecto).
 
+## 14. La visión sustituye al OCR, no al extractor
+
+**Contexto.** LFM3-VL-2B puede leer una imagen, pero el proyecto ya tiene contrato, verificación
+literal y homologación probados sobre texto.
+**Decisión.** `--vision` produce **texto por página** (bloques sin caja) y el pipeline existente
+hace el resto. Las páginas con capa de texto nativa no se envían al modelo; sin `--model` no hay
+visión por defecto y no hay caída silenciosa a RapidOCR.
+**Descartada.** Pedir el contrato JSON directamente al VL: se salta la capa determinista y un 2B
+forzando JSON falla más que un OCR mediocre. Si el benchmark lo justifica, será otra decisión.
+
+## 15. `llama-cpp-python>=0.3.38` por la arquitectura `lfm3`
+
+**Contexto.** La 0.3.36 no conoce `LLM_ARCH_LFM3` ni trae `MTMDChatHandler`; cargar el GGUF falla.
+**Decisión.** Subir la cota a 0.3.38, que añade la arquitectura y el handler multimodal (hay
+wheel CPU `py3-none-manylinux`).
+**Descartada.** Servir Liquid por ollama para no tocar la dependencia: rompe la regla de una sola
+vía local GGUF y el CLI ya soporta ollama si hiciera falta.
+
 ---
 
 **Cómo se añade una decisión.** Cuando una ronda cierre una decisión de arquitectura que no sea

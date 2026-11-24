@@ -112,3 +112,44 @@ def test_run_bench_nuextract_reports_json_mode(tmp_path: Path, monkeypatch) -> N
     assert record["mode"] == "json"
     assert "prompt" in calls[0]
     assert "response_format" not in calls[0]
+
+
+def test_run_bench_vision_uses_transcription(tmp_path: Path, monkeypatch) -> None:
+    from vlm_ocr.types import LayoutBlock, PageInput
+
+    runner = _FakeRunner()
+    monkeypatch.setattr(bench, "ingest", lambda doc: [PageInput(0, None, b"png")])
+    monkeypatch.setattr(bench, "runner_for", lambda ref, n_ctx: runner)
+    seen: list[str] = []
+
+    def fake_transcribe(pages, runner, *, max_tokens):
+        seen.append("transcrito")
+        return [LayoutBlock(0, "Linea del VL", 0.0, (0, 0, 0, 0))]
+
+    monkeypatch.setattr(bench, "transcribe_pages", fake_transcribe)
+    ref = catalog.ad_hoc(_model(tmp_path))
+
+    record = bench.run_bench(
+        ref,
+        doc=tmp_path / "doc.pdf",
+        contract_path=_contract(tmp_path),
+        vision=True,
+    )
+
+    assert seen == ["transcrito"]
+    assert record["engine"] == "vision"
+    assert "Linea del VL" in runner.prompts[0].messages[0]["content"]
+
+
+class _FakeRunner:
+    load_time_ms = 1.0
+
+    def __init__(self) -> None:
+        self.prompts = []
+
+    def complete(self, prompt, max_tokens):
+        self.prompts.append(prompt)
+        return json.dumps(EXAMPLE), {"completion_tokens": 2}, "stop"
+
+    def estimate_tokens(self, prompt) -> int:
+        return 1

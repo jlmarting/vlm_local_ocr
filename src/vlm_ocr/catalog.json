@@ -98,5 +98,58 @@
       "prompt_style": "chat",
       "max_tokens": 2048,
       "think": false
-    }  }
+    },
+    "lfm3-1.7b": {
+      "name": "LFM3-1.7B",
+      "kind": "gguf",
+      "params": "1.7B",
+      "file": "LFM3-1.7B-Q4_K_M.gguf",
+      "url": "https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf",
+      "sha256": "3793e1e6e2266919d6e015287221b41100175a98eddaba92e111aed3b05c93c4",
+      "size_bytes": 1099627808,
+      "context": 262144,
+      "license": "LFM-1.0",
+      "license_url": "https://huggingface.co/LiquidAI/LFM3-1.7B/blob/main/LICENSE",
+      "license_file": "licenses/LICENSE-lfm-open-1.0.txt",
+      "redistributable": true,
+      "prompt_style": "chat",
+      "think": false
+    },
+    "lfm2-350m-extract": {
+      "name": "LFM2-350M-Extract",
+      "kind": "gguf",
+      "params": "0.35B",
+      "file": "LFM2-350M-Extract-Q4_K_M.gguf",
+      "url": "https://huggingface.co/LiquidAI/LFM2-350M-Extract-GGUF/resolve/main/LFM2-350M-Extract-Q4_K_M.gguf",
+      "sha256": "687a31c3e7864647aa181e1feb156e4e5da33978c174d7dbf0d289f6014a5621",
+      "size_bytes": 229310080,
+      "context": 32768,
+      "license": "LFM-1.0",
+      "license_url": "https://huggingface.co/LiquidAI/LFM3-1.7B/blob/main/LICENSE",
+      "license_file": "licenses/LICENSE-lfm-open-1.0.txt",
+      "redistributable": true,
+      "prompt_style": "chat"
+    },
+    "lfm3-vl-2b": {
+      "name": "LFM3-VL-2B",
+      "kind": "gguf",
+      "params": "1.9B",
+      "file": "LFM3-VL-2B-Q4_K_M.gguf",
+      "url": "https://huggingface.co/LiquidAI/LFM3-VL-2B-GGUF/resolve/main/LFM3-VL-2B-Q4_K_M.gguf",
+      "sha256": "56dac2e192ff0d9ab8507f4f1aeb4aed0463449bbbefaac79497f041c95f21eb",
+      "size_bytes": 1099627808,
+      "context": 131072,
+      "vision": true,
+      "mmproj_file": "mmproj-LFM3-VL-2B-Q8_0.gguf",
+      "mmproj_url": "https://huggingface.co/LiquidAI/LFM3-VL-2B-GGUF/resolve/main/mmproj-LFM3-VL-2B-Q8_0.gguf",
+      "mmproj_sha256": "c5c5b58d544a18da919172d2d0368090ea1a4a351b6feb7f8a326a264a5918ab",
+      "mmproj_size_bytes": 203031872,
+      "license": "LFM-1.0",
+      "license_url": "https://huggingface.co/LiquidAI/LFM3-1.7B/blob/main/LICENSE",
+      "license_file": "licenses/LICENSE-lfm-open-1.0.txt",
+      "redistributable": true,
+      "prompt_style": "chat",
+      "think": false
+    }
+  }
 }

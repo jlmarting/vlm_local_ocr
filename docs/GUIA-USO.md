@@ -154,6 +154,18 @@ el OCR empieza a inventarse palabras, y ahí ni nosotros ni el LLM hacemos milag
 nuevo. Orientaciones de 90°/270° no están garantizadas (el clasificador distingue 0°/180° por
 línea; giró y prefirió no contarlo).
 
+### «El escaneo es malo: que lo lea un modelo de visión»
+
+```bash
+uv run vlm-ocr models fetch lfm3-vl-2b          # modelo + proyector (1,2 GB)
+uv run vlm-ocr escaneo.pdf --format md --vision --model lfm3-vl-2b
+uv run vlm-ocr escaneo.pdf --format json --contract c.json --vision --model lfm3-vl-2b
+```
+
+`--vision` cambia solo el primer paso: el modelo VL transcribe cada página rasterizada y el
+resto del pipeline (contrato, verificación, homologación) trabaja igual. Las páginas con texto
+nativo no pagan el modelo. Requiere `llama-cpp-python>=0.3.38`.
+
 ### «Tengo el texto en el portapapeles / no quiero fichero temporal»
 
 ```bash
@@ -211,6 +223,7 @@ uv run vlm-ocr models list --verify           # + sha256 de los presentes
 uv run vlm-ocr models fetch qwen05b           # descarga verificada
 uv run vlm-ocr models fetch qwen25-3b --accept-license
 uv run vlm-ocr models bench llama32-3b --doc nomina.pdf --contract c.json --out bench.jsonl
+uv run vlm-ocr models bench lfm3-vl-2b --doc escaneo.pdf --contract c.json --vision
 ```
 
 Precedencia: `--model` (alias o ruta) > `--profile fast|balanced|quality|extract` > defecto

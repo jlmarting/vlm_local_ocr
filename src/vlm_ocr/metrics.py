@@ -18,7 +18,7 @@ def empty_report() -> dict[str, Any]:
             "rasterized_pages": None,
             "dpi": None,
         },
-        "ocr": {"time_ms": None, "blocks": None, "mean_confidence": None},
+        "ocr": {"engine": None, "time_ms": None, "blocks": None, "mean_confidence": None},
         "llm": {
             "enabled": False,
             "model": None,
@@ -34,6 +34,7 @@ def empty_report() -> dict[str, Any]:
             "max_tokens": None,
         },
         "output": {"format": None, "size_bytes": None},
+        "vision": {"pages": None, "time_ms": None},
         "extract": {
             "deterministic": None,
             "llm": False,

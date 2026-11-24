@@ -89,6 +89,9 @@ El CLI busca cada GGUF en `models/` del repo, `./models/` o el directorio de dat
 | `qwen05b` | Qwen2.5-0.5B-Instruct Q4_K_M | 0,5 GB | Apache-2.0 | `fast` | sí |
 | `nuextract-tiny` | NuExtract-1.5-tiny Q4_K_M | 0,4 GB | MIT | `extract` | sí |
 | `qwen25-3b` | Qwen2.5-3B-Instruct Q4_K_M | 2,0 GB | qwen-research | — | **no** (descarga aparte) |
+| `lfm3-1.7b` | LFM3-1.7B Q4_K_M | 1,0 GB | LFM Open License v1.0 | — | sí, con su licencia |
+| `lfm2-350m-extract` | LFM2-350M-Extract Q4_K_M | 0,2 GB | LFM Open License v1.0 | — | sí, con su licencia |
+| `lfm3-vl-2b` | LFM3-VL-2B Q4_K_M + `mmproj` | 1,2 GB | LFM Open License v1.0 | — | sí, con su licencia |
 | `cloud-deepseek` | DeepSeek V4.1 Flash en ollama | — | ollama-cloud | — | no (API) |
 
 ```bash
@@ -103,6 +106,22 @@ uv run vlm-ocr doc.pdf --format json --contract c.json --profile fast
 - Sin `--accept-license` no se descarga un modelo cuya licencia exige aceptación; sin `HF_TOKEN` no se descargan repos *gated*.
 - Alias propios: `<config>/vlm-local-ocr/catalog.json` se fusiona sobre el del paquete (mismo alias → gana el del usuario); `<config>` depende del SO (ver rutas por plataforma).
 - El paquete solo incluye modelos **redistribuibles**; Qwen2.5-3B (`qwen-research`) queda fuera y se descarga aparte.
+- Los alias de Liquid no ocupan perfil (`--profile balanced` sigue siendo `llama32-3b`): se eligen con `--model`.
+- `lfm3-vl-2b` es multimodal: `models fetch` descarga también su proyector `mmproj` (203 MB) y verifica los dos sha256. Requiere `llama-cpp-python>=0.3.38`.
+- `think: false` en la entrada apaga el bloque de razonamiento cuando la plantilla del GGUF lo soporta (`lfm3-1.7b`, `lfm3-vl-2b`). Con LFM3 encendido, el modelo gasta tokens pensando y, con presupuesto corto, devuelve los placeholders del esquema.
+
+### Visión: modelo VL como OCR
+
+```bash
+uv run vlm-ocr models fetch lfm3-vl-2b
+uv run vlm-ocr escaneo.pdf --format md --vision --model lfm3-vl-2b
+uv run vlm-ocr escaneo.pdf --format json --contract c.json --vision --model lfm3-vl-2b
+```
+
+`--vision` sustituye a RapidOCR: cada página rasterizada se transcribe con el modelo VL y ese
+texto entra en el pipeline de siempre (contrato, verificación, homologación, plantillas). Las
+páginas con capa de texto nativa no pasan por el modelo. Sin `--model` no hay visión por
+defecto (error con hint) y no existe caída silenciosa a OCR si el modelo falla.
 
 ### Proveedor remoto (ollama)
 
