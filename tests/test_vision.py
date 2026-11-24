@@ -155,3 +155,31 @@ def test_vision_prompt_is_literal() -> None:
 
     assert "No traduzcas" in vision.VISION_PROMPT
     assert prompt.text_for_tokens == vision.VISION_PROMPT
+
+
+def test_vision_runner_sends_plain_text_without_images(tmp_path: Path, monkeypatch) -> None:
+    captured: dict = {}
+
+    class FakeLlama:
+        def __init__(self, **kwargs):
+            pass
+
+        def create_chat_completion(self, messages, **kwargs):
+            captured["messages"] = messages
+            return {
+                "choices": [{"message": {"content": '{"a": 1}'}, "finish_reason": "stop"}],
+                "usage": {},
+            }
+
+    monkeypatch.setattr(llmrun, "Llama", FakeLlama)
+    class FakeHandler:
+        def __init__(self, **kwargs):
+            pass
+
+    monkeypatch.setattr(llmrun, "_mtmd_handler", lambda: FakeHandler)
+    ref = _ref(tmp_path)
+    runner = llmrun.VisionRunner(ref)
+
+    runner.complete(llmrun.BuiltPrompt(messages=[{"role": "user", "content": "hola"}]), max_tokens=8)
+
+    assert captured["messages"] == [{"role": "user", "content": "hola"}]

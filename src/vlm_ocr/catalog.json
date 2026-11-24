@@ -112,7 +112,8 @@
       "license_url": "https://huggingface.co/LiquidAI/LFM3-1.7B/blob/main/LICENSE",
       "license_file": "licenses/LICENSE-lfm-open-1.0.txt",
       "redistributable": true,
-      "prompt_style": "chat"
+      "prompt_style": "chat",
+      "think": false
     },
     "lfm2-350m-extract": {
       "name": "LFM2-350M-Extract",
@@ -147,7 +148,8 @@
       "license_url": "https://huggingface.co/LiquidAI/LFM3-1.7B/blob/main/LICENSE",
       "license_file": "licenses/LICENSE-lfm-open-1.0.txt",
       "redistributable": true,
-      "prompt_style": "chat"
+      "prompt_style": "chat",
+      "think": false
     }
   }
 }
