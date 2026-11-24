@@ -240,6 +240,16 @@ def _models_list(args: argparse.Namespace) -> int:
             status = "verificado" if catalog.verify_file(entry, path) else "hash incorrecto"
         else:
             status = "presente"
+        mmproj = catalog.find_mmproj(entry)
+        mmproj_status = "—"
+        if entry.vision:
+            mmproj_status = "presente" if mmproj is not None else "—"
+            if mmproj is not None and args.verify:
+                mmproj_status = (
+                    "verificado"
+                    if catalog.verify_mmproj(entry, mmproj)
+                    else "hash incorrecto"
+                )
         rows.append(
             {
                 "alias": alias,
@@ -250,12 +260,15 @@ def _models_list(args: argparse.Namespace) -> int:
                 "profile": entry.profile or "—",
                 "status": status,
                 "path": str(path) if path is not None else None,
+                "vision": entry.vision,
+                "mmproj_status": mmproj_status,
+                "mmproj_path": str(mmproj) if mmproj is not None else None,
             }
         )
     if args.json:
         print(json.dumps(rows, ensure_ascii=False))
         return 0
-    header = ("ALIAS", "NOMBRE", "TAMAÑO", "LICENCIA", "PERFIL", "ESTADO")
+    header = ("ALIAS", "NOMBRE", "TAMAÑO", "LICENCIA", "PERFIL", "VISIÓN", "ESTADO")
     cells = [
         (
             str(row["alias"]),
@@ -263,6 +276,7 @@ def _models_list(args: argparse.Namespace) -> int:
             _human_size(row["size_bytes"]),
             str(row["license"]),
             str(row["profile"]),
+            "sí" if row["vision"] else "—",
             str(row["status"]),
         )
         for row in rows

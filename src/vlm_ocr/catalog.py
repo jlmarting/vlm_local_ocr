@@ -283,6 +283,13 @@ def find_downloaded(entry: ModelEntry) -> Path | None:
     return None
 
 
+def verify_mmproj(entry: ModelEntry, path: Path | str) -> bool:
+    """¿El ``mmproj`` coincide con el sha256 del catálogo?"""
+    if not entry.mmproj_sha256:
+        return False
+    return sha256_file(path) == entry.mmproj_sha256
+
+
 def find_mmproj(entry: ModelEntry) -> Path | None:
     """Fichero ``mmproj`` del modelo de visión, en los directorios de búsqueda."""
     if not entry.vision or not entry.mmproj_file:
@@ -449,23 +456,55 @@ def fetch(
 
     directory = Path(dest) if dest is not None else default_dest()
     directory.mkdir(parents=True, exist_ok=True)
-    target = directory / str(entry.file)
     say = progress or (lambda message: print(message))
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
 
+    # El proyector va primero: si falla, no deja un modelo grande a medias.
+    if entry.vision:
+        _download_verified(
+            url=str(entry.mmproj_url),
+            sha256=str(entry.mmproj_sha256),
+            size_bytes=entry.mmproj_size_bytes,
+            target=directory / str(entry.mmproj_file),
+            headers=headers,
+            say=say,
+            label=f"{alias} (mmproj)",
+        )
+    return _download_verified(
+        url=str(entry.url),
+        sha256=str(entry.sha256),
+        size_bytes=entry.size_bytes,
+        target=directory / str(entry.file),
+        headers=headers,
+        say=say,
+        label=alias,
+    )
+
+
+def _download_verified(
+    *,
+    url: str,
+    sha256: str,
+    size_bytes: int | None,
+    target: Path,
+    headers: dict[str, str],
+    say: Callable[[str], None],
+    label: str,
+) -> Path:
+    """Descarga con ``.part``, verifica sha256 y renombra; si falla, no deja destino."""
     if target.is_file():
-        if verify_file(entry, target):
+        if sha256_file(target) == sha256:
             say(f"modelo ya presente y verificado: {target}")
             return target
         say(f"hash incorrecto en {target}; se vuelve a descargar")
         target.unlink()
 
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
-    request = urllib.request.Request(str(entry.url), headers=headers)
+    request = urllib.request.Request(url, headers=headers)
     temporary = target.with_suffix(target.suffix + ".part")
-    say(f"descargando {entry.url}")
+    say(f"descargando {url}")
     try:
         with urllib.request.urlopen(request, timeout=60) as response, temporary.open("wb") as out:
-            total = int(response.headers.get("Content-Length") or 0) or entry.size_bytes or 0
+            total = int(response.headers.get("Content-Length") or 0) or size_bytes or 0
             done = 0
             printed = -1
             while True:
@@ -478,24 +517,22 @@ def fetch(
                     percent = done * 100 // total
                     if percent // 5 != printed // 5:
                         printed = percent
-                        megabytes = done // (1024 * 1024)
-                        total_mb = total // (1024 * 1024)
-                        say(f"{percent}% ({megabytes} MB de {total_mb} MB)")
+                        say(f"{percent}% ({done // (1024 * 1024)} MB de {total // (1024 * 1024)} MB)")
     except urllib.error.HTTPError as exc:
         temporary.unlink(missing_ok=True)
         if exc.code == 401:
             raise CatalogError(
-                f"401 al descargar {entry.url}: acepta la licencia en Hugging Face y "
+                f"401 al descargar {url}: acepta la licencia en Hugging Face y "
                 "exporta HF_TOKEN"
             ) from exc
-        raise CatalogError(f"error HTTP {exc.code} al descargar {entry.url}") from exc
+        raise CatalogError(f"error HTTP {exc.code} al descargar {url}") from exc
     except urllib.error.URLError as exc:
         temporary.unlink(missing_ok=True)
-        raise CatalogError(f"no se pudo descargar {entry.url}: {exc.reason}") from exc
+        raise CatalogError(f"no se pudo descargar {url}: {exc.reason}") from exc
 
-    if not verify_file(entry, temporary):
+    if sha256_file(temporary) != sha256:
         temporary.unlink(missing_ok=True)
-        raise CatalogError(f"sha256 no coincide para {alias}: descarga corrupta")
+        raise CatalogError(f"sha256 no coincide para {label}: descarga corrupta")
     temporary.rename(target)
     say(f"modelo listo: {target}")
     return target

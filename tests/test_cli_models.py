@@ -363,3 +363,28 @@ def test_max_tokens_must_be_positive(tmp_path: Path, capsys) -> None:
 
     assert code == 2
     assert "--max-tokens" in capsys.readouterr().err
+
+
+def test_models_list_json_marks_vision_and_mmproj(
+    capsys, install, monkeypatch, tmp_path: Path
+) -> None:
+    directory = install(
+        {
+            "v": gguf(
+                vision=True,
+                mmproj_file="mm.gguf",
+                mmproj_url="https://example.com/mm.gguf",
+                mmproj_sha256="b" * 64,
+                mmproj_size_bytes=5,
+            )
+        }
+    )
+    (directory / "m.gguf").write_bytes(b"")
+    (directory / "mm.gguf").write_bytes(b"")
+
+    assert cli.main(["models", "list", "--json"]) == 0
+
+    rows = json.loads(capsys.readouterr().out)
+    assert rows[0]["vision"] is True
+    assert rows[0]["mmproj_status"] == "presente"
+    assert rows[0]["mmproj_path"] == str(directory / "mm.gguf")
