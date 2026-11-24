@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import catalog, extract, homologate, inputs, metrics, templates, verify
+from . import catalog, extract, homologate, inputs, metrics, templates, verify, vision
 from .annotations import field_map, has_annotations, item_hints
 from .bench import run_bench
 from .contract import (
@@ -23,6 +23,7 @@ from .contract import (
 from .errors import InputError
 from .ingest import ingest
 from .layout import native_blocks, rows_text
+from .llmrun import runner_for
 from .ocr import ocr_pages
 from .output import to_answer_json, to_json_payload, to_markdown, to_text_json
 
@@ -83,6 +84,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--no-llm",
         action="store_true",
         help="solo asignación determinista: no carga modelo",
+    )
+    parser.add_argument(
+        "--vision",
+        action="store_true",
+        help="transcribe las páginas con un modelo de visión (requiere --model)",
     )
     parser.add_argument(
         "--strict",
@@ -508,7 +514,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.instructions is not None and args.contract is None:
         print("error: --instructions requiere --contract", file=sys.stderr)
         return 2
-    if args.format == "md" and (
+    if args.format == "md" and not (
+        args.vision and args.contract is None and args.instructions is None
+    ) and (
         args.contract
         or args.instructions
         or (args.prompt is None and (args.model or args.profile))
@@ -518,6 +526,36 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+
+    vision_ref: catalog.ModelRef | None = None
+    if args.vision:
+        if args.prompt is not None:
+            print(
+                "error: --vision no se combina con --prompt en esta versión",
+                file=sys.stderr,
+            )
+            return 2
+        if args.no_llm:
+            print("error: --vision requiere el LLM; quita --no-llm", file=sys.stderr)
+            return 2
+        if args.model is None:
+            print(
+                "error: --vision necesita un modelo con visión; usa --model lfm3-vl-2b",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            vision_ref = catalog.resolve(args.model)
+        except catalog.CatalogError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        if not vision_ref.entry.vision:
+            print(
+                f"error: {vision_ref.label} no declara visión en el catálogo; "
+                "usa --model lfm3-vl-2b",
+                file=sys.stderr,
+            )
+            return 2
 
     start = time.perf_counter()
     report = metrics.empty_report() if (args.metrics or args.metrics_out) else None
@@ -677,11 +715,31 @@ def main(argv: list[str] | None = None) -> int:
             raster_pages = {page.index for page in pages if page.image_png is not None}
 
         ocr_start = time.perf_counter()
-        blocks = ocr_pages(pages, lang=args.lang)
+        vision_pages = 0
+        if vision_ref is not None:
+            runner = runner_for(vision_ref, n_ctx=args.n_ctx)
+            native_pages = [page for page in pages if page.text is not None]
+            blocks = ocr_pages(native_pages, lang=args.lang)
+            blocks += vision.transcribe_pages(
+                pages, runner, max_tokens=args.max_tokens or 1200
+            )
+            vision_pages = sum(
+                1 for page in pages if page.text is None and page.image_png is not None
+            )
+        else:
+            blocks = ocr_pages(pages, lang=args.lang)
         if report is not None:
+            report["ocr"]["engine"] = "vision" if vision_ref is not None else "rapidocr"
             report["ocr"]["time_ms"] = _elapsed_ms(ocr_start)
             report["ocr"]["blocks"] = len(blocks)
-            report["ocr"]["mean_confidence"] = metrics.mean_confidence(blocks, raster_pages)
+            if vision_ref is None:
+                report["ocr"]["mean_confidence"] = metrics.mean_confidence(
+                    blocks, raster_pages
+                )
+            report["vision"] = {
+                "pages": vision_pages,
+                "time_ms": _elapsed_ms(ocr_start) if vision_ref is not None else None,
+            }
 
         if args.prompt is not None:
             document_text = to_markdown(blocks)

@@ -57,6 +57,7 @@ def test_empty_report_has_stable_shape() -> None:
         "ocr",
         "llm",
         "output",
+        "vision",
         "extract",
         "template",
         "verify",
