@@ -176,14 +176,14 @@ def test_models_list_prints_a_row_per_alias(capsys, install) -> None:
     assert {"a", "b"} <= aliases
 
 
-def test_models_list_json_has_six_real_entries(capsys, monkeypatch, tmp_path: Path) -> None:
+def test_models_list_json_has_real_entries(capsys, monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(catalog, "user_catalog_path", lambda: tmp_path / "nada.json")
 
     assert cli.main(["models", "list", "--json"]) == 0
 
     rows = json.loads(capsys.readouterr().out)
-    assert len(rows) == 6
-    assert {row["alias"] for row in rows} >= {"llama32-3b", "nuextract-tiny"}
+    assert len(rows) == 9
+    assert {row["alias"] for row in rows} >= {"llama32-3b", "nuextract-tiny", "lfm3-1.7b"}
 
 
 def test_models_list_marks_downloaded(capsys, install) -> None:

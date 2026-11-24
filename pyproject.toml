@@ -25,7 +25,7 @@ dependencies = [
     "rapidocr>=3.0",
     "onnxruntime>=1.17",
     "pillow>=10",
-    "llama-cpp-python>=0.3.19",
+    "llama-cpp-python>=0.3.38",
     "jsonschema>=4.20",
 ]
 

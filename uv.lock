@@ -268,7 +268,7 @@ wheels = [
 
 [[package]]
 name = "llama-cpp-python"
-version = "0.3.36"
+version = "0.3.38"
 source = { registry = "https://abetlen.github.io/llama-cpp-python/whl/cpu" }
 dependencies = [
     { name = "diskcache" },
@@ -278,14 +278,14 @@ dependencies = [
     { name = "typing-extensions" },
 ]
 wheels = [
-    { url = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.36/llama_cpp_python-0.3.36-py3-none-linux_riscv64.whl" },
-    { url = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.36/llama_cpp_python-0.3.36-py3-none-macosx_11_0_arm64.whl" },
-    { url = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.36/llama_cpp_python-0.3.36-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl" },
-    { url = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.36/llama_cpp_python-0.3.36-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl" },
-    { url = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.36/llama_cpp_python-0.3.36-py3-none-musllinux_1_2_aarch64.whl" },
-    { url = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.36/llama_cpp_python-0.3.36-py3-none-musllinux_1_2_x86_64.whl" },
-    { url = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.36/llama_cpp_python-0.3.36-py3-none-pyemscripten_2026_0_wasm32.whl" },
-    { url = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.36/llama_cpp_python-0.3.36-py3-none-win_amd64.whl" },
+    { url = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.38/llama_cpp_python-0.3.38-py3-none-linux_riscv64.whl", hash = "sha256:651f90a35c1026191b57051dbec745ec34ea82bbd07f739a79cbc2f8ec90db74" },
+    { url = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.38/llama_cpp_python-0.3.38-py3-none-macosx_11_0_arm64.whl", hash = "sha256:1b239fcfd73288435d09f30a1c46488132cfa65a14c0d3fb71dc51daf355e197" },
+    { url = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.38/llama_cpp_python-0.3.38-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:ba02704e16b02e2f6f85b0c9b01f6efcb86b8427385f825788493d949a80778a" },
+    { url = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.38/llama_cpp_python-0.3.38-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:9a27213ff2b65614f3a25d87cf1721829588ed475650e84ded16a8dedb033426" },
+    { url = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.38/llama_cpp_python-0.3.38-py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:72ede898e86e5bf87ef58f77eb783f4bcdc935f7c487dd439242db8c15081726" },
+    { url = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.38/llama_cpp_python-0.3.38-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:8d0d83923a702dbaa76b00c41c5650308e277e2a406daa0db1ee246b2a1646e1" },
+    { url = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.38/llama_cpp_python-0.3.38-py3-none-pyemscripten_2026_0_wasm32.whl", hash = "sha256:158494fd276988fc1f4b3f9d4bbd706b7736c5175fe5fe1ad5a437befda798f7" },
+    { url = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.38/llama_cpp_python-0.3.38-py3-none-win_amd64.whl", hash = "sha256:8c6a06b7128cd9dff06e9c3d918e6a7a7f95b39554a1bec12e84537df9a4bdf4" },
 ]
 
 [[package]]
@@ -1276,7 +1276,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "jsonschema", specifier = ">=4.20" },
-    { name = "llama-cpp-python", specifier = ">=0.3.19", index = "https://abetlen.github.io/llama-cpp-python/whl/cpu" },
+    { name = "llama-cpp-python", specifier = ">=0.3.38", index = "https://abetlen.github.io/llama-cpp-python/whl/cpu" },
     { name = "onnxruntime", specifier = ">=1.17" },
     { name = "pillow", specifier = ">=10" },
     { name = "pypdfium2", specifier = ">=4.30" },

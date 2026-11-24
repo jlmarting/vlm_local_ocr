@@ -235,6 +235,9 @@ def test_default_alias_ignores_download_state(install) -> None:
 
 PACKAGED = [
     "cloud-deepseek",
+    "lfm2-350m-extract",
+    "lfm3-1.7b",
+    "lfm3-vl-2b",
     "llama32-3b",
     "nuextract-tiny",
     "phi4mini",
@@ -253,7 +256,7 @@ def test_packaged_catalog_ships_in_the_package() -> None:
     assert resources.files("vlm_ocr").joinpath("catalog.json").is_file()
 
 
-def test_packaged_catalog_has_the_six_models() -> None:
+def test_packaged_catalog_has_the_expected_models() -> None:
     assert sorted(packaged_entries()) == PACKAGED
 
 

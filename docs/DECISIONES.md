@@ -102,6 +102,24 @@ env, tmp_home)`, no una VM.
 **Descartada.** Métricas mezcladas en stdout: rompe `vlm-ocr doc.pdf | jq .` y todo pipeline de
 verdad. La regla «stdout es el producto, stderr es el taller» no se negocia.
 
+## 12. La visión sustituye al OCR, no al extractor
+
+**Contexto.** LFM3-VL-2B puede leer una imagen, pero el proyecto ya tiene contrato, verificación
+literal y homologación probados sobre texto.
+**Decisión.** `--vision` produce **texto por página** (bloques sin caja) y el pipeline existente
+hace el resto. Las páginas con capa de texto nativa no se envían al modelo; sin `--model` no hay
+visión por defecto y no hay caída silenciosa a RapidOCR.
+**Descartada.** Pedir el contrato JSON directamente al VL: se salta la capa determinista y un 2B
+forzando JSON falla más que un OCR mediocre. Si el benchmark lo justifica, será otra decisión.
+
+## 13. `llama-cpp-python>=0.3.38` por la arquitectura `lfm3`
+
+**Contexto.** La 0.3.36 no conoce `LLM_ARCH_LFM3` ni trae `MTMDChatHandler`; cargar el GGUF falla.
+**Decisión.** Subir la cota a 0.3.38, que añade la arquitectura y el handler multimodal (hay
+wheel CPU `py3-none-manylinux`).
+**Descartada.** Servir Liquid por ollama para no tocar la dependencia: rompe la regla de una sola
+vía local GGUF y el CLI ya soporta ollama si hiciera falta.
+
 ---
 
 **Cómo se añade una decisión.** Cuando una ronda cierre una decisión de arquitectura que no sea

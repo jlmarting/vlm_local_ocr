@@ -24,6 +24,9 @@ Dependencias y componentes de terceros:
     https://www.llama.com/llama3_2/license/
   - **NuExtract-1.5-tiny** — MIT, © NuMind.
     https://huggingface.co/numind/NuExtract-1.5-tiny
+  - **LFM3-1.7B**, **LFM2-350M-Extract** y **LFM3-VL-2B** — LFM Open License v1.0, © Liquid AI
+    (uso comercial permitido por debajo de 10 M USD de facturación anual).
+    https://huggingface.co/LiquidAI
 
   **Qwen2.5-3B-Instruct** (licencia `qwen-research`) **no se empaqueta**: se descarga aparte
   con `vlm-ocr models fetch qwen25-3b --accept-license` aceptando su licencia.

@@ -9,6 +9,14 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- Modelos Liquid en el catálogo: `lfm3-1.7b` (texto, 256K de contexto), `lfm2-350m-extract` (extracción) y `lfm3-vl-2b` (visión). Los modelos multimodales declaran su `mmproj` y `models fetch` verifica modelo y proyector por sha256.
+- `--vision`: un modelo VL transcribe las páginas rasterizadas (sustituye a RapidOCR) y el pipeline de contrato/verificación/homologación no cambia. Páginas con texto nativo no pasan por el modelo; sin `--model` no hay visión por defecto. `models bench --vision` compara las dos vías.
+- Licencia LFM Open License v1.0 en `licenses/` y en `NOTICE`.
+
+### Changed
+
+- `llama-cpp-python>=0.3.38`: la 0.3.36 no conoce la arquitectura `lfm3` ni el handler multimodal `MTMDChatHandler`.
+
 - Listas repetidas en tickets: `x-item-columns`, `x-stop-labels` obligatorio, `cantidad`, observaciones unidas con espacio + salto de línea, extractor determinista, stop de pagos, fallback al LLM y verificación de precios. Plantillas/homologación por línea (`ItemMap`) con 0 tokens. Ejemplo: `examples/contrato-ticket.schema.json`.
 - Modo `--prompt` con LLM sin contrato: tarea libre sobre el texto, excluyente con `--contract`, modelo explícito y salida md (respuesta) o json (`text` + `answer`); sin gramática ni verificación literal.
 - Texto plano como documento: ficheros `.txt` y `--input-format txt|text` por stdin. Se decodifica en UTF-8 estricto (BOM tolerado), no pasa por OCR y cada línea no vacía es un bloque; vacío o no UTF-8 es error.
@@ -76,6 +84,14 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - OCR y sidecar delimitados como datos no confiables frente a prompt injection.
 
 ### Added
+
+- Modelos Liquid en el catálogo: `lfm3-1.7b` (texto, 256K de contexto), `lfm2-350m-extract` (extracción) y `lfm3-vl-2b` (visión). Los modelos multimodales declaran su `mmproj` y `models fetch` verifica modelo y proyector por sha256.
+- `--vision`: un modelo VL transcribe las páginas rasterizadas (sustituye a RapidOCR) y el pipeline de contrato/verificación/homologación no cambia. Páginas con texto nativo no pasan por el modelo; sin `--model` no hay visión por defecto. `models bench --vision` compara las dos vías.
+- Licencia LFM Open License v1.0 en `licenses/` y en `NOTICE`.
+
+### Changed
+
+- `llama-cpp-python>=0.3.38`: la 0.3.36 no conoce la arquitectura `lfm3` ni el handler multimodal `MTMDChatHandler`.
 
 - CLI `vlm-ocr` con salida Markdown (defecto) y JSON.
 - Ingesta de PDFs e imágenes: los PDFs con capa de texto se leen sin OCR; los escaneados se rasterizan a 200 DPI.
