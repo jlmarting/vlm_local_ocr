@@ -16,6 +16,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 ### Changed
 
 - `llama-cpp-python>=0.3.38`: la 0.3.36 no conoce la arquitectura `lfm3` ni el handler multimodal `MTMDChatHandler`.
+- `think: false` también en modelos locales: apaga el razonamiento de las plantillas que exponen `enable_thinking` (LFM3). Sin eso, LFM3 responde con cadena de pensamiento y el JSON sale con placeholders o vacío.
 
 - Listas repetidas en tickets: `x-item-columns`, `x-stop-labels` obligatorio, `cantidad`, observaciones unidas con espacio + salto de línea, extractor determinista, stop de pagos, fallback al LLM y verificación de precios. Plantillas/homologación por línea (`ItemMap`) con 0 tokens. Ejemplo: `examples/contrato-ticket.schema.json`.
 - Modo `--prompt` con LLM sin contrato: tarea libre sobre el texto, excluyente con `--contract`, modelo explícito y salida md (respuesta) o json (`text` + `answer`); sin gramática ni verificación literal.
@@ -92,6 +93,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 ### Changed
 
 - `llama-cpp-python>=0.3.38`: la 0.3.36 no conoce la arquitectura `lfm3` ni el handler multimodal `MTMDChatHandler`.
+- `think: false` también en modelos locales: apaga el razonamiento de las plantillas que exponen `enable_thinking` (LFM3). Sin eso, LFM3 responde con cadena de pensamiento y el JSON sale con placeholders o vacío.
 
 - CLI `vlm-ocr` con salida Markdown (defecto) y JSON.
 - Ingesta de PDFs e imágenes: los PDFs con capa de texto se leen sin OCR; los escaneados se rasterizan a 200 DPI.

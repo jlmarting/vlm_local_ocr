@@ -108,6 +108,7 @@ uv run vlm-ocr doc.pdf --format json --contract c.json --profile fast
 - El paquete solo incluye modelos **redistribuibles**; Qwen2.5-3B (`qwen-research`) queda fuera y se descarga aparte.
 - Los alias de Liquid no ocupan perfil (`--profile balanced` sigue siendo `llama32-3b`): se eligen con `--model`.
 - `lfm3-vl-2b` es multimodal: `models fetch` descarga también su proyector `mmproj` (203 MB) y verifica los dos sha256. Requiere `llama-cpp-python>=0.3.38`.
+- `think: false` en la entrada apaga el bloque de razonamiento cuando la plantilla del GGUF lo soporta (`lfm3-1.7b`, `lfm3-vl-2b`). Con LFM3 encendido, el modelo gasta tokens pensando y, con presupuesto corto, devuelve los placeholders del esquema.
 
 ### Visión: modelo VL como OCR
 
