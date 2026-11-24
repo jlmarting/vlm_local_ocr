@@ -26,6 +26,7 @@ class BuiltPrompt:
     raw: str | None = None
     response_format: dict[str, Any] | None = None
     text_for_tokens: str = ""
+    images: tuple[bytes, ...] = ()
 
 
 class Runner(Protocol):
@@ -87,6 +88,84 @@ class LocalRunner:
             content = choice["text"]
         usage = response.get("usage")
         return content, usage if isinstance(usage, dict) else None, choice.get("finish_reason")
+
+
+def _mtmd_handler() -> Any:
+    """Handler multimodal de llama.cpp; exige una versión con ``MTMDChatHandler``."""
+    try:
+        from llama_cpp.llama_chat_format import MTMDChatHandler
+    except ImportError as exc:
+        raise ContractError(
+            "la visión requiere llama-cpp-python>=0.3.38; actualiza la dependencia"
+        ) from exc
+    return MTMDChatHandler
+
+
+class VisionRunner:
+    """Transcribe imágenes con un GGUF multimodal (modelo + ``mmproj``)."""
+
+    def __init__(self, ref: ModelRef, n_ctx: int = 4096) -> None:
+        if Llama is None:
+            raise ContractError(
+                "llama-cpp-python no está instalado; instálalo para usar --vision"
+            )
+        if ref.path is None:
+            raise CatalogError(f"el modelo {ref.label} no está descargado")
+        if ref.mmproj_path is None:
+            raise CatalogError(
+                f"falta el proyector (mmproj) {ref.entry.mmproj_file} de {ref.label}: "
+                f"vlm-ocr models fetch {ref.label}"
+            )
+        handler_class = _mtmd_handler()
+        start = perf_counter()
+        try:
+            handler = handler_class(clip_model_path=str(ref.mmproj_path), verbose=False)
+            self._llm = Llama(
+                model_path=str(ref.path),
+                chat_handler=handler,
+                n_ctx=n_ctx,
+                verbose=False,
+            )
+        except Exception as exc:
+            raise ContractError(
+                f"no se pudo cargar el modelo de visión {ref.path}: {exc}"
+            ) from exc
+        self.load_time_ms: float = round((perf_counter() - start) * 1000, 1)
+
+    def estimate_tokens(self, prompt: BuiltPrompt) -> int:
+        return max(1, len(prompt.text_for_tokens or prompt.raw or "") // 4)
+
+    def complete(
+        self, prompt: BuiltPrompt, max_tokens: int
+    ) -> tuple[str, dict[str, Any] | None, str | None]:
+        content: list[dict[str, Any]] = [
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": "data:image/png;base64," + _b64(prompt_image)
+                },
+            }
+            for prompt_image in prompt.images
+        ]
+        content.append({"type": "text", "text": prompt.text_for_tokens})
+        response = self._llm.create_chat_completion(
+            messages=[{"role": "user", "content": content}],
+            temperature=0,
+            max_tokens=max_tokens,
+        )
+        choice = response["choices"][0]
+        usage = response.get("usage")
+        return (
+            choice["message"]["content"],
+            usage if isinstance(usage, dict) else None,
+            choice.get("finish_reason"),
+        )
+
+
+def _b64(data: bytes) -> str:
+    from base64 import b64encode
+
+    return b64encode(data).decode("ascii")
 
 
 class OllamaRunner:
@@ -191,6 +270,8 @@ def runner_for(ref: ModelRef, n_ctx: int = 4096) -> Runner:
     if ref.entry.kind == "gguf":
         if ref.path is None:
             raise CatalogError(f"el modelo {ref.label} no está descargado")
+        if ref.entry.vision:
+            return VisionRunner(ref, n_ctx)
         return LocalRunner(ref.path, n_ctx)
     if ref.entry.kind == "ollama":
         return OllamaRunner(ref.entry, n_ctx)

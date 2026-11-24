@@ -343,7 +343,7 @@ def resolve(value: str) -> ModelRef:
                 mmproj = find_mmproj(entry)
                 if mmproj is None:
                     raise CatalogError(
-                        f"falta el proyector {entry.mmproj_file} de {value}: "
+                        f"falta el proyector (mmproj) {entry.mmproj_file} de {value}: "
                         f"vlm-ocr models fetch {value}"
                     )
             return ModelRef(entry, found, mmproj)
