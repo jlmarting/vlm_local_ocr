@@ -51,6 +51,11 @@ class ModelEntry:
     api_key_env: str | None = None
     requires_key: bool = False
     default: bool = False
+    vision: bool = False
+    mmproj_file: str | None = None
+    mmproj_url: str | None = None
+    mmproj_sha256: str | None = None
+    mmproj_size_bytes: int | None = None
 
 
 def packaged_catalog_path() -> Path:
@@ -120,6 +125,25 @@ def build_entry(alias: str, data: Any) -> ModelEntry:
         if bool(data.get("requires_key")) and not _text(data.get("api_key_env")):
             raise CatalogError(f"{alias}: requires_key exige 'api_key_env'")
 
+    if kind != "gguf" and (data.get("vision") or any(
+        data.get(key) for key in ("mmproj_file", "mmproj_url", "mmproj_sha256", "mmproj_size_bytes")
+    )):
+        raise CatalogError(f"{alias}: 'vision' y 'mmproj_*' solo con modelos gguf")
+    if data.get("vision"):
+        for key in ("mmproj_file", "mmproj_url", "mmproj_sha256"):
+            if not _text(data.get(key)):
+                raise CatalogError(f"{alias}: un modelo con visión requiere '{key}'")
+        mm_sha = str(data["mmproj_sha256"])
+        if not _SHA256_RE.match(mm_sha):
+            raise CatalogError(f"{alias}: mmproj_sha256 inválido (64 hex): {mm_sha!r}")
+        mm_size = data.get("mmproj_size_bytes")
+        if not isinstance(mm_size, int) or isinstance(mm_size, bool) or mm_size <= 0:
+            raise CatalogError(f"{alias}: mmproj_size_bytes debe ser un entero positivo")
+    elif any(
+        data.get(key) for key in ("mmproj_file", "mmproj_url", "mmproj_sha256", "mmproj_size_bytes")
+    ):
+        raise CatalogError(f"{alias}: 'mmproj_*' exige 'vision: true'")
+
     max_tokens = data.get("max_tokens")
     if max_tokens is not None and (
         not isinstance(max_tokens, int) or isinstance(max_tokens, bool) or max_tokens <= 0
@@ -163,6 +187,10 @@ def _coerce(values: dict[str, Any]) -> dict[str, Any]:
         "model",
         "base_url",
         "api_key_env",
+        "mmproj_file",
+        "mmproj_url",
+        "mmproj_sha256",
+        "mmproj_size_bytes",
         "size_bytes",
         "max_tokens",
         "think",
@@ -207,6 +235,7 @@ class ModelRef:
 
     entry: ModelEntry
     path: Path | None = None
+    mmproj_path: Path | None = None
 
     @property
     def label(self) -> str:
@@ -254,6 +283,17 @@ def find_downloaded(entry: ModelEntry) -> Path | None:
     return None
 
 
+def find_mmproj(entry: ModelEntry) -> Path | None:
+    """Fichero ``mmproj`` del modelo de visión, en los directorios de búsqueda."""
+    if not entry.vision or not entry.mmproj_file:
+        return None
+    for directory in search_dirs():
+        candidate = Path(directory) / entry.mmproj_file
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def ad_hoc(path: Path | str) -> ModelRef:
     """Entrada sintética para una ruta explícita a un GGUF."""
     target = Path(path)
@@ -276,7 +316,7 @@ def ref_for_path(path: Path | str) -> ModelRef:
             continue
         found = find_downloaded(entry)
         if found is not None and found.resolve() == target.resolve():
-            return ModelRef(entry, found)
+            return ModelRef(entry, found, find_mmproj(entry) if entry.vision else None)
     return ad_hoc(target)
 
 
@@ -291,7 +331,15 @@ def resolve(value: str) -> ModelRef:
                 raise CatalogError(
                     f"el modelo {value} no está descargado: vlm-ocr models fetch {value}"
                 )
-            return ModelRef(entry, found)
+            mmproj = None
+            if entry.vision:
+                mmproj = find_mmproj(entry)
+                if mmproj is None:
+                    raise CatalogError(
+                        f"falta el proyector {entry.mmproj_file} de {value}: "
+                        f"vlm-ocr models fetch {value}"
+                    )
+            return ModelRef(entry, found, mmproj)
         return ModelRef(entry)
     if value.lower().endswith(".gguf") or Path(value).is_file():
         return ad_hoc(value)

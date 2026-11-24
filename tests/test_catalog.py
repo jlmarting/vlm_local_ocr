@@ -497,3 +497,75 @@ def test_default_dest_sin_repo_usa_paths(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "data_dir", lambda: tmp_path / "datos")
     monkeypatch.setattr(catalog, "_repo_models", lambda: None)
     assert catalog.default_dest() == tmp_path / "datos" / "models"
+
+
+def vision(**overrides) -> dict:
+    entry = gguf(
+        vision=True,
+        mmproj_file="mm.gguf",
+        mmproj_url="https://example.com/mm.gguf",
+        mmproj_sha256="b" * 64,
+        mmproj_size_bytes=5,
+    )
+    entry.update(overrides)
+    return entry
+
+
+def test_vision_entry_with_mmproj_loads(tmp_path: Path) -> None:
+    path = write_catalog(tmp_path / "catalog.json", {"v": vision()})
+
+    entries = catalog.load_catalog(path)
+
+    assert entries["v"].vision is True
+    assert entries["v"].mmproj_file == "mm.gguf"
+    assert entries["v"].mmproj_sha256 == "b" * 64
+
+
+def test_vision_without_mmproj_raises(tmp_path: Path) -> None:
+    data = gguf(vision=True)
+    path = write_catalog(tmp_path / "catalog.json", {"v": data})
+
+    with pytest.raises(catalog.CatalogError, match="mmproj"):
+        catalog.load_catalog(path)
+
+
+def test_vision_with_bad_mmproj_sha_raises(tmp_path: Path) -> None:
+    path = write_catalog(tmp_path / "catalog.json", {"v": vision(mmproj_sha256="zz")})
+
+    with pytest.raises(catalog.CatalogError, match="mmproj_sha256"):
+        catalog.load_catalog(path)
+
+
+def test_vision_on_remote_model_raises(tmp_path: Path) -> None:
+    path = write_catalog(tmp_path / "catalog.json", {"v": ollama(vision=True)})
+
+    with pytest.raises(catalog.CatalogError, match="vision"):
+        catalog.load_catalog(path)
+
+
+def test_vision_without_mmproj_size_raises(tmp_path: Path) -> None:
+    data = vision()
+    del data["mmproj_size_bytes"]
+    path = write_catalog(tmp_path / "catalog.json", {"v": data})
+
+    with pytest.raises(catalog.CatalogError, match="mmproj_size_bytes"):
+        catalog.load_catalog(path)
+
+
+def test_resolve_vision_sets_mmproj_path(install, models_dir: Path) -> None:
+    install({"v": vision()})
+    (models_dir / "m.gguf").write_bytes(b"")
+    (models_dir / "mm.gguf").write_bytes(b"")
+
+    ref = catalog.resolve("v")
+
+    assert ref.path == models_dir / "m.gguf"
+    assert ref.mmproj_path == models_dir / "mm.gguf"
+
+
+def test_resolve_vision_without_mmproj_raises(install, models_dir: Path) -> None:
+    install({"v": vision()})
+    (models_dir / "m.gguf").write_bytes(b"")
+
+    with pytest.raises(catalog.CatalogError, match="mm.gguf"):
+        catalog.resolve("v")
