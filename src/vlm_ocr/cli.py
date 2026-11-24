@@ -532,6 +532,17 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     vision_ref: catalog.ModelRef | None = None
+    if not args.vision and args.model is not None:
+        try:
+            chosen = catalog.resolve(args.model)
+        except catalog.CatalogError:
+            chosen = None
+        if chosen is not None and chosen.entry.vision:
+            print(
+                f"error: {chosen.label} es multimodal; usa --vision o elige un modelo de texto",
+                file=sys.stderr,
+            )
+            return 2
     if args.vision:
         if args.prompt is not None:
             print(

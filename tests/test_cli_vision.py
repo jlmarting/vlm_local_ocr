@@ -171,3 +171,23 @@ def test_vision_with_no_llm_errors(tmp_path: Path, capsys, monkeypatch, install)
 
     assert code == 2
     assert "--no-llm" in capsys.readouterr().err
+
+
+def test_vision_model_without_flag_errors(
+    tmp_path: Path, capsys, monkeypatch, install
+) -> None:
+    models = install({"v": vision_entry()})
+    _downloaded(models, "m.gguf", "mm.gguf")
+    _raster_page(monkeypatch)
+
+    code = cli.main(
+        [
+            str(tmp_path / "doc.pdf"),
+            "--format", "json",
+            "--contract", str(_contract(tmp_path)),
+            "--model", "v",
+        ]
+    )
+
+    assert code == 2
+    assert "--vision" in capsys.readouterr().err
